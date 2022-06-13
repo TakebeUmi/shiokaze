@@ -1,0 +1,116 @@
+#!/usr/bin/env python
+#
+#	octreeliquid/wscript
+#
+#	This is part of Shiokaze, a research-oriented fluid solver for computer graphics.
+#	Created by Ryoichi Ando <rand@nii.ac.jp> on Oct 31, 2017. All rights reserved.
+#	Unauthorized use, redistributing and copying of this file, via any medium are strictly prohibited.
+#
+def build(bld):
+	#
+	bld.shlib(source = ['asyncscheduler.cpp'],
+			target = bld.get_target_name(bld,'asyncscheduler'),
+			use = bld.get_target_name(bld,['core']))
+	#
+	bld.shlib(source = ['macoctreeliquid2.cpp'],
+			target = bld.get_target_name(bld,'macoctreeliquid2'),
+			cxxflags = ['-DSPATIAL_DIM=2'],
+			use = bld.get_target_name(bld,['core','macoctreegrid2','macoctreeproject2','macoctreehelper2','macoctreesegregator2','macoctreesizingfunc2']))
+	#
+	bld.shlib(source = ['macoctreeliquid3.cpp'],
+			target = bld.get_target_name(bld,'macoctreeliquid3'),
+			cxxflags = ['-DSPATIAL_DIM=3'],
+			use = bld.get_target_name(bld,['core','macoctreegrid3','macoctreeproject3','macoctreemesher3','macoctreesegregator3','macoctreesizingfunc3']))
+	#
+	bld.shlib(source = ['macoctreegrid2.cpp'],
+			target = bld.get_target_name(bld,'macoctreegrid2'),
+			use = bld.get_target_name(bld,'core'))
+	#
+	bld.shlib(source = ['macoctreehelper2.cpp'],
+			target = bld.get_target_name(bld,'macoctreehelper2'),
+			cxxflags = ['-DSPATIAL_DIM=2'],
+			use = bld.get_target_name(bld,['core','macoctreegrid2']))
+	#
+	bld.shlib(source = ['macoctreegrid3.cpp'],
+			target = bld.get_target_name(bld,'macoctreegrid3'),
+			use = bld.get_target_name(bld,'core'))
+	#
+	bld.shlib(source = ['macoctreeproject2.cpp'],
+			target = bld.get_target_name(bld,'macoctreeproject2'),
+			use = bld.get_target_name(bld,['core','macoctreegrid2']),
+			lib = ['blas'])
+	#
+	bld.shlib(source = ['macoctreeproject3.cpp'],
+			target = bld.get_target_name(bld,'macoctreeproject3'),
+			use = bld.get_target_name(bld,['core','macoctreegrid3']),
+			lib = ['blas'])
+	#
+	bld.shlib(source = ['macoctreemesher3.cpp'],
+			target = bld.get_target_name(bld,'macoctreemesher3'),
+			use = bld.get_target_name(bld,['core','macoctreegrid3']))
+	#
+	bld.shlib(source = ['macoctreesegregator2.cpp'],
+			target = bld.get_target_name(bld,'macoctreesegregator2'),
+			use = bld.get_target_name(bld,['core','macoctreegrid2']))
+	#
+	bld.shlib(source = ['macoctreesegregator3.cpp'],
+			target = bld.get_target_name(bld,'macoctreesegregator3'),
+			use = bld.get_target_name(bld,['core','macoctreegrid3']))
+	#
+	bld.shlib(source = ['macoctreeaccuracytest2.cpp'],
+			target = bld.get_target_name(bld,'macoctreeaccuracytest2'),
+			cxxflags = ['-DSPATIAL_DIM=2'],
+			use = bld.get_target_name(bld,['core','macoctreegrid2','macoctreeproject2']))
+	#
+	bld.shlib(source = ['macoctreeaccuracytest3.cpp'],
+			target = bld.get_target_name(bld,'macoctreeaccuracytest3'),
+			cxxflags = ['-DSPATIAL_DIM=3','-Wno-format-security'],
+			use = bld.get_target_name(bld,['core','macoctreegrid3','macoctreeproject3','macoctreemesher3']))
+	#
+	bld.shlib(source = ['macoctreestandingwatertest2.cpp'],
+			target = bld.get_target_name(bld,'macoctreestandingwatertest2'),
+			cxxflags = ['-DSPATIAL_DIM=2'],
+			use = bld.get_target_name(bld,['core','macoctreehelper2','macoctreegrid2','macoctreeproject2']))
+	#
+	bld.shlib(source = ['macoctreestandingwatertest3.cpp'],
+			target = bld.get_target_name(bld,'macoctreestandingwatertest3'),
+			cxxflags = ['-DSPATIAL_DIM=3','-Wno-format-security'],
+			use = bld.get_target_name(bld,['core','macoctreegrid3','macoctreemesher3','macoctreeproject3']))
+	#
+	bld.shlib(source = ['macoctreeinterpaccuracytest2.cpp'],
+			target = bld.get_target_name(bld,'macoctreeinterpaccuracytest2'),
+			cxxflags = ['-DSPATIAL_DIM=2','-Wno-format-security'],
+			use = bld.get_target_name(bld,['core','macoctreegrid2']))
+	#
+	bld.shlib(source = ['macoctreeinterpaccuracytest3.cpp'],
+			target = bld.get_target_name(bld,'macoctreeinterpaccuracytest3'),
+			cxxflags = ['-DSPATIAL_DIM=2','-Wno-format-security'],
+			use = bld.get_target_name(bld,['core','macoctreegrid3']))
+	#
+	bld.shlib(source = ['macoctreeadaptivitytest2.cpp'],
+			target = bld.get_target_name(bld,'macoctreeadaptivitytest2'),
+			cxxflags = ['-DSPATIAL_DIM=2'],
+			use = bld.get_target_name(bld,['core','macoctreegrid2','macoctreesizingfunc2']))
+	#
+	bld.shlib(source = ['macoctreeadaptivitytest3.cpp'],
+			target = bld.get_target_name(bld,'macoctreeadaptivitytest3'),
+			cxxflags = ['-DSPATIAL_DIM=3','-Wno-format-security'],
+			use = bld.get_target_name(bld,['core','macoctreegrid3','macoctreemesher3','macoctreesizingfunc3']))
+	#
+	bld.shlib(source = ['macoctreesizingfunc2.cpp'],
+			target = bld.get_target_name(bld,'macoctreesizingfunc2'),
+			use = bld.get_target_name(bld,['core','macoctreegrid2']))
+	#
+	bld.shlib(source = ['macoctreesizingfunc3.cpp'],
+			target = bld.get_target_name(bld,'macoctreesizingfunc3'),
+			use = bld.get_target_name(bld,['core','macoctreegrid3']))
+	#
+	bld.shlib(source = 'scenetester3.cpp',
+			target = bld.get_target_name(bld,'scenetester3'),
+			cxxflags = ['-DSPATIAL_DIM=3'],
+			use = bld.get_target_name(bld,'core'))
+	#
+	bld.shlib(source = ['macoctreedilationtest2.cpp'],
+			target = bld.get_target_name(bld,'macoctreedilationtest2'),
+			cxxflags = ['-DSPATIAL_DIM=2'],
+			use = bld.get_target_name(bld,['core','macoctreehelper2','macoctreegrid2']))
