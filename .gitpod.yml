@@ -1,1 +1,3 @@
 image: ryichando/shiokaze
+ports:
+  - port: 8080
