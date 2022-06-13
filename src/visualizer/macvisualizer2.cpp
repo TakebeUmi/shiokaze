@@ -34,17 +34,33 @@ class macvisualizer2 : public macvisualizer2_interface {
 protected:
 	//
 	virtual void draw_velocity( graphics_engine &g, const macarray2<Real> &velocity ) const override {
+		//
 		if( m_param.draw_velocity ) {
 			//
-			shared_array2<vec2r> cell_velocity(velocity.shape());
-			velocity.convert_to_full(*cell_velocity.get());
-			//
-			g.color4(1.0,1.0,1.0,0.5);
-			velocity.shape().for_each([&](int i, int j) {
-				vec2d p0 = m_dx*vec2i(i,j).cell();
-				vec2d p1 = p0+m_dx*cell_velocity()(i,j);
-				graphics_utility::draw_arrow(g,p0.v,p1.v);
-			});
+			if( m_param.draw_mac ) {
+				//
+				velocity.const_serial_actives([&]( int dim, int i, int j, const auto &it ) {
+					vec2d p0 = m_dx*vec2i(i,j).face(dim);
+					vec2d p1 = p0+m_dx*it()*vec2d(dim==0,dim==1);
+					if( dim == 0 ) {
+						g.color4(0.75,0.75,1.0,0.5);
+					} else {
+						g.color4(1.0,0.75,0.75,0.5);
+					}
+					graphics_utility::draw_arrow(g,p0.v,p1.v);
+				});
+			} else {
+				//
+				shared_array2<vec2r> cell_velocity(velocity.shape());
+				velocity.convert_to_full(*cell_velocity.get());
+				//
+				g.color4(1.0,1.0,1.0,0.5);
+				velocity.shape().for_each([&](int i, int j) {
+					vec2d p0 = m_dx*vec2i(i,j).cell();
+					vec2d p1 = p0+m_dx*cell_velocity()(i,j);
+					graphics_utility::draw_arrow(g,p0.v,p1.v);
+				});
+			}
 		}
 	}
 	//
@@ -72,7 +88,6 @@ protected:
 				//
 				set_color(i,j);
 				g.vertex2v((m_dx*vec2d(i,j)).v);
-				set_color(i+(dim!=0),j+(dim!=1));
 				g.vertex2v((m_dx*vec2d(i+(dim!=0),j+(dim!=1))).v);
 			});
 			g.end();
@@ -83,12 +98,20 @@ protected:
 	virtual void initialize( const shape2 &shape, double dx ) override {
 		m_dx = dx;
 	}
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_dx);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_dx);
+	}
 	virtual void configure( configuration &config ) override {
 		config.get_bool("DrawVelocity",m_param.draw_velocity,"Should draw velocity");
+		config.get_bool("DrawMAC",m_param.draw_mac,"Draw staggered velocity");
 	}
 	//
 	struct Parameters {
 		bool draw_velocity {true};
+		bool draw_mac {true};
 	};
 	//
 	Parameters m_param;

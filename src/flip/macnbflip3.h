@@ -31,6 +31,7 @@
 #include <shiokaze/parallel/parallel_driver.h>
 #include <shiokaze/utility/gridutility3_interface.h>
 #include <shiokaze/utility/macutility3_interface.h>
+#include <shiokaze/utility/gridutility3_interface.h>
 #include <shiokaze/particlerasterizer/particlerasterizer3_interface.h>
 #include <shiokaze/advection/macadvection3_interface.h>
 #include <shiokaze/redistancer/redistancer3_interface.h>
@@ -51,7 +52,7 @@ protected:
 						 std::function<bool(const vec3d &p)> mask ) override;
 	//
 	// Map FLIP momentum from particles to grid
-	virtual void splat( macarray3<macflip3_interface::mass_momentum3> &mass_and_momentum ) const override;
+	virtual void splat( double time, macarray3<macflip3_interface::mass_momentum3> &mass_and_momentum ) const override;
 	//
 	// Advcect particles through the velocity field
 	virtual void advect( std::function<double(const vec3d &p)> solid,
@@ -65,7 +66,7 @@ protected:
 	virtual void correct( std::function<double(const vec3d &p)> fluid, const macarray3<Real> &velocity ) override;
 	//
 	// Update fluid level set
-	virtual void update( std::function<double(const vec3d &p)> solid, array3<Real> &fluid ) override;
+	virtual void update( std::function<double(const vec3d &p)> solid, array3<Real> &fluid, double time, bool add_active ) override;
 	//
 	// Update FLIP velocity
 	virtual void update( const macarray3<Real> &prev_velocity,
@@ -88,7 +89,7 @@ protected:
 	virtual std::vector<macflip3_interface::particle3> get_particles() const override;
 	//
 	virtual void initialize( const shape3 &shape, double dx ) override;
-	virtual void post_initialize() override;
+	virtual void post_initialize( bool initialized_from_file ) override;
 	virtual void configure( configuration &config ) override;
 	//
 	virtual bool const_send_message( std::string message, void *ptr=nullptr ) const override {
@@ -107,14 +108,18 @@ protected:
 		unsigned narrowband {3};
 		int RK_order {2};
 		double erosion {0.5};
-		unsigned min_particles_per_cell {6};
-		unsigned max_particles_per_cell {6};
+		double min_mass_per_cell {1.0};
+		double max_mass_per_cell {1.5};
 		unsigned minimal_live_count {5};
 		double stiff {1.0};
 		bool velocity_correction {true};
 		double bullet_maximal_time {0.5};
+		bool splat_bullet_particle {false};
 		bool draw_particles {true};
 		double decay_rate {10.0};
+		double view_scale {1.0};
+		bool collision_domain_boundary {true};
+		bool rescale_gradient {true};
 	};
 	//
 	Parameters m_param;
@@ -135,16 +140,26 @@ protected:
 	//
 	shape3 m_shape;							// Grid resolution
 	double m_dx;							// Grid cell size
-	//
 	std::vector<Particle> m_particles;		// FLIP particle array
 	//
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+		file.read(m_particles);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
+		file.write(m_particles);
+	}
+	//
 	pointgridhash3_driver m_pointgridhash{this,"pointgridhash3"};
-	particlerasterizer3_driver m_particlerasterizer{this,"convexhullrasterizer3"};
+	gridutility3_driver m_gridutility{this,"gridutility3"};
+	particlerasterizer3_driver m_particlerasterizer{this,"flatrasterizer3"};
 	parallel_driver m_parallel{this};
 	//
 	virtual void sort_particles();
 	virtual void update_velocity_derivative( Particle& particle, const macarray3<Real> &velocity );
-	virtual void additionally_apply_velocity_derivative( macarray3<macflip3_interface::mass_momentum3> &mass_and_momentum ) const;
 	//
 	static double grid_kernel( const vec3d &r, double dx );
 	static vec3d grid_gradient_kernel( const vec3d &r, double dx );
@@ -157,8 +172,6 @@ protected:
 	//
 	virtual void fit_particle( std::function<double(const vec3d &p)> fluid, Particle &particle, const vec3d &gradient ) const;
 	virtual void collision( std::function<double(const vec3d &p)> solid );
-	virtual size_t mark_bullet( double time, std::function<double(const vec3d &p)> fluid, std::function<vec3d(const vec3d &p)> velocity );
-	virtual size_t remove_bullet( double time );
 };
 //
 SHKZ_END_NAMESPACE

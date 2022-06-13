@@ -39,7 +39,7 @@ protected:
 		config.get_bool("ResetView",m_param.reset_view,"Reset view");
 	}
 	//
-	virtual void initialize( const environment_map &environment ) override {
+	virtual void post_initialize( bool initialized_from_file ) override {
 		//
 		if( ! m_bounding_box_set || m_param.reset_view ) {
 			m_origin = vec2d();
@@ -57,7 +57,7 @@ protected:
 		//
 		if( ! m_bounding_box_set || m_param.reset_view ) {
 			double scale (1.0);
-			scale = std::max(p1[0]-p0[0],p1[1]-p0[1]);
+			scale = p1[0]-p0[0];
 			set_2D_coordinate(p0,scale);
 		}
 		m_bb0 = vec2d(p0);

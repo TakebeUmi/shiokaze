@@ -93,7 +93,7 @@ void graphics_gl::look_at( const double target[3], const double position[3], con
 	gluPerspective(fov,m_ratio,near,far);
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
-	gluLookAt( position[0], position[1], position[2], target[0], target[1], target[2], up[0], up[1], up[2] );
+	gluLookAt( position[0], position[1], position[2], target[0], target[1], target[2], up[0], up[1], -up[2] );
 }
 //
 void graphics_gl::clear() {
@@ -149,7 +149,7 @@ void graphics_gl::line_width( double width ) {
 }
 //
 void graphics_gl::vertex3v( const double *v ) {
-	glVertex3dv(v);
+	glVertex3d(v[0],v[1],v[2]);
 }
 //
 void graphics_gl::draw_string( const double *v, std::string str, unsigned size ) {

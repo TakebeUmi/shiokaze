@@ -42,7 +42,7 @@ public:
 protected:
 	//
 	virtual void configure( configuration &config ) override;
-	virtual void post_initialize() override;
+	virtual void post_initialize( bool initialized_from_file ) override;
 	//
 	double interpolate_solid( const vec3d &p ) const;
 	vec3d interpolate_velocity( const vec3d &p ) const;

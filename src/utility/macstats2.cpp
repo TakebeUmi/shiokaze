@@ -85,6 +85,14 @@ protected:
 		m_shape = shape;
 		m_dx = dx;
 	}
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
+	}
 	//
 	struct Parameters {
 		std::string export_path;

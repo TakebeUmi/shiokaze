@@ -70,11 +70,13 @@ public:
 	};
 	/**
 	 \~english @brief Splat FLIP momentum and mass onto the grids.
+	 @param[in] time Time.
 	 @param[out] mass_and_momentum Grid of mass and momentum to be mapped.
 	 \~japanese @brief FLIP 粒子の運動量と質量をグリッドに転写する。
+	 @param[in] time 時間。
 	 @param[out] mass_and_momentum 転写される質量と運動量のグリッド。
 	 */
-	virtual void splat( macarray3<mass_momentum3> &mass_and_momentum ) const = 0;
+	virtual void splat( double time, macarray3<mass_momentum3> &mass_and_momentum ) const = 0;
 	/**
 	 \~english @brief Advect FLIP particles along the input velocity field.
 	 @param[in] solid Solid level set function.
@@ -93,11 +95,11 @@ public:
 	/**
 	 \~english @brief Mark bullet particles.
 	 @param[in] fluid Fluid level set function.
-	 @param[in] velocity Velocity function.
+	 @param[in] velocity Velocity interpolation function.
 	 @param[in] time Time current simulation time. Alternatively speaking, accumulated dt.
 	 \~japanese @brief 弾丸粒子をマークする。
 	 @param[in] fluid 液体のレベルセット関数。
-	 @param[in] velocity 速度関数。
+	 @param[in] velocity 速度場の補間関数。
 	 @param[in] time 現在のシミュレーション時間。あるいは、dt を蓄積したもの。
 	 */
 	virtual void mark_bullet( std::function<double(const vec3d &p)> fluid, std::function<vec3d(const vec3d &p)> velocity, double time ) = 0;
@@ -114,11 +116,15 @@ public:
 	 \~english @brief Update fluid level set.
 	 @param[in] fluid Liquid level set.
 	 @param[in] solid Solid level set function.
+	 @param[in] time Time.
+	 @param[in] add_active Whether add active cells.
 	 \~japanese @brief 液体のレベルセットを更新する。
 	 @param[in] fluid 液体のレベルセット。
 	 @param[in] solid 壁のレベルセット関数。
+	 @param[in] time 時間。
+	 @param[in] add_active アクティブセルを追加するか。
 	 */
-	virtual void update( std::function<double(const vec3d &p)> solid, array3<Real> &fluid ) = 0;
+	virtual void update( std::function<double(const vec3d &p)> solid, array3<Real> &fluid, double time, bool add_active=true ) = 0;
 	/**
 	 \~english @brief Update momentum of FLIP particles.
 	 @param[in] prev_velocity Velocity before the pressure projection.

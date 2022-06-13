@@ -25,12 +25,15 @@
 #ifndef SHKZ_CONFIGURABLE_H
 #define SHKZ_CONFIGURABLE_H
 //
-#include <shiokaze/core/configuration.h>
+#include "configuration.h"
+#include "filesystem.h"
 #include <string>
 #include <vector>
 #include <map>
 #include <cassert>
+#include <cstdio>
 #include <algorithm>
+#include <typeinfo>
 //
 SHKZ_BEGIN_NAMESPACE
 //
@@ -66,6 +69,20 @@ public:
 	 */
 	virtual void initialize( const environment_map &environment ) {}
 	/**
+	 \~english @brief Initialize the program from a file.
+	 @param[in] file filestream input.
+	 \~japanese @brief ファイルからプログラムを初期化する。
+	 @param[in] file filestream の入力。
+	 */
+	virtual void initialize( const filestream &file ) {}
+	/**
+	 \~english @brief Initialize the program from a file.
+	 @param[in] file filestream input.
+	 \~japanese @brief ファイルからプログラムを初期化する。
+	 @param[in] file filestream の入力。
+	 */
+	virtual void serialize( const filestream &file ) const {}
+	/**
 	 \~english @brief Assign the global settings of the program.
 	 @param[in] config Configuration setting.
 	 \~japanese @brief グローバルの設定を与える。
@@ -97,6 +114,16 @@ public:
 		load(config);
 		configure(config);
 		initialize(environment_map());
+	}
+	/**
+	 \~english @brief Run load - configure - initialize processes.
+	 \~japanese @brief load - configure - initialize のプロセスを呼ぶ。
+	 */
+	virtual void setup_now( const filestream &file, configuration& config=get_global_configuration() ) {
+		assert(not_recursive());
+		load(config);
+		configure(config);
+		initialize(file);
 	}
 	/**
 	 \~english @brief Check if this instance is not derived from recursive_configurable.
@@ -170,8 +197,32 @@ public:
 		initialize(merged_environment);
 		for( auto it=m_children.rbegin(); it!=m_children.rend(); ++it ) (*it)->initialize(merged_environment);
 		for( auto it=m_recursive_children.rbegin(); it!=m_recursive_children.rend(); ++it ) (*it)->recursive_initialize(merged_environment);
-		post_initialize();
+		post_initialize(false);
 		m_initialize_done = true;
+	}
+	/**
+	 \~english @brief Initialize the program from a file and relay the same to its children.
+	 @param[in] file filestream input.
+	 \~japanese @brief ファイルからプログラムを初期化して、同様の処理を子供インスタンスにも行う。
+	 @param[in] file filestream の入力。
+	 */
+	virtual void recursive_initialize( const filestream &file ) {
+		initialize(file);
+		for( auto it=m_children.rbegin(); it!=m_children.rend(); ++it ) (*it)->initialize(file);
+		for( auto it=m_recursive_children.rbegin(); it!=m_recursive_children.rend(); ++it ) (*it)->recursive_initialize(file);
+		post_initialize(true);
+		m_initialize_done = true;
+	}
+	/**
+	 \~english @brief Initialize the program from a file and relay the same to its children.
+	 @param[in] file filestream input.
+	 \~japanese @brief ファイルからプログラムを初期化して、同様の処理を子供インスタンスにも行う。
+	 @param[in] file filestream の入力。
+	 */
+	virtual void recursive_serialize( const filestream &file ) const {
+		serialize(file);
+		for( auto it=m_children.rbegin(); it!=m_children.rend(); ++it ) (*it)->serialize(file);
+		for( auto it=m_recursive_children.rbegin(); it!=m_recursive_children.rend(); ++it ) (*it)->recursive_serialize(file);
 	}
 	/**
 	 \~english @brief Get if the instance is initialized.
@@ -228,6 +279,15 @@ public:
 		recursive_load(config);
 		recursive_configure(config);
 		recursive_initialize();
+	}
+	/**
+	 \~english @brief Run recursive_load - recursive_configure - recursive_initialize processes.
+	 \~japanese @brief recursive_load - recursive_configure - recursive_initialize のプロセスを呼ぶ。
+	 */
+	virtual void setup_now( const filestream &file, configuration& config=get_global_configuration() ) override {
+		recursive_load(config);
+		recursive_configure(config);
+		recursive_initialize(file);
 	}
 	/**
 	 \~english @brief Check if this instance is not derived from recursive_configurable.
@@ -293,11 +353,14 @@ private:
 	//
 	using configurable::load;
 	using configurable::configure;
+	using configurable::serialize;
 	//
 	virtual void initialize( const environment_map &environment ) override { configurable::initialize(environment); }
+	virtual void initialize( const filestream &file ) override { configurable::initialize(file); }
 	virtual void post_load () {}
 	virtual void post_configure () {}
-	virtual void post_initialize () {}
+	virtual void post_initialize ( bool initialized_from_file ) {}
+	virtual void post_initialize ( const filestream &file ) {}
 	//
 	std::vector<configurable *> m_children;
 	std::vector<recursive_configurable *> m_recursive_children;

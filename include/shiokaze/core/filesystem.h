@@ -27,6 +27,8 @@
 //
 #include <shiokaze/core/common.h>
 #include <string>
+#include <vector>
+#include <functional>
 //
 SHKZ_BEGIN_NAMESPACE
 //
@@ -125,6 +127,174 @@ public:
 	 */
 	static std::string resolve_libname( std::string name );
 };
+/** @file */
+/// \~english @brief Class that perform data writing and reading.
+/// \~japanese @brief ファイルの書き込みと入力を行うクラス。
+class filestream {
+public:
+	/**
+	 \~english @brief Option for reading and writing.
+	 \~japanese @brief 読み書きのオプション。
+	 */
+	enum OPTION { READ, WRITE };
+	/**
+	 \~english @brief Open a file.
+	 @param[in] path Path to a file.
+	 @param[in] OPTION Opening option.
+	 \~japanese @brief ファイルを開く。
+	 @param[in] path ファイルへのパス。
+	 @param[in] OPTION ファイルを開く時のオプション。
+	 */
+	filestream( std::string path, OPTION );
+	/**
+	 \~english @brief ファイルストリームのデストラクタ。
+	 \~japanese @brief Destructor.
+	 */
+	virtual ~filestream();
+	/**
+	 \~english @brief Write data.
+	 @param[in] ptr Pointer to the data.
+	 @param[in] size Byte length.
+	 \~japanese @brief データを書き込む。
+	 @param[in] ptr データの先頭のポインタ。
+	 @param[in] size バイト長。
+	 */
+	void write( const void *ptr, size_t size ) const;
+	/**
+	 \~english @brief Read data.
+	 @param[out] ptr Pointer to the data.
+	 @param[in] size Byte length.
+	 \~japanese @brief データを読み込む。
+	 @param[out] ptr データの先頭のポインタ。
+	 @param[in] size バイト長。
+	 */
+	void read( void *ptr, size_t size ) const;
+	/**
+	 \~english @brief Write an element.
+	 @param[in] v Reference to an element.
+	 \~japanese @brief 要素を書き込む。
+	 @param[in] v 書き込む要素への参照。
+	 */
+	template<class T> void w( const T &v ) const {
+		write(&v,sizeof(T));
+	}
+	/**
+	 \~english @brief Read an element.
+	 @param[out] v Reference to an element to read.
+	 \~japanese @brief 要素を読み込む。
+	 @param[out] v 読み込む要素への参照。
+	 */
+	template<class T> void r( T &v ) const {
+		read(&v,sizeof(T));
+	}
+	/**
+	 \~english @brief Write an element vector.
+	 @param[in] v Reference to an element vector of vector.
+	 @param[in] func Delegate function for writing data.
+	 \~japanese @brief 要素を書き込む。
+	 @param[in] v 書き込むベクトルのベクトル要素への参照。
+	 @param[in] func 要素を書き込むための代理関数。
+	 */
+	template<class T> void write( const std::vector<std::vector<T> > &v, std::function<void(const filestream &file, const T& e)> func=nullptr ) const {
+		const size_t size = v.size();
+		w(size);
+		for( size_t n=0; n<size; ++n ) {
+			write(v[n],func);
+		}
+	}
+	/**
+	 \~english @brief Read an element vector.
+	 @param[out] v Reference to an element vector of vector.
+	 @param[in] func Delegate function for reading data.
+	 \~japanese @brief 要素を書き込む。
+	 @param[out] v 読み込むベクトルのベクトル要素への参照。
+	 @param[in] func 要素を読み込むための代理関数。
+	 */
+	template<class T> void read( std::vector<std::vector<T> > &v, std::function<void(const filestream &file, T& e)> func=nullptr ) const {
+		size_t size;
+		r(size);
+		v.resize(size);
+		for( size_t n=0; n<size; ++n ) {
+			read(v[n],func);
+		}
+	}
+	/**
+	 \~english @brief Write an element vector.
+	 @param[in] v Reference to an element vector.
+	 @param[in] func Delegate function for writing data.
+	 \~japanese @brief 要素を書き込む。
+	 @param[in] v 書き込むベクトル要素への参照。
+	 @param[in] func 要素を書き込むための代理関数。
+	 */
+	template<class T> void write( const std::vector<T> &v, std::function<void(const filestream &file, const T& e)> func=nullptr ) const {
+		const size_t size = v.size();
+		w(size);
+		if( func ) {
+			for( size_t n=0; n<size; ++n ) func(*this,v[n]);
+		} else {
+			write(v.data(),size*sizeof(T));
+		}
+	}
+	/**
+	 \~english @brief Read an element vector.
+	 @param[out] v Reference to an element vector.
+	 @param[in] func Delegate function for reading data.
+	 \~japanese @brief 要素を書き込む。
+	 @param[out] v 読み込むベクトル要素への参照。
+	 @param[in] func 要素を読み込むための代理関数。
+	 */
+	template<class T> void read( std::vector<T> &v, std::function<void(const filestream &file, T& e)> func=nullptr ) const {
+		size_t size;
+		r(size);
+		v.resize(size);
+		if( func ) {
+			for( size_t n=0; n<size; ++n ) func(*this,v[n]);
+		} else {
+			read(v.data(),size*sizeof(T));
+		}
+	}
+	/**
+	 \~english @brief Write a string.
+	 @param[in] str Reference to an element.
+	 \~japanese @brief 文字列を書き込む。
+	 @param[in] str 書き込む文字列への参照。
+	 */
+	void write( const std::string &str ) const;
+	/**
+	 \~english @brief Read a string.
+	 @param[out] str Reference to an output string.
+	 \~japanese @brief 文字列を読み込む。
+	 @param[out] str 読み込まれた文字列。
+	 */
+	void read( std::string &str ) const;
+	/**
+	 \~english @brief Write boundary for debugging purpose.
+	 \~japanese @brief デバッグ目的のための境界情報を書き込む。
+	 */
+	void write_boundary() const {
+		const unsigned char boundary ('B');
+		w(boundary);
+	}
+	/**
+	 \~english @brief Read boundary for debugging purpose and return if it was a boundary.
+	 @return \true if boundary is read \false otherwise.
+	 \~japanese @brief デバッグ目的のための境界情報を読み込んで境界が読み込まれたどうが確認する。
+	 @return もし境界が読み込まれたら \true を、そうでなければ \false を返す。
+	 */
+	bool check_boundary() const {
+		unsigned char boundary;
+		r(boundary);
+		return boundary == 'B';
+	}
+	//
+private:
+	void *m_gzfp {nullptr};
+	bool m_writable {false};
+	bool m_readable {false};
+};
+//
+template<> void filestream::write<bool>( const std::vector<bool> &v, std::function<void(const filestream &file, const bool& e)> func ) const;
+template<> void filestream::read<bool>( std::vector<bool> &v, std::function<void(const filestream &file, bool& e)> func ) const;
 //
 SHKZ_END_NAMESPACE
 //

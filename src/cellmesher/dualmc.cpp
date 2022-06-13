@@ -70,6 +70,14 @@ protected:
 	shape3 m_shape;
 	double m_dx {0.0};
 	//
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
+	}
 };
 //
 //

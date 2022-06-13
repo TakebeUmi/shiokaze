@@ -63,9 +63,10 @@ protected:
 	//
 	virtual void load( configuration &config ) override;
 	virtual void configure( configuration &config ) override;
-	virtual void post_initialize() override;
+	virtual void post_initialize( bool initialized_from_file ) override;
 	//
 	macarray2<Real> m_velocity{this};
+	macarray2<Real> m_solid_velocity{this};
 	macarray2<Real> m_external_force{this};
 	array2<Real> m_fluid{this};
 	array2<Real> m_solid{this};
@@ -91,9 +92,34 @@ protected:
 	bool m_force_exist;
 	unsigned m_graph_lists[4];
 	//
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+		file.r(m_force_exist);
+		file.r(m_target_volume);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
+		file.w(m_force_exist);
+		file.w(m_target_volume);
+	}
+	//
+	virtual bool keyboard( int key, int action, int mods ) override {
+		if( action == UI_interface::PRESS ) {
+			if ( key == UI_interface::KEY_S ) {
+				filestream file("macliquid2.dat",filestream::WRITE);
+				recursive_serialize(file);
+				return true;
+			}
+		}
+		return false;
+	}
+	//
 	std::function<bool( double dx, double dt, double time, unsigned step )> m_check_inject_func;
 	std::function<bool( const vec2d &p, double dx, double dt, double time, unsigned step, double &fluid, vec2d &velocity )> m_inject_func;
 	std::function<void( double dx, double dt, double time, unsigned step, double &volume_change )> m_post_inject_func;
+	std::function<vec2d(double)> m_gravity_func;
 	//
 	struct Parameters {
 		vec2d gravity;
@@ -105,7 +131,7 @@ protected:
 	//
 	Parameters m_param;
 	//
-	virtual void inject_external_force( macarray2<Real> &velocity, double dt );
+	virtual void inject_external_force( macarray2<Real> &velocity, double dt, bool clear=true );
 	virtual void inject_external_fluid( array2<Real> &fluid, macarray2<Real> &velocity, double dt, double time );
 	virtual size_t do_inject_external_fluid( array2<Real> &fluid, macarray2<Real> &velocity, double dt, double time, unsigned step );
 	virtual void set_volume_correction( macproject2_interface *macproject );

@@ -67,8 +67,10 @@ private:
 	std::string m_legend;
 	int m_until, m_frame, m_step;
 	double m_window_scale;
+	double m_dpi_scale {0.0};
 	bool m_show_logo;
 	bool m_paused {false};
+	unsigned m_subsample {0};
 	//
 public:
 	//

@@ -32,6 +32,7 @@ import sys
 import os
 import time
 import math
+import ConfigParser, json
 
 # Start up the scheduling system with one worker per local core
 scheduler = Scheduler.getInstance()
@@ -41,21 +42,20 @@ scheduler.start()
 
 end = int(sys.argv[1])
 name = sys.argv[2]
-LiquidColor_Red = float(sys.argv[3])
-LiquidColor_Green = float(sys.argv[4])
-LiquidColor_Blue = float(sys.argv[5])
-SampleCount = sys.argv[6]
-target_x = float(sys.argv[7])
-target_y = float(sys.argv[8])
-target_z = float(sys.argv[9])
-origin_x = float(sys.argv[10])
-origin_y = float(sys.argv[11])
-origin_z = float(sys.argv[12])
-
+#
+# Load variables
+config = ConfigParser.ConfigParser()
+config.read('../mesh/common.ini')
+#
+SampleCount = config.getint('Common','SampleCount')
+TargetPos = json.loads(config.get('Common','TargetPos'))
+OriginPos = json.loads(config.get('Common','OriginPos'))
+LiquidColor = json.loads(config.get('Common','LiquidColor'))
+#
 img_path = '../'+name+'_img'
 if not os.path.exists(img_path):
 	os.system('mkdir '+img_path)
-
+#
 for frame in range(0,end+1):
 	#
 	png_path = img_path+'/'+str(frame)+'_'+name+'.png'
@@ -84,15 +84,15 @@ for frame in range(0,end+1):
 		#
 		# Scene parameters
 		paramMap = StringMap()
-		paramMap['target_x'] = str(target_x)
-		paramMap['target_y'] = str(target_y)
-		paramMap['target_z'] = str(target_z)
-		paramMap['origin_x'] = str(origin_x)
-		paramMap['origin_y'] = str(origin_y)
-		paramMap['origin_z'] = str(origin_z)
+		paramMap['target_x'] = str(TargetPos[0])
+		paramMap['target_y'] = str(TargetPos[1])
+		paramMap['target_z'] = str(TargetPos[2])
+		paramMap['origin_x'] = str(OriginPos[0])
+		paramMap['origin_y'] = str(OriginPos[1])
+		paramMap['origin_z'] = str(OriginPos[2])
 		paramMap['up'] = '0, 1, 0'
-		paramMap['sample_count'] = SampleCount
-		paramMap['liquid_color'] = str(LiquidColor_Red)+', '+str(LiquidColor_Green)+', '+str(LiquidColor_Blue)
+		paramMap['sample_count'] = str(SampleCount)
+		paramMap['liquid_color'] = str(LiquidColor[0])+', '+str(LiquidColor[1])+', '+str(LiquidColor[2])
 		#
 		paramMap['mesh_filename'] = mesh_file
 		paramMap['solid_filename'] = '../mesh/static_solids/levelset_solid.serialized'
@@ -108,7 +108,7 @@ for frame in range(0,end+1):
 			for i in range(0,number):
 				(x,y,z,r,) = unpack('ffff',f.read(16))
 				ParticleColor = Spectrum()
-				ParticleColor.fromSRGB(LiquidColor_Red,LiquidColor_Green,LiquidColor_Blue)
+				ParticleColor.fromSRGB(LiquidColor[0],LiquidColor[1],LiquidColor[2])
 				if name == 'mesh':
 					scene.addChild(pmgr.create(
 									   {'type' : 'sphere',
@@ -134,6 +134,28 @@ for frame in range(0,end+1):
 		# Create a queue for tracking render jobs
 		queue = RenderQueue()
 		scene.setDestinationFile(img_path+'/'+str(frame)+'_'+name+'.exr')
+		#
+		# Append moving solids if exists
+		transforms_file = '../mesh/'+str(frame)+'_transforms.dat'
+		if os.path.exists(transforms_file):
+			print 'Loading moving solids...'
+			pmgr = PluginManager.getInstance()
+			f = open(transforms_file,'rb')
+			(number,) = unpack('I',f.read(4))
+			print 'Adding '+str(number)+' moving solids...'
+			for i in range(0,number):
+				(x,y,z) = unpack('fff',f.read(12))
+				(r,rx,ry,rz) = unpack('ffff',f.read(16))
+				scene.addChild(pmgr.create(
+					{	'type' : 'ply',#'serialized',
+						#'maxSmoothAngle' : 30.0,
+						'filename' : '../mesh/moving_solids/polygon_'+str(i)+'.ply',#serialized',
+						'toWorld' : Transform.translate(Vector(x,y,z)) * Transform.rotate(Vector(rx,ry,rz),r),
+						#'bsdf' : {
+						#	'type' : 'diffuse',
+						#	'reflectance' : Spectrum(0.6)
+						#}
+					}))
 		#
 		# Create a render job and insert it into the queue
 		job = RenderJob('myRenderJob',scene,queue)

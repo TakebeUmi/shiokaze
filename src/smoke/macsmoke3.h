@@ -30,6 +30,7 @@
 #include <shiokaze/parallel/parallel_driver.h>
 #include <shiokaze/ui/drawable.h>
 #include <shiokaze/advection/macadvection3_interface.h>
+#include <shiokaze/utility/gridutility3_interface.h>
 #include <shiokaze/utility/macutility3_interface.h>
 #include <shiokaze/utility/macstats3_interface.h>
 #include <shiokaze/visualizer/gridvisualizer3_interface.h>
@@ -58,9 +59,10 @@ protected:
 	virtual bool should_screenshot() const override { return m_timestepper->should_export_frame(); }
 	virtual void load( configuration &config ) override;
 	virtual void configure( configuration &config ) override;
-	virtual void post_initialize() override;
+	virtual void post_initialize( bool initialized_from_file ) override;
 	//
 	macarray3<Real> m_velocity{this};
+	macarray3<Real> m_solid_velocity{this};
 	macarray3<Real> m_external_force{this};
 	array3<Real> m_density{this};
 	array3<Real> m_accumulation{this};
@@ -96,6 +98,7 @@ protected:
 	macproject3_driver m_macproject{this,"macpressuresolver3"};
 	macadvection3_driver m_macadvection{this,"macadvection3"};
 	gridvisualizer3_driver m_gridvisualizer{this,"gridvisualizer3"};
+	gridutility3_driver m_gridutility{this,"gridutility3"};
 	graphplotter_driver m_graphplotter{this,"graphplotter"};
 	macstats3_driver m_macstats{this,"macstats3"};
 	macvisualizer3_driver m_macvisualizer{this,"macvisualizer3"};
@@ -104,6 +107,8 @@ protected:
 	//
 	parallel_driver m_parallel{this};
 	dylibloader m_dylib;
+	//
+	std::function<void(double,Real [DIM3][2])> m_set_boundary_flux;
 	//
 	virtual void inject_external_force( macarray3<Real> &velocity );
 	virtual void add_buoyancy_force( macarray3<Real> &velocity, const array3<Real> &density, double dt );

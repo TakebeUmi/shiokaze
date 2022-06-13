@@ -130,7 +130,7 @@ struct leaf2 {
 	}
 	//
 	unsigned count_filled() const {
-		return bitcount::count(m_fill_mask.data(),m_fill_mask.size(),nullptr);;
+		return bitcount::count(m_fill_mask.data(),m_fill_mask.size());
 	}
 	//
 	void set_filled( const size_t &n ) {
@@ -302,7 +302,7 @@ struct terminal_leaf2 : public leaf2 {
 	}
 	//
 	virtual size_t count() const override {
-		return bitcount::count(m_mask.data(),m_mask.size(),nullptr);
+		return bitcount::count(m_mask.data(),m_mask.size());
 	}
 	//
 	virtual bool deletable() const override {

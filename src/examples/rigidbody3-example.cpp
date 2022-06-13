@@ -67,7 +67,7 @@ private:
 		}
 	}
 	//
-	virtual void post_initialize() override {
+	virtual void post_initialize( bool initialized_from_file ) override {
 		//
 		polygon_storage.clear();
 		m_world->clear();

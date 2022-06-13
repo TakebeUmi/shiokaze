@@ -97,6 +97,15 @@ public:
 		parent->add_child(this);
 	}
 	/**
+	 \~english @brief Set module name.
+	 @param[in] name Module name.
+	 \~japanese @brief モジュールの名前を設定する。
+	 @param[in] name モジュール名。
+	 */
+	void set_module_name( std::string name ) {
+		m_name = name;
+	}
+	/**
 	 \~english @brief Set name.
 	 @param[in] long_name Module name.
 	 @param[in] argname Argument name for this instance.
@@ -159,6 +168,24 @@ public:
 		configurable::environment_map merged_environment(m_environment);
 		merged_environment.insert(environment.begin(),environment.end());
 		m_object->recursive_initialize(merged_environment);
+	}
+	/**
+	 \~english @brief Initialize the program from a file.
+	 @param[in] file filestream input.
+	 \~japanese @brief ファイルからプログラムを初期化する。
+	 @param[in] file filestream の入力。
+	 */
+	virtual void initialize( const filestream &file ) override {
+		m_object->recursive_initialize(file);
+	}
+	/**
+	 \~english @brief Initialize the program from a file.
+	 @param[in] file filestream input.
+	 \~japanese @brief ファイルからプログラムを初期化する。
+	 @param[in] file filestream の入力。
+	 */
+	virtual void serialize( const filestream &file ) const override {
+		m_object->recursive_serialize(file);
 	}
 	/**
 	 \~english @brief Get the raw pointer.

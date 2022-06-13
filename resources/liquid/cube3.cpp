@@ -35,7 +35,7 @@
 SHKZ_USING_NAMESPACE
 //
 static bool g_use_mesh {false};
-static double g_width (0.2);
+static double g_width (0.25);
 static unsigned g_default_gn (64);
 static vec3d g_center(0.5,0.5,0.5);
 static int g_version (0);
@@ -79,8 +79,9 @@ extern "C" std::map<std::string,std::string> get_default_parameters() {
 	dictionary["Gravity"] = "0.0,0.0";
 	dictionary["SurfaceTension"] = "5e-3";
 	dictionary["RegionalVolumeCorrection"] = "Yes";
-	dictionary["TimeStep"] = "1e-2";
-	dictionary["OriginPos"] = "0.5,1.0,3.5";
+	dictionary["CFL"] = "80";
+	dictionary["UseSquaredCFL"] = "Yes";
+	dictionary["OriginPos"] = "0.5,1.0,2.8";
 	dictionary["TargetPos"] = "0.5,0.45,0.5";
 	return dictionary;
 }
@@ -97,7 +98,11 @@ extern "C" void initialize( const shape3 &shape, double dx ) {
 		polygon->load_mesh(filesystem::find_resource_path("objects","bunny_watertight_low.ply"));
 		polygon->get_mesh(vertices,faces);
 		for( auto &v : vertices ) v[0] = -v[0];
-		polygon3_utility::transform(vertices,vec3d(0.53,0.26,0.6),0.58,1,180.0);
+		//
+		const double scale = g_version == 1 ? 0.36 : 0.58;
+		const vec3d origin = g_version == 1 ? vec3d(0.53,0.37,0.6) : vec3d(0.53,0.26,0.6);
+		//
+		polygon3_utility::transform(vertices,origin,scale,1,180.0);
 		levelset->set_mesh(vertices,faces);
 		levelset->generate_levelset();
 	}
@@ -115,8 +120,13 @@ extern "C" double fluid( const vec3d &p ) {
 		vec3d center1 = g_center+vec3d(g_width,0.0,0.0);
 		double w = 0.5 * g_width;
 		double value (1.0);
-		value = std::min(value,utility::box(p,center0-vec3d(w,w,w),center0+vec3d(w,w,w)));
-		value = std::min(value,utility::box(p,center1-vec3d(w,w,w),center1+vec3d(w,w,w)));
+		if( g_use_mesh ) {
+			value = std::min(value,levelset->get_levelset(p-vec3d(g_width,0.0,0.0)));
+			value = std::min(value,levelset->get_levelset(p+vec3d(g_width,0.0,0.0)));
+		} else {
+			value = std::min(value,utility::box(p,center0-vec3d(w,w,w),center0+vec3d(w,w,w)));
+			value = std::min(value,utility::box(p,center1-vec3d(w,w,w),center1+vec3d(w,w,w)));
+		}
 		return value;
 	} else {
 		return 1.0;
@@ -124,13 +134,11 @@ extern "C" double fluid( const vec3d &p ) {
 }
 //
 extern "C" vec3d velocity( const vec3d &p ) {
-	if( ! g_use_mesh ) {
-		if( g_version == 0 ) {
-			return vec3d();
-		} else {
-			if( p[0] < 0.5 ) return vec3d(0.7,0.08,0.0);
-			else return vec3d(-0.7,-0.08,0.0);
-		}
+	if( g_version == 0 ) {
+		return vec3d();
+	} else {
+		if( p[0] < 0.5 ) return vec3d(0.2,0.0,0.0);
+		else return vec3d(-0.2,0.0,0.0);
 	}
 	return vec3d();
 }

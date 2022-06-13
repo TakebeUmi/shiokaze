@@ -71,7 +71,7 @@ private:
 		m_array.flood_fill();
 	}
 	//
-	virtual void post_initialize() override {
+	virtual void post_initialize( bool initialized_from_file ) override {
 		//
 		m_array.initialize(m_shape);
 		m_array.set_as_levelset(2.0*m_dx);

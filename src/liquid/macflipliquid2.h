@@ -28,6 +28,7 @@
 #include "macliquid2.h"
 #include <shiokaze/flip/macflip2_interface.h>
 #include <shiokaze/particlerasterizer/particlerasterizer2_interface.h>
+#include <shiokaze/redistancer/redistancer2_interface.h>
 //
 SHKZ_BEGIN_NAMESPACE
 //
@@ -44,28 +45,22 @@ protected:
 	virtual void draw( graphics_engine &g ) const override;
 	//
 	virtual void configure( configuration &config ) override;
-	virtual void post_initialize() override;
+	virtual void post_initialize( bool initialized_from_file ) override;
 	//
 	struct Parameters {
 		double PICFLIP;
 		bool disable_resample {false};
+		unsigned levelset_half_bandwidth_count {3};
+		bool preupdate_FLIP {true};
 	};
 	Parameters m_param;
 	//
-	shape2 m_double_shape;
-	double m_half_dx;
-	//
 	macflip2_driver m_flip{this,"macexnbflip2"};
-	gridvisualizer2_driver m_highres_gridvisualizer{this,"gridvisualizer2"};
-	particlerasterizer2_driver m_highres_particlerasterizer{this,"flatrasterizer2"};
+	redistancer2_driver m_redistancer{this,"pderedistancer2"};
 	//
 	double interpolate_fluid( const vec2d &p ) const;
 	double interpolate_solid( const vec2d &p ) const;
 	vec2d interpolate_velocity( const vec2d &p ) const;
-	//
-private:
-	//
-	void draw_highresolution( graphics_engine &g ) const;
 };
 //
 SHKZ_END_NAMESPACE

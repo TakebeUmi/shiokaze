@@ -42,5 +42,4 @@ def build(bld):
 	bld.shlib(source = 'macflipliquid3.cpp',
 			target = bld.get_target_name(bld,'macflipliquid3'),
 			cxxflags = ['-DSPATIAL_DIM=3'],
-			use = [ bld.get_target_name(bld,'macliquid3') ],
-			lib = ['z'])
+			use = bld.get_target_name(bld,'macliquid3'))

@@ -572,10 +572,10 @@ private:
 			std::memset(m_fill_mask,with_value,m_bit_mask_size);
 		}
 		size_t count() const {
-			return bitcount::count(m_bit_mask,m_bit_mask_size,nullptr);
+			return bitcount::count(m_bit_mask,m_bit_mask_size);
 		}
 		size_t count_filled() const {
-			return m_fill_mask ? bitcount::count(m_fill_mask,m_bit_mask_size,nullptr) : 0;
+			return m_fill_mask ? bitcount::count(m_fill_mask,m_bit_mask_size) : 0;
 		}
 		void fill_all() {
 			if( ! m_fill_mask ) alloc_fill(0xFF);

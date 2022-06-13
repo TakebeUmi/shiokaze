@@ -76,12 +76,14 @@ protected:
 		if( m_param.draw_velocity ) {
 			//
 			g.color4(1.0,1.0,1.0,0.5);
+			g.begin(graphics_engine::MODE::LINES);
 			velocity.const_serial_actives([&](int i, int j, int k, const auto &it) {
 				vec3d p0 = m_dx*vec3i(i,j,k).cell();
 				vec3d p1 = p0+m_dx*it();
 				g.vertex3v(p0.v);
 				g.vertex3v(p1.v);
 			});
+			g.end();
 		}
 	}
 	virtual void draw_levelset( graphics_engine &g, const array3<Real> &levelset ) const override {
@@ -112,10 +114,10 @@ protected:
 		}
 	}
 	//
-	virtual void visualize_cell_scalar( graphics_engine &g, const array3<Real> &q ) const override {
+	virtual void visualize_cell_scalar( graphics_engine &g, const array3<Real> &q, double min_value, double max_value ) const override {
 		// TO BE IMPLEMENTED...
 	}
-	virtual void visualize_nodal_scalar( graphics_engine &g, const array3<Real> &q ) const override {
+	virtual void visualize_nodal_scalar( graphics_engine &g, const array3<Real> &q, double min_value, double max_value ) const override {
 		// TO BE IMPLEMENTED...
 	}
 	//
@@ -123,11 +125,20 @@ protected:
 		m_shape = shape;
 		m_dx = dx;
 	}
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
+	}
 	virtual void configure( configuration &config ) override {
 		config.get_bool("DrawActive",m_param.draw_active,"Should draw active");
 		config.get_bool("DrawInside",m_param.draw_inside,"Should draw inside");
 		config.get_bool("DrawGrid",m_param.draw_grid,"Should draw grid");
 		config.get_bool("DrawSolid",m_param.draw_solid,"Should draw solid");
+		config.get_bool("DrawFluid",m_param.draw_fluid,"Should draw solid");
 		config.get_bool("DrawDensity",m_param.draw_density,"Should draw density");
 		config.get_bool("DrawVelocity",m_param.draw_velocity,"Should draw velocity");
 	}

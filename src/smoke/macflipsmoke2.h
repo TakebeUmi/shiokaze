@@ -42,7 +42,7 @@ protected:
 	virtual void draw( graphics_engine &g ) const override;
 	//
 	virtual void configure( configuration &config ) override;
-	virtual void post_initialize() override;
+	virtual void post_initialize( bool initialized_from_file ) override;
 	//
 	double interpolate_solid( const vec2d &p ) const;
 	vec2d interpolate_velocity( const vec2d &p ) const;

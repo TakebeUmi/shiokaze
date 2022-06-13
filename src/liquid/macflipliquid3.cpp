@@ -39,44 +39,32 @@
 SHKZ_USING_NAMESPACE
 //
 macflipliquid3::macflipliquid3 () {
-	//
 	m_param.PICFLIP = 0.95;
-	m_highres_particlerasterizer.set_name("Highresolution Particle Rasterizer for FLIP","HighresRasterizer");
 }
 //
 void macflipliquid3::configure( configuration &config ) {
 	//
 	config.get_double("PICFLIP",m_param.PICFLIP,"PICFLIP blending factor");
 	config.get_bool("DisableResample",m_param.disable_resample,"Disable resampling");
+	config.get_bool("PreupdateFLIP",m_param.preupdate_FLIP,"Pre-update FLIP");
 	assert( m_param.PICFLIP >= 0.0 && m_param.PICFLIP <= 1.0 );
 	//
 	macliquid3::configure(config);
-	//
-	m_double_shape = 2 * m_shape;
-	m_half_dx = 0.5 * m_dx;
-	//
-	config.set_default_double("HighresRasterizer.RadiusFactor",1.0);
-	config.set_default_double("HighresRasterizer.WeightFactor",2.0);
-	config.set_default_unsigned("HighresRasterizer.NeighborLookUpCells",2);
-	//
-	m_highres_particlerasterizer->set_environment("shape",&m_double_shape);
-	m_highres_particlerasterizer->set_environment("dx",&m_half_dx);
-	//
-	m_highres_macsurfacetracker->set_environment("shape",&m_double_shape);
-	m_highres_macsurfacetracker->set_environment("dx",&m_half_dx);
 }
 //
-void macflipliquid3::post_initialize () {
+void macflipliquid3::post_initialize ( bool initialized_from_file ) {
 	//
-	macliquid3::post_initialize();
+	macliquid3::post_initialize(initialized_from_file);
 	//
-	scoped_timer timer(this);
-	timer.tick(); console::dump( ">>> Started FLIP initialization\n" );
-	//
-	extend_both();
-	m_flip->resample(m_fluid,[&](const vec3d &p){ return interpolate_solid(p); },m_velocity);
-	//
-	console::dump( "<<< Initialization finished. Took %s\n", timer.stock("initialization").c_str());
+	if( ! initialized_from_file ) {
+		scoped_timer timer(this);
+		timer.tick(); console::dump( ">>> Started FLIP initialization\n" );
+		//
+		extend_both();
+		m_flip->resample(m_fluid,[&](const vec3d &p){ return interpolate_solid(p); },m_velocity);
+		//
+		console::dump( "<<< Initialization finished. Took %s\n", timer.stock("initialization").c_str());
+	}
 }
 //
 size_t macflipliquid3::do_inject_external_fluid( array3<Real> &fluid, macarray3<Real> &velocity, double dt, double time, unsigned step ) {
@@ -101,21 +89,27 @@ void macflipliquid3::idle() {
 	add_to_graph();
 	//
 	// Compute the timestep size
-	double time = m_timestepper->get_current_time();
-	double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
-	double CFL = m_timestepper->get_current_CFL();
-	unsigned step = m_timestepper->get_step_count();
+	const double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
+	const double time = m_timestepper->get_current_time();
+	const double CFL = m_timestepper->get_current_CFL();
+	const unsigned step = m_timestepper->get_step_count();
 	timer.tick(); console::dump( ">>> %s step started (dt=%.2e,CFL=%.2f)...\n", dt, CFL, console::nth(step).c_str());
 	//
-	shared_macarray3<Real> face_density(m_shape);
 	shared_macarray3<Real> save_velocity(m_shape);
 	shared_macarray3<macflip3_interface::mass_momentum3> mass_and_momentum(m_shape);
 	//
+	// Update solid
+	m_macutility->update_solid_variables(m_dylib,time,&m_solid,&m_solid_velocity);
+	//
 	// Update fluid levelset
-	m_flip->update([&](const vec3d &p){ return interpolate_solid(p); },m_fluid);
+	if( m_param.preupdate_FLIP ) {
+		m_flip->update([&](const vec3d &p){ return interpolate_solid(p); },m_fluid,time);
+	}
 	//
 	// Advect fluid levelset
-	m_macsurfacetracker->advect(m_fluid,m_solid,m_velocity,dt);
+	shared_array3<Real> fluid_save(m_fluid);
+	m_macadvection->advect_scalar(m_fluid,m_velocity,fluid_save(),dt,"levelset");
+	m_fluid.flood_fill();
 	//
 	// Advect FLIP particles
 	m_flip->advect(
@@ -123,34 +117,22 @@ void macflipliquid3::idle() {
 		[&](const vec3d &p){ return interpolate_velocity(p); },
 		time,dt);
 	//
-	// Grid velocity advection
-	m_macadvection->advect_vector(m_velocity,m_velocity,m_fluid,dt);
-	//
-	// Mark bullet particles
-	m_flip->mark_bullet(
-		[&](const vec3d &p){ return interpolate_fluid(p); },
-		[&](const vec3d &p){ return interpolate_velocity(p); },
-		time
-	);
-	//
-	// Correct positions
-	m_flip->correct([&](const vec3d &p){ return interpolate_fluid(p); },m_velocity);
-	//
-	// Reseed particles
-	if( ! m_param.disable_resample ) {
-		m_flip->resample(m_fluid,
-			[&](const vec3d &p){ return interpolate_solid(p); },
-			m_velocity
-		);
+	// Update fluid levelset
+	if( ! m_param.preupdate_FLIP ) {
+		m_flip->update([&](const vec3d &p){ return interpolate_solid(p); },m_fluid,time);
 	}
 	//
-	// Splat momentum and mass of FLIP particles onto grids
-	m_flip->splat(mass_and_momentum());
+	// Redistance
+	timer.tick(); console::dump( "Re-distancing fluid levelsets..." );
+	m_redistancer->redistance(m_fluid,m_param.levelset_half_bandwidth_count);
+	m_gridutility->extrapolate_levelset(m_solid,m_fluid);
+	console::dump( "Done. Took %s\n", timer.stock("redistance_levelset").c_str());
 	//
-	// Compute face mass
-	timer.tick(); console::dump( "Computing face mass..." );
-	m_macutility->compute_face_density(m_solid,m_fluid,face_density());
-	console::dump( "Done. Took %s\n", timer.stock("compute_face_mass").c_str());
+	// Grid velocity advection
+	m_macadvection->advect_vector(m_velocity,m_velocity,m_fluid,dt,"velocity");
+	//
+	// Splat momentum and mass of FLIP particles onto grids
+	m_flip->splat(time,mass_and_momentum());
 	//
 	// Compute the combined grid velocity
 	timer.tick(); console::dump( "Computing combined grid velocity..." );
@@ -159,7 +141,7 @@ void macflipliquid3::idle() {
 	overwritten_velocity->activate_as(mass_and_momentum());
 	overwritten_velocity->parallel_actives([&](int dim, int i, int j, int k, auto &it, int tn ) {
 		const auto value = mass_and_momentum()[dim](i,j,k);
-		Real grid_mass = std::max((Real)0.0,face_density()[dim](i,j,k)-value.mass);
+		const Real grid_mass = m_velocity[dim].active(i,j,k) ? std::max(0.0,1.0-value.mass) : 0.0;
 		it.set((grid_mass*m_velocity[dim](i,j,k)+value.momentum)/(grid_mass+value.mass));
 	});
 	//
@@ -167,6 +149,14 @@ void macflipliquid3::idle() {
 	overwritten_velocity->const_serial_actives([&](int dim, int i, int j, int k, auto &it) {
 		m_velocity[dim].set(i,j,k,it());
 	});
+	//
+	// Mark bullet particles
+	m_flip->mark_bullet(
+		[&](const vec3d &p){ return interpolate_fluid(p); },
+		[&](const vec3d &p){ return interpolate_velocity(p); },
+		time
+	);
+	//
 	console::dump( "Done. Took %s\n", timer.stock("compute_combined_velocity").c_str());
 	//
 	// Save the current velocity
@@ -182,10 +172,21 @@ void macflipliquid3::idle() {
 	set_volume_correction(m_macproject.get());
 	//
 	// Project
-	m_macproject->project(dt,m_velocity,m_solid,m_fluid,(macliquid3::m_param).surftens_k);
+	m_macproject->project(dt,m_velocity,m_solid,m_solid_velocity,m_fluid,(macliquid3::m_param).surftens_k);
 	//
 	// Extend both the level set and velocity
 	extend_both();
+	//
+	// Correct positions
+	m_flip->correct([&](const vec3d &p){ return interpolate_fluid(p); },m_velocity);
+	//
+	// Reseed particles
+	if( ! m_param.disable_resample ) {
+		m_flip->resample(m_fluid,
+			[&](const vec3d &p){ return interpolate_solid(p); },
+			m_velocity
+		);
+	}
 	//
 	// Update FLIP momentum
 	m_flip->update(save_velocity(),m_velocity,dt,(macliquid3::m_param).gravity,m_param.PICFLIP);
@@ -195,6 +196,9 @@ void macflipliquid3::idle() {
 	// Export mesh
 	export_mesh();
 	//
+	// Save status
+	save_state();
+	//
 	// Report stats
 	m_macstats->dump_stats(m_solid,m_fluid,m_velocity,m_timestepper.get());
 }
@@ -202,63 +206,24 @@ void macflipliquid3::idle() {
 void macflipliquid3::do_export_mesh( unsigned frame ) const {
 	//
 	scoped_timer timer(this);
+	std::string particle_path = console::format_str("%s/%d_particles.dat",m_export_path.c_str(),frame);
+	timer.tick(); console::dump( "Writing ballistic particles..." );
 	//
-	timer.tick(); console::dump( "Computing high-resolution levelset..." );
-	//
-	shared_array3<Real> doubled_fluid(m_double_shape.cell(),1.0);
-	shared_array3<Real> doubled_solid(m_double_shape.nodal(),1.0);
-	//
-	array_upsampler3::upsample_to_double_cell<Real>(m_fluid,m_dx,doubled_fluid());
-	array_upsampler3::upsample_to_double_nodal<Real>(m_solid,m_dx,doubled_solid());
-	//
-	shared_bitarray3 mask(m_double_shape);
-	shared_array3<Real> sizing_array(m_shape);
-	//
-	std::vector<particlerasterizer3_interface::Particle3> points, ballistic_points;
+	std::vector<particlerasterizer3_interface::Particle3> ballistic_points;
 	std::vector<macflip3_interface::particle3> particles = m_flip->get_particles();
 	for( int n=0; n<particles.size(); ++n ) {
 		//
 		particlerasterizer3_interface::Particle3 point;
 		point.p = particles[n].p;
 		point.r = particles[n].r;
-		double levelset_value = interpolate_fluid(particles[n].p);
 		//
-		if( levelset_value < 0.5*m_dx ) {
-			points.push_back(point);
-			mask().set(mask->shape().clamp(point.p/m_half_dx));
-		} else {
-			if( particles[n].bullet ) ballistic_points.push_back(point);
+		if( interpolate_fluid(particles[n].p) > point.r ) {
+			ballistic_points.push_back(point);
 		}
-		//
-		vec3i pi = m_shape.find_cell(point.p/m_dx);
-		sizing_array->set(pi,std::max((Real)particles[n].sizing_value,sizing_array()(pi)));
 	}
 	//
-	mask().dilate(4);
-	doubled_fluid->activate_as_bit(mask());
-	//
-	shared_array3<Real> particle_levelset(m_double_shape,0.125*m_dx);
-	m_highres_particlerasterizer->build_levelset(particle_levelset(),mask(),points);
-	//
-	doubled_fluid->parallel_actives([&](int i, int j, int k, auto &it, int tn) {
-		double rate = array_interpolator3::interpolate(sizing_array(),0.5*vec3d(i,j,k));
-		double f = it(), p = particle_levelset()(i,j,k);
-		it.set( rate * std::min(f,p) + (1.0-rate) * f );
-	});
-	//
-	console::dump( "Done. Took %s\n", timer.stock("generate_highres_mesh").c_str());
-	//
-	auto vertex_color_func = [&](const vec3d &p) { return p; };
-	auto uv_coordinate_func = [&](const vec3d &p) { return vec2d(p[0],0.0); };
-	//
-	timer.tick(); console::dump( "Generating mesh..." );
-	m_highres_macsurfacetracker->export_fluid_mesh(m_export_path,frame,doubled_solid(),doubled_fluid(),vertex_color_func,uv_coordinate_func);
-	console::dump( "Done. Took %s\n", timer.stock("export_highres_mesh").c_str());
-	//
-	std::string particle_path = console::format_str("%s/%d_particles.dat",m_export_path.c_str(),frame);
-	timer.tick(); console::dump( "Writing ballistic particles..." );
 	FILE *fp = fopen(particle_path.c_str(),"wb");
-	size_t size = ballistic_points.size();
+	const size_t size = ballistic_points.size();
 	fwrite(&size,1,sizeof(unsigned),fp);
 	for( size_t n=0; n<size; ++n ) {
 		float position[3] = { (float)ballistic_points[n].p.v[0],
@@ -271,7 +236,7 @@ void macflipliquid3::do_export_mesh( unsigned frame ) const {
 	fclose(fp);
 	console::dump( "Done. Size=%d. Took %s\n", size, timer.stock("write_ballistic").c_str());
 	//
-	do_export_solid_mesh();
+	macliquid3::do_export_mesh(frame);
 }
 //
 void macflipliquid3::render_mesh( unsigned frame ) const {
@@ -292,26 +257,28 @@ void macflipliquid3::render_mesh( unsigned frame ) const {
 		}
 	}
 	//
-	std::string render_command = console::format_str("cd %s; /usr/bin/python render.py %d mesh %g %g %g %d %g %g %g %g %g %g",
+	// Write variables
+	FILE *fp = fopen((m_export_path+"/common.ini").c_str(),"w");
+	assert(fp);
+	fprintf(fp,"[Common]\n");
+	fprintf(fp,"OriginPos = [%f,%f,%f]\n",(macliquid3::m_param).origin[0],(macliquid3::m_param).origin[1],(macliquid3::m_param).origin[2]);
+	fprintf(fp,"TargetPos = [%f,%f,%f]\n",(macliquid3::m_param).target[0],(macliquid3::m_param).target[1],(macliquid3::m_param).target[2]);
+	fprintf(fp,"SampleCount = %d\n", (macliquid3::m_param).render_sample_count );
+	fprintf(fp,"LiquidColor = [%f,%f,%f]\n", 0.5, 0.5, 1.0);
+	fclose(fp);
+	//
+	std::string render_command = console::format_str("cd %s; /usr/bin/python render.py %d mesh",
 				mitsuba_path.c_str(),
-				frame,
-				0.5, 0.5, 1.0,
-				(macliquid3::m_param).render_sample_count,
-				(macliquid3::m_param).target[0], (macliquid3::m_param).target[1], (macliquid3::m_param).target[2],
-				(macliquid3::m_param).origin[0], (macliquid3::m_param).origin[1], (macliquid3::m_param).origin[2]);
+				frame);
 	//
 	console::dump("Running command: %s\n", render_command.c_str());
 	console::system(render_command.c_str());
 	//
 	if( (macliquid3::m_param).render_transparent ) {
 		//
-		std::string render_command = console::format_str("cd %s; /usr/bin/python render.py %d transparent %g %g %g %d %g %g %g %g %g %g",
+		std::string render_command = console::format_str("cd %s; /usr/bin/python render.py %d transparent",
 				mitsuba_path.c_str(),
-				frame,
-				0.5, 0.5, 1.0,
-				(macliquid3::m_param).render_transparent_sample_count,
-				(macliquid3::m_param).target[0], (macliquid3::m_param).target[1], (macliquid3::m_param).target[2],
-				(macliquid3::m_param).origin[0], (macliquid3::m_param).origin[1], (macliquid3::m_param).origin[2]);
+				frame);
 		//
 		console::dump("Running command: %s\n", render_command.c_str());
 		console::system(render_command.c_str());
@@ -334,25 +301,10 @@ vec3d macflipliquid3::interpolate_velocity( const vec3d &p ) const {
 //
 void macflipliquid3::draw( graphics_engine &g ) const {
 	//
-	// Draw velocity
-	m_macvisualizer->draw_velocity(g,m_velocity);
-	//
-	// Draw projection component
-	m_macproject->draw(g);
+	macliquid3::draw(g);
 	//
 	// Draw FLIP particles
 	m_flip->draw(g,m_timestepper->get_current_time());
-	//
-	// Visualize solid
-	shared_array3<Real> solid_to_visualize(m_solid.shape());
-	if( ! m_gridutility->assign_visualizable_solid(m_dylib,m_dx,solid_to_visualize())) solid_to_visualize->copy(m_solid);
-	if( array_utility3::levelset_exist(solid_to_visualize())) m_gridvisualizer->draw_solid(g,solid_to_visualize());
-	//
-	// Visualize levelset
-	m_gridvisualizer->draw_fluid(g,m_solid,m_fluid);
-	//
-	// Draw graph
-	m_graphplotter->draw(g);
 }
 //
 extern "C" module * create_instance() {

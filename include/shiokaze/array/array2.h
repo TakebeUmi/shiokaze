@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <algorithm>
 #include <utility>
+#include <functional>
 #include <shiokaze/math/shape.h>
 #include "array_core2.h"
 //
@@ -105,13 +106,31 @@ private:
 		m_core->recursive_configure(config);
 	}
 	//
-	virtual void post_initialize() override {
+	virtual void post_initialize( bool initialized_from_file ) override {
 		if( shape().count() && ! m_is_initialized ) {
 			initialize(m_shape,m_background_value);
 		}
 	}
 	//
 public:
+	/**
+	 \~english @brief Set a writing function of an element.
+	 @param[in] func Function to write an element.
+	 \~japanese @brief 要素をファイルに書き出す関数を設定する。
+	 @param[in] func 要素を書き出す関数。
+	 */
+	virtual void set_write_function( std::function<void( const filestream &file, const T& e )> func ) {
+		m_write_func = func;
+	}
+	/**
+	 \~english @brief Set a reading function of an element.
+	 @param[in] func Function to read an element.
+	 \~japanese @brief 要素をファイルから読み出す関数を設定する。
+	 @param[in] func 要素を読み出す関数。
+	 */
+	virtual void set_read_function( std::function<void( const filestream &file, T& e )> func ) {
+		m_read_func = func;
+	}
 	/**
 	 \~english @brief Send a message to the core module.
 	 @param[in] message Message
@@ -305,9 +324,6 @@ public:
 			m_core->flood_fill([&](const void *value_ptr) {
 				return *static_cast<const T *>(value_ptr) < 0.0;
 			},m_parallel);
-		} else {
-			printf( "Flood fill attempted without being set either levelset or fillable.\n");
-			exit(0);
 		}
 	}
 	/**
@@ -1876,6 +1892,73 @@ private:
 	bool m_touch_only_actives {false}, m_fillable {false}, m_levelset {false}, m_is_initialized {false};
 	array2_ptr m_core;
 	std::string m_core_name;
+	std::function<void( const filestream &file, const T& e )> m_write_func {nullptr};
+	std::function<void( const filestream &file, T& e )> m_read_func {nullptr};
+	//
+	template<typename Y, typename = void>
+	struct try_flood_fill : std::false_type { try_flood_fill( array2<T> &array ){} };
+	//
+	template<typename Y> struct try_flood_fill<Y,typename std::enable_if<
+		true, decltype(std::declval<Y&>() < std::declval<double&>(),(void)0)>::type
+		> : std::true_type { try_flood_fill( array2<T> &array ) { array.flood_fill(); }};
+	//
+	virtual void initialize( const filestream &file ) override {
+		//
+		file.r(m_shape);
+		file.r(m_background_value);
+		file.r(m_fill_value);
+		file.r(m_touch_only_actives);
+		file.r(m_fillable);
+		file.r(m_levelset);
+		m_core->initialize(m_shape.w,m_shape.h,sizeof(T));
+		//
+		size_t total;
+		file.r(total);
+		//
+		for( size_t n=0; n<total; ++n ) {
+			vec2i pi;
+			file.r(pi);
+			T value;
+			if( m_read_func ) {
+				m_read_func(file,value);
+			} else {
+				file.r(value);
+			}
+			set(pi,value);
+		}
+		if( m_fillable || m_levelset ) {
+			try_flood_fill<T>(*this);
+		}
+		m_is_initialized = true;
+	}
+	virtual void serialize( const filestream &file ) const override {
+		//
+		file.w(m_shape);
+		file.w(m_background_value);
+		file.w(m_fill_value);
+		file.w(m_touch_only_actives);
+		file.w(m_fillable);
+		file.w(m_levelset);
+		//
+		size_t total = count();
+		file.w(total);
+		//
+		size_t write_count (0);
+		const_serial_actives([&](int i, int j, const auto &it) {
+			vec2i pi(i,j);
+			file.w(pi);
+			if( m_write_func ) {
+				m_write_func(file,it());
+			} else {
+				file.w(it());
+			}
+			++ write_count;
+		});
+		if( write_count != total ) {
+			printf( "array2: write_count = %zu, total = %zu\n", write_count, total );
+			exit(0);
+		}
+	}
 };
 //
 SHKZ_END_NAMESPACE

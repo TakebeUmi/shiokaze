@@ -50,29 +50,29 @@ protected:
 		fluid.activate_as_bit(mask);
 		fluid.parallel_actives( [&](int i, int j, auto &it ) {
 			if( mask(i,j)) {
+				double result (1.0);
 				vec2d x (m_dx*vec2i(i,j).cell());
-				std::vector<size_t> neighbors = m_pointgridhash->get_cell_neighbors(m_shape.find_cell(x/m_dx),pointgridhash2_interface::USE_NODAL);
+				std::vector<size_t> neighbors = m_pointgridhash->get_cell_neighbors(vec2i(i,j),pointgridhash2_interface::USE_NODAL);
 				if( neighbors.size()) {
 					double R (0.0), w_sum (0.0);
 					for( const auto n : neighbors ) R += m_param.r_factor * particles[n].r;
 					R /= neighbors.size(); R *= 2.0 * m_param.w_factor;
-					for( const auto n : neighbors ) w_sum += kernel((particles[n].p-x).norm2() / (R*R));
-					if( w_sum ) {
-						vec2d avg_x; double avg_r (0.0);
-						for( const auto n : neighbors ) {
-							double w = kernel((particles[n].p-x).norm2() / (R*R)) / w_sum;
-							if( w ) {
-								avg_x += w * particles[n].p;
-								avg_r += w * m_param.r_factor * particles[n].r;
+					if( R*R ) {
+						for( const auto n : neighbors ) w_sum += kernel((particles[n].p-x).norm2() / (R*R));
+						if( w_sum ) {
+							vec2d avg_x; double avg_r (0.0);
+							for( const auto n : neighbors ) {
+								double w = kernel((particles[n].p-x).norm2() / (R*R)) / w_sum;
+								if( w ) {
+									avg_x += w * particles[n].p;
+									avg_r += w * m_param.r_factor * particles[n].r;
+								}
 							}
+							result = (avg_x-x).len() - avg_r;
 						}
-						it.set((avg_x-x).len() - avg_r);
-					} else {
-						it.set(1.0);
 					}
-				} else {
-					it.set(1.0);
 				}
+				it.set(result);
 			}
 		});
 	}
@@ -84,6 +84,14 @@ protected:
 	virtual void initialize( const shape2 &shape, double dx ) override {
 		m_shape = shape;
 		m_dx = dx;
+	}
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
 	}
 	//
 	typedef struct {

@@ -39,15 +39,18 @@ protected:
 		config.get_double("MinScale",m_param.min_scale,"Minimal scale");
 		config.get_double("RotateSpeed",m_param.rotate_speed,"Rotation speed");
 		config.get_bool("ResetView",m_param.reset_view,"Reset view");
+		config.get_vec3d("TargetPos",m_param.target.v,"Camera target position");
+		config.get_vec3d("OriginPos",m_param.origin.v,"Camera origin position");
+		config.get_double("Fov",m_param.fov,"Camera FOV");
 	}
 	//
-	virtual void initialize( const environment_map &environment ) override {
+	virtual void post_initialize( bool initialized_from_file ) override {
 		//
 		if( ! m_bounding_box_set || m_param.reset_view ) {
-			m_target = vec3d(0.5,0.2,0.5);
-			m_position = vec3d(-0.4,1.6,-3.0);
-			m_up = vec3d(0.0,1.0,0.0);
-			m_fov = 35.0;
+			m_target = m_param.target;
+			m_position = m_param.origin;
+			m_up = m_param.up;
+			m_fov = m_param.fov;
 			m_near = 0.1;
 			m_far = 10.0;
 		}
@@ -63,10 +66,10 @@ protected:
 		//
 		m_near = std::numeric_limits<double>::max();
 		m_far = std::numeric_limits<double>::min();
-		vec3d dir = (m_target-m_position).normal();
-		double w = m_bb1[0]-m_bb0[0];
-		double h = m_bb1[1]-m_bb0[1];
-		double d = m_bb1[2]-m_bb0[2];
+		const vec3d dir = (m_target-m_position).normal();
+		const double w = m_bb1[0]-m_bb0[0];
+		const double h = m_bb1[1]-m_bb0[1];
+		const double d = m_bb1[2]-m_bb0[2];
 		//
 		for( int i=0; i<2; ++i ) for( int j=0; j<2; ++j ) for( int k=0; k<2; ++k ) {
 			vec3d r = vec3d(i*w,j*h,k*d) - m_position;
@@ -87,22 +90,7 @@ protected:
 		m_bb0 = vec3d(p0);
 		m_bb1 = vec3d(p1);
 		//
-		if( ! m_bounding_box_set || m_param.reset_view ) {
-			//
-			double w = m_bb1[0]-m_bb0[0];
-			double h = m_bb1[1]-m_bb0[1];
-			double d = m_bb1[2]-m_bb0[2];
-			double m = std::max(w,d);
-			vec3d target = 0.5*vec3d(w,0.75*h,d);
-			vec3d position = vec3d(-0.4,target[1]+1.0,-3.0);
-			vec3d up = vec3d(0.0,1.0,0.0);
-			double fov (35.0), near(0.1), far(10.0);
-			look_at(target.v,position.v,up.v,fov);
-			set_distance(2.75*m);
-		} else {
-			update_clipping();
-		}
-		//
+		update_clipping();
 		m_bounding_box_set = true;
 	}
 	//
@@ -171,8 +159,7 @@ protected:
 	//
 	virtual void scroll( double xoffset, double yoffset ) override {
 		//
-		double distance = get_distance();
-		distance = std::max(m_param.min_scale,distance-m_param.scroll_speed*yoffset);
+		const double distance = std::max(m_param.min_scale,get_distance()-m_param.scroll_speed*yoffset);
 		set_distance(distance);
 	}
 	//
@@ -186,23 +173,23 @@ protected:
 	virtual void drag( double x, double y, double z, double u, double v, double w ) override {
 		m_dragging = true;
 		//
-		if( m_space_pressing ) {
+		if( m_shift_pressing ) {
 			//
-			double x = m_dragging_pos[0]-m_drag_start[0];
-			double y = m_dragging_pos[1]-m_drag_start[1];
+			const double x = m_dragging_pos[0]-m_drag_start[0];
+			const double y = m_dragging_pos[1]-m_drag_start[1];
 			m_target = m_drag_start_target + m_param.rotate_speed * (x * m_dragging_xvec + y * m_up);
 			update_clipping();
 			//
-		} else if( m_shift_pressing ) {
+		} else if( m_space_pressing ) {
 			//
 			vec3d eye_r = m_drag_start_position - m_target;
-			double dot = eye_r * m_up;
+			const double dot = eye_r * m_up;
 			eye_r -= dot * m_up;
 			double d = eye_r.len();
 			eye_r = eye_r / d;
 			//
-			double factor = (m_drag_start[0]-m_dragging_pos[0]) * m_param.rotate_speed;
-			vec3d aside = m_up ^ eye_r;
+			const double factor = (m_drag_start[0]-m_dragging_pos[0]) * m_param.rotate_speed;
+			const vec3d aside = m_up ^ eye_r;
 			vec3d rotated = (factor * aside + (1.0-factor) * eye_r).normal();
 			rotated *= d;
 			rotated += dot * m_up;
@@ -215,12 +202,12 @@ protected:
 	//
 	vec3d convert( const vec2d &input ) const {
 		//
-		vec3d r = m_target-m_position;
+		const vec3d r = m_target-m_position;
 		vec3d ex = r ^ m_up;
 		vec3d ey = ex ^ r;
 		ex.normalize();
 		ey.normalize();
-		double scale = r.len() * tan(0.5*m_fov/180.0*M_PI);
+		const double scale = r.len() * tan(0.5*m_fov/180.0*M_PI);
 		//
 		vec2d p_2D;
 		p_2D[0] = 2.0 * (input[0] / (double)m_width - 0.5) * m_width / (double)m_height;
@@ -233,12 +220,12 @@ protected:
 		//
 		UI_interface::event_structure result(event);
 		//
-		vec3d out = convert(vec2d(event.x,event.y));
+		const vec3d out = convert(vec2d(event.x,event.y));
 		result.x = out[0];
 		result.y = out[1];
 		result.z = out[2];
 		//
-		vec3d out1 = convert(vec2d(event.x+event.u,event.y+event.v));
+		const vec3d out1 = convert(vec2d(event.x+event.u,event.y+event.v));
 		result.u = out1[0]-out[0];
 		result.v = out1[1]-out[1];
 		result.w = out1[2]-out[2];
@@ -251,6 +238,23 @@ protected:
 		g.look_at(m_target.v,m_position.v,m_up.v,m_fov,m_near,m_far);
 		//
 		if( m_bounding_box_set ) {
+			g.line_width(2.0);
+			g.color4(0.2,0.2,1.0,0.5);
+			g.begin(graphics_engine::MODE::LINES);
+			g.vertex3(0.0,0.0,0.0);
+			g.vertex3(0.25,0.0,0.0);
+			g.end();
+			g.color4(0.2,1.0,0.2,0.5);
+			g.begin(graphics_engine::MODE::LINES);
+			g.vertex3(0.0,0.0,0.0);
+			g.vertex3(0.0,0.25,0.0);
+			g.end();
+			g.color4(1.0,0.2,0.2,0.5);
+			g.begin(graphics_engine::MODE::LINES);
+			g.vertex3(0.0,0.0,0.0);
+			g.vertex3(0.0,0.0,0.25);
+			g.end();
+			g.line_width(1.0);
 			g.color4(1.0,1.0,1.0,0.5);
 			graphics_utility::draw_wired_box(g,m_bb0.v,m_bb1.v);
 		}
@@ -272,6 +276,10 @@ protected:
 	}
 	//
 	struct Parameters {
+		vec3d target {0.5,0.2,0.5};
+		vec3d origin {-0.4,1.6,-3.0};
+		vec3d up {0.0,1.0,0.0};
+		double fov {30.0};
 		double scroll_speed {0.01};
 		double rotate_speed {0.001};
 		double min_scale {0.01};

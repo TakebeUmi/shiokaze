@@ -28,6 +28,7 @@
 #include "macliquid3.h"
 #include <shiokaze/flip/macflip3_interface.h>
 #include <shiokaze/particlerasterizer/particlerasterizer3_interface.h>
+#include <shiokaze/redistancer/redistancer3_interface.h>
 //
 SHKZ_BEGIN_NAMESPACE
 //
@@ -44,22 +45,20 @@ protected:
 	virtual void draw( graphics_engine &g ) const override;
 	//
 	virtual void configure( configuration &config ) override;
-	virtual void post_initialize() override;
+	virtual void post_initialize( bool initialized_from_file ) override;
 	virtual void do_export_mesh( unsigned frame ) const override;
 	virtual void render_mesh( unsigned frame ) const override;
 	//
 	struct Parameters {
 		double PICFLIP;
 		bool disable_resample {false};
+		unsigned levelset_half_bandwidth_count {3};
+		bool preupdate_FLIP {true};
 	};
 	Parameters m_param;
 	//
-	shape3 m_double_shape;
-	double m_half_dx;
-	//
 	macflip3_driver m_flip{this,"macexnbflip3"};
-	macsurfacetracker3_driver m_highres_macsurfacetracker{this,"maclevelsetsurfacetracker3"};
-	particlerasterizer3_driver m_highres_particlerasterizer{this,"flatrasterizer3"};
+	redistancer3_driver m_redistancer{this,"pderedistancer3"};
 	//
 	double interpolate_fluid( const vec3d &p ) const;
 	double interpolate_solid( const vec3d &p ) const;

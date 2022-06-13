@@ -283,7 +283,7 @@ struct shape2 {
 		return face(dim).clamp(p+0.5*vec2d(dim==0,dim==1));
 	}
 	/**
-	 \~english @brief Get the length of grid cell size.
+	 \~english @brief Get the length of grid cell size
 	 \~japanese @brief グリッドのセルの長さを得る。
 	 */
 	double dx() const {
@@ -298,6 +298,15 @@ struct shape2 {
 	unsigned max() const {
 		unsigned result (0);
 		for( int dim : DIMS2 ) result = std::max(result,(*this)[dim]);
+		return result;
+	}
+	/**
+	 \~english @brief Get the minimal number in all the dimensions.
+	 \~japanese @brief 全ての次元の中の最小値を得る。
+	 */
+	unsigned min() const {
+		unsigned result (w);
+		for( int dim : DIMS2 ) result = std::min(result,(*this)[dim]);
 		return result;
 	}
 	/**
@@ -764,6 +773,15 @@ struct shape3 {
 	unsigned max() const {
 		unsigned result (0);
 		for( int dim : DIMS3 ) result = std::max(result,(*this)[dim]);
+		return result;
+	}
+	/**
+	 \~english @brief Get the minimal number in all the dimensions.
+	 \~japanese @brief 全ての次元の中の最小値を得る。
+	 */
+	unsigned min() const {
+		unsigned result (w);
+		for( int dim : DIMS3 ) result = std::min(result,(*this)[dim]);
 		return result;
 	}
 	/**

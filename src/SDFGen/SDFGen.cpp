@@ -91,7 +91,9 @@ protected:
 		for( int i=0; i<nx; ++i ) {
 			for( int j=0; j<ny; ++j ) {
 				for( int k=0; k<nz; ++k ) {
-					m_levelset_array.set(i,j,k,phi(i,j,k));
+					const float value = phi(i,j,k);
+					assert( ! utility::is_nan(value));
+					m_levelset_array.set(i,j,k,value);
 				}
 			}
 		}
@@ -99,7 +101,7 @@ protected:
 	virtual double get_levelset( const vec3d &p ) const override {
 		double box_levelset = utility::box(p,m_corner0,m_corner1);
 		const vec3d converted_p = p - m_corner0;
-		return std::max(0.0,box_levelset)+array_interpolator3::interpolate(m_levelset_array,converted_p/m_dx-vec3d(0.5,0.5,0.5));
+		return std::max(0.0,box_levelset)+array_interpolator3::interpolate(m_levelset_array,converted_p/m_dx);
 	}
 	//
 	virtual void configure( configuration &config ) override {
@@ -108,6 +110,24 @@ protected:
 	}
 	virtual void initialize( double dx ) override {
 		m_dx = dx;
+	}
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+		file.r(m_corner0);
+		file.r(m_corner1);
+		file.r(m_scaling);
+		file.read(m_vertices);
+		file.read(m_faces);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
+		file.w(m_corner0);
+		file.w(m_corner1);
+		file.w(m_scaling);
+		file.write(m_vertices);
+		file.write(m_faces);
 	}
 	//
 	shape3 m_shape;

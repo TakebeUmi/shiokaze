@@ -91,7 +91,7 @@ protected:
 	}
 	//
 	virtual size_t count( const parallel_driver &parallel ) const override {
-		return bitcount::count(m_bit_mask,m_bit_mask_size,&parallel);
+		return bitcount::count(m_bit_mask,m_bit_mask_size);
 	}
 	//
 	virtual void copy( const array_core3 &array, std::function<void(void *target, const void *src)> copy_func, const parallel_driver &parallel ) override {

@@ -38,7 +38,7 @@ protected:
 	//
 	virtual void configure( configuration &config ) override;
 	virtual void initialize( const shape3 &shape, double dx ) override;
-	virtual void post_initialize() override;
+	virtual void post_initialize( bool initialized_from_file ) override;
 	//
 	virtual bool backtrace( const array3<Real> &solid, const array3<Real> &fluid ) override;
 	virtual bool fetch( macarray3<Real> &u_reconstructed ) const override;

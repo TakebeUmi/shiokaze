@@ -69,7 +69,7 @@ protected:
 	}
 	//
 	virtual size_t count( const parallel_driver &parallel ) const override {
-		return bitcount::count(m_bit_mask,m_bit_mask_size,&parallel);
+		return bitcount::count(m_bit_mask,m_bit_mask_size);
 	}
 	//
 	virtual ~lineararray2() {

@@ -23,4 +23,4 @@ def build(bld):
 #
 	bld.shlib(source = bld.path.ant_glob('**/*.cpp'),
 			target = bld.get_target_name(bld,'core'),
-			lib=['boost_date_time','boost_filesystem','boost_system'])
+			lib=['boost_date_time','boost_filesystem','boost_system','z'])

@@ -73,7 +73,7 @@ void macliquid2::configure( configuration &config ) {
 	config.get_double("ResolutionScale",resolution_scale,"Resolution doubling scale");
 	//
 	m_shape *= resolution_scale;
-	m_dx = view_scale * m_shape.dx();
+	m_dx = view_scale / m_shape[0];
 }
 //
 void macliquid2::setup_window( std::string &name, int &width, int &height ) const {
@@ -81,37 +81,46 @@ void macliquid2::setup_window( std::string &name, int &width, int &height ) cons
 	height = width * ratio;
 }
 //
-void macliquid2::post_initialize () {
+void macliquid2::post_initialize ( bool initialized_from_file ) {
 	//
-	auto initialize_func = reinterpret_cast<void(*)(const shape2 &shape, double dx)>(m_dylib.load_symbol("initialize"));
+	auto initialize_func = reinterpret_cast<void(*)(const shape2 &m_shape, double m_dx)>(m_dylib.load_symbol("initialize"));
 	if( initialize_func ) {
 		initialize_func(m_shape,m_dx);
 	}
 	//
-	// Initialize arrays
-	m_force_exist = false;
-	m_velocity.initialize(m_shape);
-	m_external_force.initialize(m_shape);
-	m_solid.initialize(m_shape.nodal());
-	m_fluid.initialize(m_shape.cell());
-	//
-	// Assign initial variables from script
-	m_macutility->assign_initial_variables(m_dylib,m_velocity,&m_solid,&m_fluid);
-	//
-	// Compute the initial volume
-	m_target_volume = m_gridutility->get_area(m_solid,m_fluid);
-	//
-	// Get Injection function
+	// Get functions
 	m_check_inject_func = reinterpret_cast<bool(*)(double, double, double, unsigned)>(m_dylib.load_symbol("check_inject"));
 	m_inject_func = reinterpret_cast<bool(*)(const vec2d &, double, double, double, unsigned, double &, vec2d &)>(m_dylib.load_symbol("inject"));
 	m_post_inject_func = reinterpret_cast<void(*)(double, double, double, unsigned, double&)>(m_dylib.load_symbol("post_inject"));
+	m_gravity_func = reinterpret_cast<vec2d(*)(double)>(m_dylib.load_symbol("gravity"));
 	//
-	double max_u = m_macutility->compute_max_u(m_velocity);
-	if( max_u ) {
+	if( initialized_from_file ) {
+		m_fluid.flood_fill();
+		m_solid.flood_fill();
+	} else {
 		//
-		// Project to make sure that the velocity field is divergence free at the beggining
-		double CFL = m_timestepper->get_target_CFL();
-		m_macproject->project(CFL*m_dx/max_u,m_velocity,m_solid,m_fluid);
+		m_velocity.initialize(m_shape);
+		m_solid_velocity.initialize(m_shape);
+		m_external_force.initialize(m_shape);
+		m_solid.initialize(m_shape.nodal());
+		m_fluid.initialize(m_shape.cell());
+		//
+		// Initialize arrays
+		m_force_exist = false;
+		//
+		// Assign initial variables from script
+		m_macutility->assign_initial_variables(m_dylib,&m_solid,&m_solid_velocity,&m_fluid,&m_velocity);
+		//
+		// Compute the initial volume
+		m_target_volume = m_gridutility->get_area(m_solid,m_fluid);
+		//
+		double max_u = m_macutility->compute_max_u(m_velocity);
+		if( max_u ) {
+			//
+			// Project to make sure that the velocity field is divergence free at the beggining
+			const double CFL = m_timestepper->get_target_CFL();
+			m_macproject->project(CFL*m_dx/max_u,m_velocity,m_solid,m_solid_velocity,m_fluid);
+		}
 	}
 	//
 	m_camera->set_bounding_box(vec2d().v,m_shape.box(m_dx).v);
@@ -132,15 +141,17 @@ void macliquid2::drag( double x, double y, double z, double u, double v, double 
 	m_force_exist = true;
 }
 //
-void macliquid2::inject_external_force( macarray2<Real> &m_velocity, double dt ) {
+void macliquid2::inject_external_force( macarray2<Real> &velocity, double dt, bool clear ) {
 	//
 	if( m_force_exist ) {
-		m_velocity += m_external_force;
-		m_external_force.clear();
-		m_force_exist = false;
+		velocity += m_external_force;
+		if( clear ) {
+			m_force_exist = false;
+			m_external_force.clear();
+		}
 	}
 	// Add gravity force
-	m_velocity += dt*m_param.gravity;
+	velocity += dt*m_param.gravity;
 }
 //
 void macliquid2::inject_external_fluid( array2<Real> &fluid, macarray2<Real> &velocity, double dt, double time ) {
@@ -243,8 +254,11 @@ void macliquid2::idle() {
 	add_to_graph();
 	//
 	// Compute the timestep size
-	const double time = m_timestepper->get_current_time();
 	const double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
+	const double time = m_timestepper->get_current_time();
+	//
+	// Update solid
+	m_macutility->update_solid_variables(m_dylib,time,&m_solid,&m_solid_velocity);
 	//
 	// Extend both the velocity field and the level set
 	extend_both();
@@ -266,7 +280,7 @@ void macliquid2::idle() {
 	set_volume_correction(m_macproject.get());
 	//
 	// Project
-	m_macproject->project(dt,m_velocity,m_solid,m_fluid,m_param.surftens_k);
+	m_macproject->project(dt,m_velocity,m_solid,m_solid_velocity,m_fluid,m_param.surftens_k);
 	//
 	// Report stats
 	m_macstats->dump_stats(m_solid,m_fluid,m_velocity,m_timestepper.get());
@@ -291,17 +305,26 @@ void macliquid2::add_to_graph() {
 //
 void macliquid2::draw( graphics_engine &g ) const {
 	//
+	// Draw solid levelset
+	shared_array2<Real> solid_to_visualize(m_solid.shape());
+	m_gridutility->assign_visualizable_solid(m_dylib,m_dx,solid_to_visualize());
+	m_gridvisualizer->draw_solid(g,solid_to_visualize());
+	//
+	// Visualize moving solid
+	auto draw_func = reinterpret_cast<void(*)(graphics_engine &,double)>(m_dylib.load_symbol("draw"));
+	if( draw_func ) {
+		g.color4(1.0,0.8,0.5,0.3);
+		draw_func(g,m_timestepper->get_current_time());
+	}
+	//
 	// Draw grid lines
 	m_gridvisualizer->draw_grid(g);
-	//
-	// Draw projection component
-	m_macproject->draw(g);
 	//
 	// Draw fluid
 	m_gridvisualizer->draw_fluid(g,m_solid,m_fluid);
 	//
-	// Draw levelset
-	m_gridvisualizer->draw_solid(g,m_solid);
+	// Draw projection component
+	m_macproject->draw(g);
 	//
 	// Draw velocity
 	m_macvisualizer->draw_velocity(g,m_velocity);

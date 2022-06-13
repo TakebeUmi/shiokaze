@@ -48,9 +48,9 @@ void macflipsmoke3::configure( configuration &config ) {
 	macsmoke3::configure(config);
 }
 //
-void macflipsmoke3::post_initialize () {
+void macflipsmoke3::post_initialize ( bool initialized_from_file ) {
 	//
-	macsmoke3::post_initialize();
+	macsmoke3::post_initialize(initialized_from_file);
 	//
 	scoped_timer timer(this);
 	timer.tick(); console::dump( ">>> Started FLIP initialization\n" );
@@ -70,23 +70,25 @@ void macflipsmoke3::idle() {
 	add_to_graph();
 	//
 	// Compute the timestep size
-	double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
-	double CFL = m_timestepper->get_current_CFL();
-	unsigned step = m_timestepper->get_step_count();
+	const double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
+	const double CFL = m_timestepper->get_current_CFL();
+	const unsigned step = m_timestepper->get_step_count();
+	const double time = m_timestepper->get_current_time();
 	timer.tick(); console::dump( ">>> %s step started (dt=%.2e,CFL=%.2f)...\n", dt, CFL, console::nth(step).c_str());
+	//
+	// Update solid
+	m_macutility->update_solid_variables(m_dylib,time,&m_solid,&m_solid_velocity);
 	//
 	// Advect FLIP particles and get the levelset after the advection
 	m_flip->advect(
 		[&](const vec3d &p){ return interpolate_solid(p); },
 		[&](const vec3d &p){ return interpolate_velocity(p); },
-		m_timestepper->get_current_time(),dt);
+		time,dt);
 	//
 	// Correct positions
 	m_flip->correct([&](const vec3d &p){ return -1.0; },m_velocity);
 	//
 	// Reseed particles
-	shared_array3<Real> fluid(m_shape);
-	fluid->set_as_levelset(m_dx);
 	m_flip->resample(m_fluid,
 		[&](const vec3d &p){ return interpolate_solid(p); },
 		m_velocity
@@ -105,7 +107,7 @@ void macflipsmoke3::idle() {
 	//
 	// Splat momentum and mass of FLIP particles onto grids
 	shared_macarray3<macflip3_interface::mass_momentum3> mass_and_momentum(m_shape);
-	m_flip->splat(mass_and_momentum());
+	m_flip->splat(time,mass_and_momentum());
 	//
 	// Overwrite grid velocity
 	m_velocity.parallel_actives([&]( int dim, int i, int j, int k, auto &it, int tn) {
@@ -126,7 +128,10 @@ void macflipsmoke3::idle() {
 	add_source (m_velocity,m_density,m_timestepper->get_current_time(),dt);
 	//
 	// Project
-	m_macproject->project(dt,m_velocity,m_solid,m_fluid);
+	m_macproject->project(dt,m_velocity,m_solid,m_solid_velocity,m_fluid,0.0);
+	//
+	// Extrapolate
+	m_macutility->extrapolate_and_constrain_velocity(m_solid,m_velocity,(macsmoke3::m_param).extrapolated_width);
 	//
 	// Update FLIP momentum
 	m_flip->update(save_velocity(),m_velocity,dt,vec3d(),m_param.PICFLIP);
@@ -150,24 +155,10 @@ vec3d macflipsmoke3::interpolate_velocity( const vec3d &p ) const {
 //
 void macflipsmoke3::draw( graphics_engine &g ) const {
 	//
-	g.color4(1.0,1.0,1.0,0.5);
-	graphics_utility::draw_wired_box(g);
+	macsmoke3::draw(g);
 	//
-	// Draw density
-	if( (macsmoke3::m_param).use_dust ) draw_dust_particles(g);
-	else m_gridvisualizer->draw_density(g,m_density);
-	//
-	// Draw velocity
-	m_macvisualizer->draw_velocity(g,m_velocity);
-	//
-	// Draw projection component
-	m_macproject->draw(g);
-	//
-	// Draw FLIP particles
+	// Draw FLIP
 	m_flip->draw(g,m_timestepper->get_current_time());
-	//
-	// Draw graph
-	m_graphplotter->draw(g);
 }
 //
 extern "C" module * create_instance() {

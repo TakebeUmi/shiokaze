@@ -24,6 +24,7 @@
 //
 #include "macflipsmoke2.h"
 #include <shiokaze/array/shared_array2.h>
+#include <shiokaze/array/macarray_extrapolator2.h>
 #include <shiokaze/array/macarray_interpolator2.h>
 #include <shiokaze/array/array_interpolator2.h>
 #include <shiokaze/graphics/graphics_utility.h>
@@ -46,9 +47,9 @@ void macflipsmoke2::configure( configuration &config ) {
 	macsmoke2::configure(config);
 }
 //
-void macflipsmoke2::post_initialize () {
+void macflipsmoke2::post_initialize ( bool initialized_from_file ) {
 	//
-	macsmoke2::post_initialize();
+	macsmoke2::post_initialize(initialized_from_file);
 	//
 	shared_array2<Real> fluid(m_shape);
 	fluid->set_as_levelset(m_dx);
@@ -61,13 +62,17 @@ void macflipsmoke2::idle() {
 	add_to_graph();
 	//
 	// Compute the timestep size
-	double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
+	const double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
+	const double time = m_timestepper->get_current_time();
+	//
+	// Update solid
+	m_macutility->update_solid_variables(m_dylib,time,&m_solid,&m_solid_velocity);
 	//
 	// Advect FLIP particles and get the levelset after the advection
 	m_flip->advect(
 		[&](const vec2d &p){ return interpolate_solid(p); },
 		[&](const vec2d &p){ return interpolate_velocity(p); },
-		m_timestepper->get_current_time(),dt);
+		time,dt);
 	//
 	// Correct positions
 	m_flip->correct([&](const vec2d &p){ return -1.0; },m_velocity);
@@ -85,7 +90,7 @@ void macflipsmoke2::idle() {
 	else {
 		m_density.dilate(std::ceil(m_timestepper->get_current_CFL()));
 		m_macadvection->advect_scalar(m_density,m_velocity,m_fluid,dt);
-		double minimal_density = (macsmoke2::m_param).minimal_density;
+		const double minimal_density = (macsmoke2::m_param).minimal_density;
 		m_density.parallel_actives([&](auto &it) {
 			if( std::abs(it()) <= minimal_density ) it.set_off();
 		});
@@ -93,7 +98,7 @@ void macflipsmoke2::idle() {
 	//
 	// Splat momentum and mass of FLIP particles onto grids
 	shared_macarray2<macflip2_interface::mass_momentum2> mass_and_momentum(m_shape);
-	m_flip->splat(mass_and_momentum());
+	m_flip->splat(time,mass_and_momentum());
 	//
 	// Overwrite grid velocity
 	m_velocity.parallel_actives([&]( int dim, int i, int j, auto &it, int tn) {
@@ -114,7 +119,10 @@ void macflipsmoke2::idle() {
 	add_source(m_velocity,m_density,m_timestepper->get_current_time(),dt);
 	//
 	// Project
-	m_macproject->project(dt,m_velocity,m_solid,m_fluid);
+	m_macproject->project(dt,m_velocity,m_solid,m_solid_velocity,m_fluid,0.0);
+	//
+	// Extrapolate
+	m_macutility->extrapolate_and_constrain_velocity(m_solid,m_velocity,(macsmoke2::m_param).extrapolated_width);
 	//
 	// Update FLIP momentum
 	m_flip->update(save_velocity(),m_velocity,dt,vec2d(),m_param.PICFLIP);
@@ -133,27 +141,10 @@ vec2d macflipsmoke2::interpolate_velocity( const vec2d &p ) const {
 //
 void macflipsmoke2::draw( graphics_engine &g ) const {
 	//
-	// Draw grid lines
-	m_gridvisualizer->draw_grid(g);
+	macsmoke2::draw(g);
 	//
 	// Draw FLIP
 	m_flip->draw(g,m_timestepper->get_current_time());
-	//
-	// Draw density
-	if( (macsmoke2::m_param).use_dust ) draw_dust_particles(g);
-	else m_gridvisualizer->draw_density(g,m_density);
-	//
-	// Draw projection component
-	m_macproject->draw(g);
-	//
-	// Draw m_solid levelset
-	m_gridvisualizer->draw_solid(g,m_solid);
-	//
-	// Draw velocity
-	m_macvisualizer->draw_velocity(g,m_velocity);
-	//
-	// Draw graph
-	m_graphplotter->draw(g);
 }
 //
 extern "C" module * create_instance() {

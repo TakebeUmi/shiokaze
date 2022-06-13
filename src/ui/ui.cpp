@@ -253,6 +253,8 @@ void ui::configure( configuration &config ) {
 	config.get_string("Legend",m_legend,"Legend annotation string");
 	config.get_integer("RecordUntil",m_until,"Maximal screenshot frame to quit");
 	config.get_double("WindowScale",m_window_scale,"Widnow size scale");
+	config.get_double("DPIScale",m_dpi_scale,"Manual DPI scale");
+	config.get_unsigned("Subsample",m_subsample,"Subsampling");
 	config.get_bool("Paused",m_paused,"Paused on start");
 	//
 	if( m_screenshot_path.size()) {
@@ -316,11 +318,19 @@ void ui::run () {
 	// Get frame buffer size
 	int width, height;
 	::glfwGetFramebufferSize(window,&width,&height);
-	double dpi_scaling = width / (double) w_width;
-	ge.set_HiDPI_scaling_factor(dpi_scaling);
+	//
+	// Specifiy DPI scale
+	if( m_dpi_scale ) {
+		ge.set_HiDPI_scaling_factor(m_dpi_scale);
+	} else {
+		m_dpi_scale = width / (double) w_width;
+		ge.set_HiDPI_scaling_factor(m_dpi_scale);
+	}
 	//
 	// Enable multi sampling for nicer view
-	::glfwWindowHint(GLFW_SAMPLES,4);
+	if( m_subsample ) {
+		::glfwWindowHint(GLFW_SAMPLES,m_subsample);
+	}
 	//
 	// Set pointer to this instance
 	::glfwSetWindowUserPointer(window, this);
@@ -425,7 +435,7 @@ void ui::run () {
 		if( m_show_logo ) {
 			//
 			vec2d sub_pos, sub_window, position;
-			if( dpi_scaling == 1.0 ) {
+			if( m_dpi_scale == 1.0 ) {
 				sub_pos = vec2d( 22 / (double) logo_width, 152 / (double) logo_height );
 				sub_window = vec2d( 42 / (double ) logo_width, 22 / (double) logo_height );
 				position = vec2d(width-sub_window[0]*logo_width-5,height-sub_window[1]*logo_height-5);
@@ -538,36 +548,52 @@ int ui::run ( int argc, const char* argv[] ) {
 	//
 	config.get_string("Log",path_to_log,"Path to the directory to export log files");
 	//
+	// Path to a saved file
+	std::string path_to_state;
+	std::shared_ptr<filestream> gzfp;
+	config.get_string("State",path_to_state,"Path to a saved state file");
+	//
 	if( ! help ) {
-		if( path_to_log.size()) {
-			// Some safety check
-			if( path_to_log[0] == '/' || filesystem::has_root(path_to_log)) {
-				console::dump( "Absolute path \"%s\" not allowed.\n", path_to_log.c_str());
-				exit(0);
-			} else if( path_to_log.substr(0,2) == ".." ) {
-				console::dump( "Parent path \"%s\" not allowed.\n", path_to_log.c_str());
-				exit(0);
-			} else {
-				if( filesystem::is_exist(path_to_log)) {
-					const std::string duplicated_dir ("duplicated");
-					if( ! filesystem::is_exist(duplicated_dir)) filesystem::create_directory(duplicated_dir);
-					unsigned count (0);
-					while( true ) {
-						const std::string new_path = duplicated_dir+"/"+path_to_log+"_"+std::to_string(count);
-						if( ! filesystem::is_exist(new_path)) {
-							if( filesystem::has_parent(path_to_log)) {
-								filesystem::create_directories(filesystem::parent_path(new_path));
-							}
-							filesystem::rename(path_to_log,new_path);
-							assert(filesystem::is_exist(new_path));
-							break;
-						}
-						++count;
-					}
-				}
-				assert(!filesystem::is_exist(path_to_log));
+		if( path_to_state.size()) {
+			//
+			assert(filesystem::is_exist(path_to_state));
+			if( ! filesystem::is_exist(path_to_log)) {
 				filesystem::create_directories(path_to_log);
-				console::set_root_path(path_to_log);
+			}
+			if( path_to_log.size()) console::set_root_path(path_to_log);
+			gzfp = std::make_shared<filestream>(path_to_state,filestream::READ);
+			//
+		} else {
+			if( path_to_log.size()) {
+				// Some safety check
+				if( path_to_log == "/" || path_to_log.substr(0,2) == "/ " ) {
+					console::dump( "Root path \"%s\" not allowed.\n", path_to_log.c_str());
+					exit(0);
+				} else if( path_to_log.substr(0,2) == ".." ) {
+					console::dump( "Parent path \"%s\" not allowed.\n", path_to_log.c_str());
+					exit(0);
+				} else {
+					if( filesystem::is_exist(path_to_log)) {
+						const std::string duplicated_dir ("duplicated");
+						if( ! filesystem::is_exist(duplicated_dir)) filesystem::create_directory(duplicated_dir);
+						unsigned count (0);
+						while( true ) {
+							const std::string new_path = duplicated_dir+"/"+path_to_log+"_"+std::to_string(count);
+							if( ! filesystem::is_exist(new_path)) {
+								if( filesystem::has_parent(path_to_log)) {
+									filesystem::create_directories(filesystem::parent_path(new_path));
+								}
+								filesystem::rename(path_to_log,new_path);
+								assert(filesystem::is_exist(new_path));
+								break;
+							}
+							++count;
+						}
+					}
+					assert(!filesystem::is_exist(path_to_log));
+					filesystem::create_directories(path_to_log);
+					console::set_root_path(path_to_log);
+				}
 			}
 		}
 	}
@@ -610,11 +636,17 @@ int ui::run ( int argc, const char* argv[] ) {
 	std::string get_current_branch_name = console::run("git rev-parse --abbrev-ref HEAD"); remove_fold_character(get_current_branch_name);
 	//
 	console::dump( "   CPU = <Cyan>%s<Default>\n", cpu_name.size() > cpu_trim ? cpu_name.substr(cpu_trim,cpu_name.size()).c_str() : "(Unknown)");
+	console::dump( "   Hostname = %s\n",utility::gethostname().c_str());
 	console::dump( "   Display availability = %s\n", has_display ? "Yes" : "No" );
 	console::dump( "   %s version = <Cyan>%d.%d.%d<Default>\n",compiler_name, __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__ );
 	console::dump( "   Build target = <Cyan>%s<Default>\n", SHKZ_BUILD_TARGET );
 	console::dump( "   Available cores = <Cyan>%d<Default>\n", std::thread::hardware_concurrency() );
 	console::dump( "   Git version = %s-%s\n", get_current_branch_name.c_str(),git_version.c_str());
+	if( typeid(Real) == typeid(double)) {
+		console::dump( "   Real = double\n");
+	} else if( typeid(Real) == typeid(float)) {
+		console::dump( "   Real = float\n");
+	}
 	//
 	// Set whether we use OpenGL engine
 	bool use_OpenGL;
@@ -674,10 +706,19 @@ int ui::run ( int argc, const char* argv[] ) {
 		}
 		//
 		config.check_touched();
-		stats->recursive_initialize();
+		if( gzfp ) {
+			stats->recursive_initialize(*gzfp);
+		} else {
+			stats->recursive_initialize();
+		}
 		//
 		configuration::auto_group group(config,root_credit);
-		instance->recursive_initialize();
+		if( gzfp ) {
+			instance->recursive_initialize(*gzfp);
+			gzfp.reset();
+		} else {
+			instance->recursive_initialize();
+		}
 		userinterface.run();
 		//
 	} else {
@@ -696,10 +737,19 @@ int ui::run ( int argc, const char* argv[] ) {
 			config.print_variables();
 		}
 		config.check_touched();
-		stats->recursive_initialize();
+		if( gzfp ) {
+			stats->recursive_initialize(*gzfp);
+		} else {
+			stats->recursive_initialize();
+		}
 		//
 		configuration::auto_group group(config,root_credit);
-		instance->recursive_initialize();
+		if( gzfp ) {
+			instance->recursive_initialize(*gzfp);
+			gzfp.reset();
+		} else {
+			instance->recursive_initialize();
+		}
 		while( true ) {
 			if( instance->is_running()) {
 				instance->idle();
@@ -725,5 +775,11 @@ int ui::run ( int argc, const char* argv[] ) {
 }
 //
 extern "C" int run( int argc, const char* argv[] ) {
+	//
+	// Check if a "quit" file exists
+	if( filesystem::is_exist("quit")) {
+		printf("***** Error: Quit file exists! ******\n");
+		exit(0);
+	}
 	return ui::run(argc,argv);
 }

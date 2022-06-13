@@ -132,6 +132,13 @@ public:
 	std::vector<T> m_array;
 	const RCMatrix_allocator<N,T> m_allocator;
 	const parallel_driver &m_parallel;
+	//
+	virtual void initialize( const filestream &file ) override {
+		file.read(m_array);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.write(m_array);
+	}
 };
 //
 template <class N, class T> struct RowEntry {
@@ -397,6 +404,26 @@ private:
 	const parallel_driver &m_parallel;
 	const RCMatrix_factory_interface<N,T> &m_factory;
 	const RCMatrix_allocator<N,T> m_allocator;
+	//
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_columns);
+		size_t size = m_matrix.size();
+		file.r(size);
+		m_matrix.resize(size);
+		for( size_t n=0; n<size; ++n ) {
+			file.read(m_matrix[n].index);
+			file.read(m_matrix[n].value);
+		}
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.write(&m_columns,sizeof(T));
+		size_t size = m_matrix.size();
+		file.w(size);
+		for( size_t n=0; n<size; ++n ) {
+			file.write(m_matrix[n].index);
+			file.write(m_matrix[n].value);
+		}
+	}
 };
 //
 template <class N, class T> class RCMatrix_factory : public RCMatrix_factory_interface<N,T> {

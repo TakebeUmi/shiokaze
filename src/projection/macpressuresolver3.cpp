@@ -47,9 +47,14 @@ protected:
 		m_target_volume = target_volume;
 	}
 	//
+	virtual void set_solid_density( const macarray3<Real> *solid_density ) override {
+		m_solid_density = solid_density;
+	}
+	//
 	virtual void project( double dt,
 				macarray3<Real> &velocity,
 				const array3<Real> &solid,
+				const macarray3<Real> &solid_velocity,
 				const array3<Real> &fluid,
 				double surface_tension,
 				const std::vector<signed_rigidbody3_interface *> *rigidbodies ) override {
@@ -65,6 +70,14 @@ protected:
 		timer.tick(); console::dump( "Precomputing solid and fluid fractions...");
 		m_macutility->compute_area_fraction(solid,areas());
 		m_macutility->compute_fluid_fraction(fluid,rhos());
+		//
+		// Modify solid faces according to the areas
+		if( m_solid_density ) {
+			areas->parallel_actives([&](int dim, int i, int j, int k, auto &it, int tn ) {
+				const Real density = (*m_solid_density)[dim](i,j,k);
+				it.set(density*it()+(1.0-density));
+			});
+		}
 		//
 		// Enforce first order accuracy
 		if( ! m_param.second_order_accurate_fluid ) {
@@ -114,10 +127,8 @@ protected:
 			console::dump( "Done. Took %s\n", timer.stock("surftension_force").c_str());
 		}
 		//
-		// The target linear system to build
-		timer.tick(); console::dump( "Building the high-res linear system [Lhs] and [rhs]..." );
-		//
 		// Label cell indices
+		timer.tick(); console::dump( "Labelling inner cells..." );
 		size_t index (0);
 		shared_array3<size_t> index_map(fluid.shape());
 		const auto mark_body = [&]( int i, int j, int k ) {
@@ -154,18 +165,21 @@ protected:
 				mark_body(i,j,k);
 			});
 		}
+		console::dump( "Done. Took %s\n", timer.stock("labelling_cells").c_str());
 		//
-		// Assemble the linear system for the Poisson equations for pressure solve
-		auto Lhs = m_factory->allocate_matrix(index,index);
-		auto rhs = m_factory->allocate_vector(index);
-		double assemble_time = utility::get_milliseconds();
-		//
-		index_map->const_parallel_actives([&]( int i, int j, int k, const auto &it, int tn ) {
+		if( index ) {
 			//
-			size_t n_index = it();
-			rhs->set(n_index,0.0);
+			// The target linear system to build
+			timer.tick(); console::dump( "Building the high-res linear system [Lhs] and [rhs]..." );
 			//
-			if( fluid(i,j,k) < 0.0 ) {
+			// Assemble the linear system for the Poisson equations for pressure solve
+			auto Lhs = m_factory->allocate_matrix(index,index);
+			auto rhs = m_factory->allocate_vector(index);
+			//
+			index_map->const_parallel_actives([&]( int i, int j, int k, const auto &it, int tn ) {
+				//
+				size_t n_index = it();
+				rhs->set(n_index,0.0);
 				//
 				vec3i query[] = {vec3i(i+1,j,k),vec3i(i-1,j,k),vec3i(i,j+1,k),vec3i(i,j-1,k),vec3i(i,j,k+1),vec3i(i,j,k-1)};
 				vec3i face[] = {vec3i(i+1,j,k),vec3i(i,j,k),vec3i(i,j+1,k),vec3i(i,j,k),vec3i(i,j,k+1),vec3i(i,j,k)};
@@ -175,10 +189,10 @@ protected:
 				double diagonal = 0.0;
 				for( int nq=0; nq<6; nq++ ) {
 					int dim = direction[nq];
+					double area = areas()[dim](face[nq]);
 					int qi(query[nq][0]), qj(query[nq][1]), qk(query[nq][2]);
 					int fi(face[nq][0]), fj(face[nq][1]), fk(face[nq][2]);
 					if( ! m_shape.out_of_bounds(query[nq]) ) {
-						double area = areas()[dim](face[nq]);
 						if( area ) {
 							double rho = rhos()[dim](face[nq]);
 							if( rho ) {
@@ -190,83 +204,96 @@ protected:
 								}
 								diagonal += value;
 							}
-							rhs->add(n_index,-sgn[nq]*area*velocity[dim](face[nq])/m_dx);
 						}
+					}
+					rhs->add(n_index,-sgn[nq]*area*velocity[dim](face[nq])/m_dx);
+					if( area < 1.0 ) {
+						const double u = solid_velocity[dim](face[nq]);
+						rhs->add(n_index,-sgn[nq]*(1.0-area)*u/m_dx);
 					}
 				}
 				Lhs->add_to_element(n_index,n_index,diagonal);
-			}
-		});
-		//
-		console::dump( "Done. Took %s\n", timer.stock("build_highres_linsystem").c_str());
-		//
-		// Volume correction
-		double rhs_correct = 0.0;
-		if( m_param.gain && m_target_volume ) {
-			timer.tick(); console::dump( "Computing volume correction...");
-			double x = (m_current_volume-m_target_volume)/m_target_volume;
-			double y = m_y_prev + x*dt; m_y_prev = y;
-			double kp = m_param.gain * 2.3/(25.0*0.01);
-			double ki = kp*kp/16.0;
-			rhs_correct = -(kp*x+ki*y)/(x+1.0);
-			rhs->for_each([&]( unsigned row, double &value ) {
-				value += rhs_correct;
 			});
-			console::dump( "Done. Took %s\n", timer.stock("volume_correction").c_str());
-			console::write(get_argument_name()+"_volume_correct_rhs", rhs_correct);
-		}
-		//
-		RCMatrix_utility<size_t,double>::report(Lhs.get(),"Lhs");
-		//
-		if( m_param.warm_start ) {
-			// Tweak the linear system
-			if( ! m_prev_pressure ) {
-				m_prev_pressure = m_factory->allocate_vector(index);
-			} else {
-				m_prev_pressure->resize(index);
+			//
+			console::dump( "Done. Took %s\n", timer.stock("build_highres_linsystem").c_str());
+			//
+			// Volume correction
+			double rhs_correct = 0.0;
+			if( m_param.gain && m_target_volume ) {
+				timer.tick(); console::dump( "Computing volume correction...");
+				double x = (m_current_volume-m_target_volume)/m_target_volume;
+				double y = m_y_prev + x*dt; m_y_prev = y;
+				double kp = m_param.gain * 2.3/(25.0*0.01);
+				double ki = kp*kp/16.0;
+				rhs_correct = -(kp*x+ki*y)/(x+1.0);
+				rhs->for_each([&]( unsigned row, double &value ) {
+					value += rhs_correct;
+				});
+				console::dump( "Done. Took %s\n", timer.stock("volume_correction").c_str());
+				console::write(get_argument_name()+"_volume_correct_rhs", rhs_correct);
 			}
-			auto new_rhs = Lhs->multiply(m_prev_pressure.get());
-			rhs->subtract(new_rhs.get());
-		}
-		//
-		// Solve the linear system
-		timer.tick(); console::dump( "Solving the linear system...");
-		auto result = m_factory->allocate_vector(index);
-		auto status = m_solver->solve(Lhs.get(),rhs.get(),result.get());
-		console::write(get_argument_name()+"_number_projection_iteration", status.count);
-		console::dump( "Done. Took %d iterations, Reresid=%e. Took %s\n", status.count, status.reresid, timer.stock("linsolve").c_str());
-		//
-		if( m_param.warm_start ) {
-			result->add(m_prev_pressure.get());
-			m_prev_pressure->copy(result.get());
-		}
-		//
-		// Re-arrange to the array
-		m_pressure.clear();
-		index_map->const_serial_actives([&](int i, int j, int k, const auto& it) {
-			m_pressure.set(i,j,k,result->at(it()));
-		});
-		//
-		// Update the full velocity
-		timer.tick(); console::dump( "Updating the velocity...");
-		velocity.parallel_actives([&](int dim, int i, int j, int k, auto &it, int tn ) {
-			double rho = rhos()[dim](i,j,k);
-			vec3i pi(i,j,k);
-			if( areas()[dim](i,j,k) && rho ) {
-				if( pi[dim] == 0 || pi[dim] == velocity.shape()[dim] ) it.set(0.0);
-				else {
-					velocity[dim].subtract(i,j,k, dt * (
-						+ m_pressure(i,j,k)
-						- m_pressure(i-(dim==0),j-(dim==1),k-(dim==2))
-						) / (rho*m_dx));
+			//
+			RCMatrix_utility<size_t,double>::report(Lhs.get(),"Lhs");
+			//
+			if( m_param.warm_start ) {
+				// Tweak the linear system
+				if( ! m_prev_pressure ) {
+					m_prev_pressure = m_factory->allocate_vector(index);
+				} else {
+					m_prev_pressure->resize(index);
 				}
-			} else {
-				if( pi[dim] == 0 && fluid(pi) < 0.0 ) it.set(0.0);
-				else if( pi[dim] == velocity.shape()[dim] && fluid(pi-vec3i(dim==0,dim==1,dim==2)) < 0.0 ) it.set(0.0);
-				else it.set_off();
+				auto new_rhs = Lhs->multiply(m_prev_pressure.get());
+				rhs->subtract(new_rhs.get());
 			}
-		});
-		console::dump( "Done. Took %s\n", timer.stock("update_velocity").c_str());
+			//
+			// Solve the linear system
+			timer.tick(); console::dump( "Solving the linear system...");
+			auto result = m_factory->allocate_vector(index);
+			auto status = m_solver->solve(Lhs.get(),rhs.get(),result.get());
+			console::write(get_argument_name()+"_number_projection_iteration", status.count);
+			console::dump( "Done. Took %d iterations, Reresid=%e. Took %s\n", status.count, status.reresid, timer.stock("linsolve").c_str());
+			//
+			if( m_param.warm_start ) {
+				result->add(m_prev_pressure.get());
+				m_prev_pressure->copy(result.get());
+			}
+			//
+			// Re-arrange to the array
+			m_pressure.clear();
+			index_map->const_serial_actives([&](int i, int j, int k, const auto& it) {
+				m_pressure.set(i,j,k,result->at(it()));
+			});
+			//
+			// Update the full velocity
+			timer.tick(); console::dump( "Updating the velocity...");
+			velocity.parallel_actives([&](int dim, int i, int j, int k, auto &it, int tn ) {
+				double rho = rhos()[dim](i,j,k);
+				vec3i pi(i,j,k);
+				const double solid_u = solid_velocity[dim](i,j,k);
+				if( areas()[dim](i,j,k) && rho ) {
+					if( pi[dim] == 0 || pi[dim] == m_shape[dim] ) it.set(solid_u);
+					else {
+						velocity[dim].subtract(i,j,k, dt * (
+							+ m_pressure(i,j,k)
+							- m_pressure(i-(dim==0),j-(dim==1),k-(dim==2))
+							) / (rho*m_dx));
+					}
+				} else {
+					it.set_off();
+				}
+			});
+			//
+			// Modify velocity accoring to the density
+			if( m_solid_density ) {
+				velocity.parallel_actives([&](int dim, int i, int j, int k, auto &it, int tn ) {
+					const Real density = (*m_solid_density)[dim](i,j,k);
+					const Real scale = 1.0-(1.0-areas()[dim](i,j,k))*density;
+					it.set(scale*it());
+				});
+			}
+			//
+			console::dump( "Done. Took %s\n", timer.stock("update_velocity").c_str());
+		}
 		//
 		console::dump( "<<< Projection done. Took %s.\n", timer.stock("projection").c_str());
 	}
@@ -284,11 +311,36 @@ protected:
 		m_dx = dx;
 	}
 	//
-	virtual void post_initialize() override {
+	virtual void post_initialize( bool initialized_from_file ) override {
 		//
 		m_pressure.initialize(m_shape);
 		m_target_volume = m_current_volume = m_y_prev = 0.0;
 	}
+	//
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+		file.r(m_target_volume);
+		file.r(m_current_volume);
+		file.r(m_y_prev);
+		if( m_param.warm_start ) {
+			m_prev_pressure = m_factory->allocate_vector();
+			m_prev_pressure->initialize(file);
+		}
+	}
+	//
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
+		file.w(m_target_volume);
+		file.w(m_current_volume);
+		file.w(m_y_prev);
+		if( m_param.warm_start ) {
+			assert(m_prev_pressure);
+			m_prev_pressure->serialize(file);
+		}
+	}
+	//
 	virtual const array3<Real> * get_pressure() const override {
 		return &m_pressure;
 	}
@@ -296,8 +348,6 @@ protected:
 	struct Parameters {
 		//
 		double gain {1.0};
-		double eps_fluid {1e-2};
-		double eps_solid {1e-2};
 		bool ignore_solid {false};
 		bool second_order_accurate_fluid {true};
 		bool second_order_accurate_solid {true};
@@ -318,6 +368,7 @@ protected:
 	double m_y_prev {0.0};
 	//
 	RCMatrix_vector_ptr<size_t,double> m_prev_pressure;
+	const macarray3<Real> *m_solid_density {nullptr};
 };
 //
 extern "C" module * create_instance() {

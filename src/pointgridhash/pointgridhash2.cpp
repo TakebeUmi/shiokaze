@@ -30,6 +30,27 @@ SHKZ_USING_NAMESPACE
 //
 static const std::vector<size_t> empty;
 class pointgridhash2 : public pointgridhash2_interface {
+public:
+	//
+	pointgridhash2 () {
+		//
+		auto read_func = []( const filestream &file, std::vector<size_t> &e ) {
+			file.read(e);
+		};
+		auto write_func = []( const filestream &file, const std::vector<size_t> &e ) {
+			file.write(e);
+		};
+		//
+		m_hash_cell.set_write_function(write_func);
+		m_hash_node.set_write_function(write_func);
+		m_hash_face0.set_write_function(write_func);
+		m_hash_face1.set_write_function(write_func);
+		//
+		m_hash_cell.set_read_function(read_func);
+		m_hash_node.set_read_function(read_func);
+		m_hash_face0.set_read_function(read_func);
+		m_hash_face1.set_read_function(read_func);
+	}
 protected:
 	//
 	virtual void clear() override {
@@ -168,9 +189,9 @@ protected:
 		std::vector<size_t> neighbors;
 		if( type == USE_CELL ) {
 			if (m_mode & CELL_MODE) {
-				for( int dir=-1; dir<=0; ++dir ) {
-					int ii = pi[0]+(dim==0)*dir;
-					int jj = pi[1]+(dim==1)*dir;
+				for( int dir=-1; dir<=0; ++dir ) for( int tdir=-1; tdir<=1; ++tdir ) {
+					int ii = pi[0]+(dim==0)*dir+(dim!=0)*tdir;
+					int jj = pi[1]+(dim==1)*dir+(dim!=1)*tdir;
 					if( ! m_hash_cell.shape().out_of_bounds(ii,jj)) {
 						const auto &bucket = m_hash_cell(ii,jj);
 						neighbors.insert(neighbors.end(),bucket.begin(),bucket.end());
@@ -219,7 +240,7 @@ protected:
 		m_mode = mode;
 		//
 	}
-	virtual void post_initialize () override {
+	virtual void post_initialize ( bool initialized_from_file ) override {
 		//
 		if( m_mode & CELL_MODE ) {
 			m_hash_cell.initialize(m_shape.cell());
@@ -243,6 +264,19 @@ protected:
 	array2<std::vector<size_t> > m_hash_node{this};
 	array2<std::vector<size_t> > m_hash_face0{this}, m_hash_face1{this};
 	//
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+		file.r(m_num_sorted);
+		file.r(m_mode);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
+		file.w(m_num_sorted);
+		file.w(m_mode);
+	}
+	//
 	const array2<std::vector<size_t> > & hash_face(int dim) const { 
 		return dim == 0 ? m_hash_face0 : m_hash_face1;
 	}
@@ -251,7 +285,6 @@ protected:
 	}
 	//
 	parallel_driver m_parallel{this};
-	//
 };
 //
 extern "C" module * create_instance() {

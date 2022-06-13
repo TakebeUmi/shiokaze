@@ -88,7 +88,7 @@ void macsmoke3::configure( configuration &config ) {
 	m_dx = view_scale * m_shape.dx();
 }
 //
-void macsmoke3::post_initialize () {
+void macsmoke3::post_initialize ( bool initialized_from_file ) {
 	//
 	scoped_timer timer(this);
 	//
@@ -97,9 +97,13 @@ void macsmoke3::post_initialize () {
 	auto initialize_func = reinterpret_cast<void(*)(const shape3 &shape, double dx)>(m_dylib.load_symbol("initialize"));
 	if( initialize_func ) initialize_func(m_shape,m_dx);
 	//
+	// Get functions
+	m_set_boundary_flux = reinterpret_cast<void(*)( double, Real [DIM3][2] )>(m_dylib.load_symbol("set_boundary_flux"));
+	//
 	// Initialize arrays
 	m_force_exist = false;
 	m_velocity.initialize(m_shape);
+	m_solid_velocity.initialize(m_shape);
 	m_external_force.initialize(m_shape);
 	//
 	m_solid.initialize(m_shape.nodal());
@@ -112,14 +116,13 @@ void macsmoke3::post_initialize () {
 	m_dust_particles.clear();
 	//
 	// Assign initial variables from script
-	m_velocity.activate_all();
-	m_macutility->assign_initial_variables(m_dylib,m_velocity,&m_solid,nullptr,&m_density);
+	m_macutility->assign_initial_variables(m_dylib,&m_solid,&m_solid_velocity,nullptr,&m_velocity,&m_density);
 	//
 	// Ensure divergence free
 	double max_u = m_macutility->compute_max_u(m_velocity);
 	if( max_u ) {
-		double CFL = m_timestepper->get_target_CFL();
-		m_macproject->project(CFL*m_dx/max_u,m_velocity,m_solid,m_fluid);
+		const double CFL = m_timestepper->get_target_CFL();
+		m_macproject->project(CFL*m_dx/max_u,m_velocity,m_solid,m_solid_velocity,m_fluid);
 	}
 	//
 	// Seed dust particles if requested
@@ -262,10 +265,14 @@ void macsmoke3::idle() {
 	add_to_graph();
 	//
 	// Compute the timestep size
-	double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
-	double CFL = m_timestepper->get_current_CFL();
-	unsigned step = m_timestepper->get_step_count();
+	const double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
+	const double CFL = m_timestepper->get_current_CFL();
+	const unsigned step = m_timestepper->get_step_count();
+	const double time = m_timestepper->get_current_time();
 	timer.tick(); console::dump( ">>> %s step started (dt=%.2e,CFL=%.2f)...\n", dt, CFL, console::nth(step).c_str());
+	//
+	// Update solid
+	m_macutility->update_solid_variables(m_dylib,time,&m_solid,&m_solid_velocity);
 	//
 	// Advection
 	if( m_param.use_dust ) advect_dust_particles(m_velocity,dt);
@@ -290,7 +297,7 @@ void macsmoke3::idle() {
 	inject_external_force(m_velocity);
 	//
 	// Projection
-	m_macproject->project(dt,m_velocity,m_solid,m_fluid);
+	m_macproject->project(dt,m_velocity,m_solid,m_solid_velocity,m_fluid,0.0);
 	m_macutility->extrapolate_and_constrain_velocity(m_solid,m_velocity,m_param.extrapolated_width);
 	//
 	console::dump( "<<< %s step done. Took %s\n", console::nth(step).c_str(), timer.stock("simstep").c_str());
@@ -352,6 +359,20 @@ void macsmoke3::draw_dust_particles( graphics_engine &g ) const {
 }
 //
 void macsmoke3::draw( graphics_engine &g ) const {
+	//
+	const double time = m_timestepper->get_current_time();
+	//
+	// Visualize solid
+	shared_array3<Real> solid_to_visualize(m_solid.shape());
+	m_gridutility->assign_visualizable_solid(m_dylib,m_dx,solid_to_visualize());
+	m_gridvisualizer->draw_solid(g,solid_to_visualize());
+	//
+	// Visualize moving solid
+	auto draw_func = reinterpret_cast<void(*)(graphics_engine &,double)>(m_dylib.load_symbol("draw"));
+	if( draw_func ) {
+		g.color4(1.0,0.8,0.5,0.3);
+		draw_func(g,m_timestepper->get_current_time());
+	}
 	//
 	// Draw velocity
 	m_macvisualizer->draw_velocity(g,m_velocity);

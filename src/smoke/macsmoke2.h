@@ -30,6 +30,7 @@
 #include <shiokaze/parallel/parallel_driver.h>
 #include <shiokaze/ui/drawable.h>
 #include <shiokaze/core/dylibloader.h>
+#include <shiokaze/utility/gridutility2_interface.h>
 #include <shiokaze/advection/macadvection2_interface.h>
 #include <shiokaze/utility/macutility2_interface.h>
 #include <shiokaze/utility/macstats2_interface.h>
@@ -58,9 +59,10 @@ protected:
 	virtual bool should_screenshot() const override { return m_timestepper->should_export_frame(); }
 	virtual void load( configuration &config ) override;
 	virtual void configure( configuration &config ) override;
-	virtual void post_initialize() override;
+	virtual void post_initialize( bool initialized_from_file ) override;
 	//
 	macarray2<Real> m_velocity{this};
+	macarray2<Real> m_solid_velocity{this};
 	macarray2<Real> m_external_force{this};
 	//
 	array2<Real> m_density{this};
@@ -92,6 +94,7 @@ protected:
 	//
 	macproject2_driver m_macproject{this,"macpressuresolver2"};
 	macadvection2_driver m_macadvection{this,"macadvection2"};
+	gridutility2_driver m_gridutility{this,"gridutility2"};
 	gridvisualizer2_driver m_gridvisualizer{this,"gridvisualizer2"};
 	macstats2_driver m_macstats{this,"macstats2"};
 	macvisualizer2_driver m_macvisualizer{this,"macvisualizer2"};
@@ -101,6 +104,11 @@ protected:
 	//
 	parallel_driver m_parallel{this};
 	dylibloader m_dylib;
+	//
+	std::function<void(graphics_engine &,double)> m_draw_func;
+	std::function<double(const vec2d &)> m_solid_func;
+	std::function<void(double,Real [DIM2][2])> m_set_boundary_flux;
+	std::function<std::pair<double,vec2d>( double, const vec2d &)> m_moving_solid_func;
 	//
 	virtual void inject_external_force( macarray2<Real> &velocity );
 	virtual void add_buoyancy_force( macarray2<Real> &velocity, const array2<Real> &density, double dt );

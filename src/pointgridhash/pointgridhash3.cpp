@@ -30,6 +30,28 @@ SHKZ_USING_NAMESPACE
 //
 static const std::vector<size_t> empty;
 class pointgridhash3 : public pointgridhash3_interface {
+public:
+	pointgridhash3 () {
+		//
+		auto read_func = []( const filestream &file, std::vector<size_t> &e ) {
+			file.read(e);
+		};
+		auto write_func = []( const filestream &file, const std::vector<size_t> &e ) {
+			file.write(e);
+		};
+		//
+		m_hash_cell.set_write_function(write_func);
+		m_hash_node.set_write_function(write_func);
+		m_hash_edge0.set_write_function(write_func);
+		m_hash_edge1.set_write_function(write_func);
+		m_hash_edge2.set_write_function(write_func);
+		//
+		m_hash_cell.set_read_function(read_func);
+		m_hash_node.set_read_function(read_func);
+		m_hash_edge0.set_read_function(read_func);
+		m_hash_edge1.set_read_function(read_func);
+		m_hash_edge2.set_read_function(read_func);
+	}
 protected:
 	//
 	virtual void clear() override {
@@ -172,12 +194,21 @@ protected:
 		std::vector<size_t> neighbors;
 		if( type == USE_CELL ) {
 			if (m_mode & CELL_MODE) {
-				for( int dir=-1; dir<=0; ++dir ) {
-					int ii = pi[0]+(dim==0)*dir;
-					int jj = pi[1]+(dim==1)*dir;
-					int kk = pi[2]+(dim==2)*dir;
-					if( ! m_hash_cell.shape().out_of_bounds(ii,jj,kk) ) {
-						const auto &bucket = m_hash_cell(ii,jj,kk);
+				vec3i ivec, jvec;
+				if( dim == 0 ) {
+					ivec = vec3i(0,1,0);
+					jvec = vec3i(0,0,1);
+				} else if( dim == 1 ) {
+					ivec = vec3i(1,0,0);
+					jvec = vec3i(0,0,1);
+				} else if( dim == 2 ) {
+					ivec = vec3i(1,0,0);
+					jvec = vec3i(0,1,0);
+				}
+				for( int dir=-1; dir<=0; ++dir ) for( int idir=-1; idir<=1; ++idir ) for( int jdir=-1; jdir<=1; ++jdir ) {
+					const vec3i qi = pi+dir*vec3i(dim==0,dim==1,dim==2)+idir*ivec+jdir*jvec;
+					if( ! m_hash_cell.shape().out_of_bounds(qi) ) {
+						const auto &bucket = m_hash_cell(qi);
 						neighbors.insert(neighbors.end(),bucket.begin(),bucket.end());
 					}
 				}
@@ -217,7 +248,7 @@ protected:
 		m_mode = mode;
 		//
 	}
-	virtual void post_initialize () override {
+	virtual void post_initialize ( bool initialized_from_file ) override {
 		//
 		if( m_mode & CELL_MODE ) {
 			m_hash_cell.initialize(m_shape.cell());
@@ -241,6 +272,19 @@ protected:
 	array3<std::vector<size_t> > m_hash_node{this};
 	array3<std::vector<size_t> > m_hash_edge0{this}, m_hash_edge1{this}, m_hash_edge2{this};
 	//
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+		file.r(m_num_sorted);
+		file.r(m_mode);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
+		file.w(m_num_sorted);
+		file.w(m_mode);
+	}
+	//
 	const array3<std::vector<size_t> > & hash_edge(int dim) const { 
 		return dim == 0 ? m_hash_edge0 : (dim==1 ? m_hash_edge1 : m_hash_edge2);
 	}
@@ -249,7 +293,6 @@ protected:
 	}
 	//
 	parallel_driver m_parallel{this};
-	//
 };
 //
 extern "C" module * create_instance() {

@@ -38,7 +38,7 @@ class macbackwardflip2 : public macbackwardflip2_interface {
 protected:
 	//
 	virtual void initialize( const shape2 &shape, double dx ) override;
-	virtual void post_initialize() override;
+	virtual void post_initialize( bool initialized_from_file ) override;
 	virtual bool backtrace( const array2<Real> &solid, const array2<Real> &fluid ) override;
 	virtual bool fetch( macarray2<Real> &u_reconstructed ) const override;
 	virtual bool fetch( array2<Real> &density_reconstructed ) const override;

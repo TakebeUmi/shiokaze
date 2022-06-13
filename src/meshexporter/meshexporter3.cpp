@@ -265,9 +265,22 @@ protected:
 	}
 	//
 	std::vector<vec3d> vertices;
+	std::vector<std::vector<size_t> > faces;
 	std::vector<vec3d> vertex_colors;
 	std::vector<vec2d> uv_coordinates;
-	std::vector<std::vector<size_t> > faces;
+	//
+	virtual void initialize( const filestream &file ) override {
+		file.read(vertices);
+		file.read(faces);
+		file.read(vertex_colors);
+		file.read(uv_coordinates);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.write(vertices);
+		file.write(faces);
+		file.write(vertex_colors);
+		file.write(uv_coordinates);
+	}
 };
 //
 extern "C" module * create_instance() {

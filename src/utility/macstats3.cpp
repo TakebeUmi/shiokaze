@@ -48,8 +48,8 @@ protected:
 				if( it() < 0.0 && interpolate<Real>(solid,vec3i(i,j,k).cell()) > 0.0 ) num_active_fluid ++;
 			});
 		} else {
-			fluid.const_serial_actives([&](const auto &it) {
-				if( it() < 0.0 ) num_active_fluid ++;
+			fluid.const_serial_inside([&](const auto &it) {
+				num_active_fluid ++;
 			});
 		}
 		console::write("macstats3_number_active_cells", num_active_fluid);
@@ -75,6 +75,14 @@ protected:
 	virtual void initialize( const shape3 &shape, double dx ) override {
 		m_shape = shape;
 		m_dx = dx;
+	}
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
 	}
 	//
 	struct Parameters {

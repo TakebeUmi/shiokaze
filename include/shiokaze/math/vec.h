@@ -255,6 +255,15 @@ template <class T, unsigned D> struct vec {
 		return result;
 	}
 	/**
+	 \~english @brief Inverse each element.
+	 \~japanese @brief それぞれの要素を逆数に変換する。
+	 */
+	vec inverse() {
+		T result = T();
+		for( unsigned dim=0; dim<D; ++dim ) result[dim] = v[dim] ? 1.0/v[dim] : T();
+		return result;
+	}
+	/**
 	 \~english @brief Compute L2 norm.
 	 @return L2 norm.
 	 \~japanese @brief L2 ノルムを計算する。

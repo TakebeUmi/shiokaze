@@ -191,6 +191,12 @@ protected:
 	virtual void initialize( const shape2 &shape, double dx ) override {
 		m_dx = dx;
 	}
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_dx);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_dx);
+	}
 	//
 	struct Parameters {
 		double rate {0.75};

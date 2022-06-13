@@ -22,6 +22,12 @@
 #	CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 #	OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
+# ANN
+def build_ann(bld):
+	bld.shlib(source=bld.path.ant_glob('src/ann/**/*.cpp'),
+			  cxxflags=['-Wno-deprecated-register','-Wno-register'],
+			  includes='include/ann',
+			  target=bld.get_target_name(bld,'ann'))
 # HACD
 def build_hacd(bld):
 	bld.shlib(source=bld.path.ant_glob('src/hacd/**/*.cpp'),
@@ -51,6 +57,7 @@ def build_reactphysics3d(bld):
 		target=bld.get_target_name(bld,'reactphysics3d'))
 #
 def build(bld):
+	build_ann(bld)
 	build_hacd(bld)
 	build_box2d(bld)
 	build_bullet3(bld)

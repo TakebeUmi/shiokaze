@@ -849,9 +849,16 @@ public:
 	}
 private:
 	parallel_driver m_parallel{this};
-	bitarray2 m_array_0;
-	bitarray2 m_array_1;
+	bitarray2 m_array_0{this};
+	bitarray2 m_array_1{this};
 	shape2 m_shape;
+	//
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+	}
 };
 //
 SHKZ_END_NAMESPACE

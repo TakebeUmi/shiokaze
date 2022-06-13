@@ -72,6 +72,19 @@ public:
 	 */
 	virtual void extrapolate_levelset( const array3<Real> &solid, array3<Real> &fluid, double threshold=0.0 ) const = 0;
 	/**
+	 \~english @brief Get upwind levelset gradient.
+	 @param[in] levelset Level set array.
+	 @param[in] dx Grid cell size.
+	 @param[in] pi Index coordinate evaluation position.
+	 @return Gradient output.
+	 \~japanese @brief 風上のレベルセット勾配を得る。
+	 @param[in] levelset レベルセットの配列。
+	 @param[in] dx グリッドのセルの大きさ。
+	 @param[in] pi インデックス座標の評価位置。
+	 @return 出力結果の勾配。
+	 */
+	virtual vec3d get_upwind_levelset_gradient( const array3<Real> &levelset, const vec3i &pi ) const = 0;
+	/**
 	 \~english @brief Compute the gradient of a level set.
 	 @param[in] levelset Level set.
 	 @param[out] gradient Output gradient.

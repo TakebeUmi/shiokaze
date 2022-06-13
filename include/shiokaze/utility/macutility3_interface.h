@@ -71,11 +71,13 @@ public:
 	 \~english @brief Compute area fraction of solid level set.
 	 @param[in] solid Solid level set.
 	 @param[out] areas Area fractions of solid.
+	 @param[in] enclose_domain_boundary Set area zero on domain boundary.
 	 \~japanese @brief 壁のレベルセットのセルの面に占める割合を計算する。
 	 @param[in] solid 壁のレベルセット。
 	 @param[out] areas 面の壁の占める割合。
+	 @param[in] enclose_domain_boundary 領域の端で面積をゼロにするか。
 	 */
-	virtual void compute_area_fraction( const array3<Real> &solid, macarray3<Real> &areas ) const = 0;
+	virtual void compute_area_fraction( const array3<Real> &solid, macarray3<Real> &areas, bool enclose_domain_boundary=true ) const = 0;
 	/**
 	 \~english @brief Compute fraction between cells of fluid level set.
 	 @param[in] fluid Fluid level set.
@@ -187,18 +189,36 @@ public:
 	/**
 	 \~english @brief Assign initial velocity field, solid level set, fluid level set, density field from the dynamic library.
 	 @param[in] dylib Reference to an instance of dynamic library.
-	 @param[out] velocity Initial velocity field.
 	 @param[out] solid Initial solid level set.
+	 @param[out] solid_velocity Initial solid velocity field.
 	 @param[out] fluid Initial fluid level set.
+	 @param[out] fluid_velocity Initial fluid velocity field.
 	 @param[out] density Initial density field.
 	 \~japanese @brief 動的ライブラリから速度場、壁のレベルセット、流体のレベルセットと密度場をセットする。
-	 @param[out] velocity 初期の速度場。
+	 @param[in] dylib 動的ライブラリへの参照。
 	 @param[out] solid 初期の壁のレベルセット。
+	 @param[out] solid_velocity 初期の壁の速度場。
 	 @param[out] fluid 初期の流体のレベルセット。
+	 @param[out] fluid_velocity 初期の流体の速度場。
 	 @param[out] density 初期の密度場。
 	 */
-	virtual void assign_initial_variables( const dylibloader &dylib, macarray3<Real> &velocity,
-									array3<Real> *solid=nullptr, array3<Real> *fluid=nullptr,array3<Real> *density=nullptr ) const = 0;
+	virtual void assign_initial_variables( const dylibloader &dylib,
+					array3<Real> *solid=nullptr, macarray3<Real> *solid_velocity=nullptr,
+					array3<Real> *fluid=nullptr, macarray3<Real> *fluid_velocity=nullptr,
+					array3<Real> *density=nullptr ) const = 0;
+	/**
+	 \~english @brief Update solid levelset and velocity with respect to time.
+	 @param[in] dylib Reference to an instance of dynamic library.
+	 @param[in] time Time.
+	 @param[out] solid Solid level set.
+	 @param[out] solid_velocity Solid face velocity.
+	 \~japanese @brief 時間に関して壁のレベルセットと速度場を更新する。
+	 @param[in] dylib 動的ライブラリへの参照。
+	 @param[in] time 時間。
+	 @param[out] solid 壁のレベルセット。
+	 @param[out] solid_velocity 壁の面の速度場。
+	*/
+	virtual void update_solid_variables( const dylibloader &dylib, double time, array3<Real> *solid=nullptr, macarray3<Real> *solid_velocity=nullptr ) const = 0;
 	/**
 	 \~english @brief Add force to the velocity field.
 	 @param[in] p Position in physical space.

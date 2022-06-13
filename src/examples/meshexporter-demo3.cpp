@@ -65,7 +65,7 @@ protected:
 		set_environment("dx",&m_dx);
 	}
 	//
-	virtual void post_initialize() override {
+	virtual void post_initialize( bool initialized_from_file ) override {
 		//
 		scoped_timer timer(this);
 		//

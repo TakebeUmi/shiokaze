@@ -859,11 +859,17 @@ public:
 	}
 private:
 	parallel_driver m_parallel{this};
-	bitarray3 m_array_0;
-	bitarray3 m_array_1;
-	bitarray3 m_array_2;
+	bitarray3 m_array_0{this};
+	bitarray3 m_array_1{this};
+	bitarray3 m_array_2{this};
 	shape3 m_shape;
 	//
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+	}
 };
 //
 SHKZ_END_NAMESPACE

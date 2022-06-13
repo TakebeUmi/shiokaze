@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include <amgcl/backend/interface.hpp>
 #include <amgcl/solver/detail/default_inner_product.hpp>
 #include <amgcl/util.hpp>
+#include <cassert>
 
 namespace amgcl {
 
@@ -76,6 +77,11 @@ class cg {
             typename math::rhs_of<value_type>::type
             >::return_type coef_type;
 
+        std::vector<value_type> vector_reresid;
+        std::vector<value_type> vector_absresid;
+
+        const std::vector<unsigned char> *kind {nullptr};
+
         /// Solver parameters.
         struct params {
             /// Maximum number of iterations.
@@ -87,8 +93,11 @@ class cg {
             /// Target absolute residual error.
             scalar_type abstol;
 
+            // Force use global residual
+            bool force_global_residual;
+
             params()
-                : maxiter(100), tol(1e-8),
+                : maxiter(100), tol(1e-8), force_global_residual(false),
                   abstol(std::numeric_limits<scalar_type>::min())
             {}
 
@@ -137,13 +146,16 @@ class cg {
          */
         template <class Matrix, class Precond, class Vec1, class Vec2>
         std::tuple<size_t, scalar_type> operator()(
-                const Matrix &A, const Precond &P, const Vec1 &rhs, Vec2 &&x) const
+                const Matrix &A, const Precond &P, const Vec1 &rhs, Vec2 &&x)
         {
             static const coef_type one  = math::identity<coef_type>();
             static const coef_type zero = math::zero<coef_type>();
 
+            std::vector<scalar_type> vector_resid0, vector_resid1;
+
             backend::residual(rhs, A, x, *r);
             scalar_type norm_rhs = norm(rhs);
+            if( kind ) vector_resid0 = vector_norm_func(rhs);
             if (norm_rhs < amgcl::detail::eps<scalar_type>(n)) {
                 backend::clear(x);
                 return std::make_tuple(0, norm_rhs);
@@ -155,8 +167,25 @@ class cg {
             coef_type rho2 = zero;
             scalar_type res_norm = norm(*r);
 
+            auto check_exit = [&]() {
+                if( prm.force_global_residual ) {
+                    return math::norm(res_norm) < eps;
+                } else if( kind ) {
+                    unsigned count (0);
+                    for( int i=0; i<vector_resid1.size(); ++i ) {
+                        if(vector_resid1[i]<=prm.tol*vector_resid0[i] || vector_resid1[i] < prm.abstol) {
+                            count ++;
+                        }
+                    }
+                    if( count == vector_resid1.size() ) return true;
+                    else return false;
+                } else {
+                  return math::norm(res_norm) < eps;
+                }
+            };
+
             size_t iter = 0;
-            for(; iter < prm.maxiter && math::norm(res_norm) > eps; ++iter) {
+            for(; iter < prm.maxiter; ++iter) {
                 P.apply(*r, *s);
 
                 rho2 = rho1;
@@ -175,6 +204,16 @@ class cg {
                 backend::axpby(-alpha, *q, one, *r);
 
                 res_norm = norm(*r);
+                 if( kind ) vector_resid1 = vector_norm_func(*r);
+
+                if(check_exit()) break;
+            }
+
+            vector_absresid = vector_resid1;
+            vector_reresid.resize(vector_resid1.size());
+            for( int i=0; i<vector_resid1.size(); ++i ) {
+                if( vector_resid0[i] ) vector_reresid[i] = vector_resid1[i] / vector_resid0[i];
+                else vector_reresid[i] = 0.0;
             }
 
             return std::make_tuple(iter, res_norm / norm_rhs);
@@ -189,7 +228,7 @@ class cg {
          */
         template <class Precond, class Vec1, class Vec2>
         std::tuple<size_t, scalar_type> operator()(
-                const Precond &P, const Vec1 &rhs, Vec2 &&x) const
+                const Precond &P, const Vec1 &rhs, Vec2 &&x)
         {
             return (*this)(P.system_matrix(), P, rhs, x);
         }
@@ -213,6 +252,24 @@ class cg {
         template <class Vec>
         scalar_type norm(const Vec &x) const {
             return sqrt(math::norm(inner_product(x, x)));
+            /*
+            scalar_type result (0.0);
+            for( size_t i=0; i<x.size(); ++i ) {
+                result = std::max(result,std::abs(x[i]));
+            }
+            return result;
+            */
+        }
+        template <class Vec>
+        std::vector<scalar_type> vector_norm_func(const Vec &x) const {
+            assert( kind && kind->size()==x.size());
+            std::vector<scalar_type> result;
+            for( size_t i=0; i<x.size(); ++i ) {
+                unsigned char k = (*kind)[i];
+                if( result.size() < k+1 ) result.resize(k+1);
+                result[k] = std::max(result[k],std::abs(x[i]));
+            }
+            return result;
         }
 };
 

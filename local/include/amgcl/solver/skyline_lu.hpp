@@ -235,8 +235,8 @@ class skyline_lu {
          * end
          */
         void factorize() {
-            precondition(!math::is_zero(D[0]), "Zero diagonal in skyline_lu");
-            D[0] = math::inverse(D[0]);
+            //precondition(!math::is_zero(D[0]), "Zero diagonal in skyline_lu");
+            D[0] = math::inverse(D[0]); // Modified by Ryoichi
 
             for(int k = 0; k < n - 1; ++k) {
                 // check whether A(1,k+1) lies within the skyline structure
@@ -290,9 +290,10 @@ class skyline_lu {
                 for(int j = ptr[k+1]; j < ptr[k+2]; ++j)
                     sum -= L[j] * U[j];
 
+                /* Modified by Ryoichi
                 precondition(!math::is_zero(sum),
                         "Zero sum in skyline_lu factorization");
-
+                */
                 D[k+1] = math::inverse(sum);
             }
         }

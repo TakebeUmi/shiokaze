@@ -41,7 +41,7 @@ static void pointwise_gaussian_blur( const array3<T> &source, array3<T> &result,
 		for(int qj=-rs; qj<rs+1; qj++) {
 			for(int qk=-rs; qk<rs+1; qk++) {
 				double q2 = vec3d(qi,qj,qk).norm2();
-				exp_w[qi+rs+L*(qj+rs)+(L*L)*(qk+rs)] = std::exp(-q2/(2.0*r*r))/std::pow(M_PI*2.0*r*r,DIM3/2.0);
+				exp_w[qi+rs+L*(qj+rs)+(L*L)*(qk+rs)] = std::exp(-q2/(2.0*r*r));
 			}
 		}
 	}
@@ -50,9 +50,9 @@ static void pointwise_gaussian_blur( const array3<T> &source, array3<T> &result,
 		//
 		T val (0.0);
 		double wsum (0.0);
-		for(int qi=-rs; qi<rs+1; qi++) {
-			for(int qj=-rs; qj<rs+1; qj++) {
-				for(int qk=-rs; qk<rs+1; qk++) {
+		for(int qi=-rs; qi<=rs; qi++) {
+			for(int qj=-rs; qj<=rs; qj++) {
+				for(int qk=-rs; qk<=rs; qk++) {
 					int ni = i+qi;
 					int nj = j+qj;
 					int nk = k+qk;
@@ -89,9 +89,10 @@ void macexnbflip3::internal_sizing_func(array3<Real> &sizing_array,
 		pointwise_gaussian_blur(velocity_array(),gaussian_blured_velocity_array(),m_param.radius);
 		//
 		// 3. Take diff between 1 and 2
-		gaussian_blured_velocity_array->set_touch_only_actives(true);
 		diff->copy(gaussian_blured_velocity_array());
-		diff() -= velocity_array();
+		diff->parallel_actives([&](int i, int j, int k, auto &it, int tn ) {
+			it.set(it()-velocity_array()(i,j,k));
+		});
 	}
 	//
 	// 4. Compute blurred levelset
@@ -104,11 +105,12 @@ void macexnbflip3::internal_sizing_func(array3<Real> &sizing_array,
 		//
 		double value0, value1;
 		//
-		if( m_param.mode==0 || m_param.mode==1 ) value0 = std::max(0.0,m_param.amplification * std::min(1.0,diff()(i,j,k).len()) - m_param.threshold_u);
+		if( m_param.mode==0 || m_param.mode==1 ) value0 = std::max(0.0,m_param.amplification * std::min(m_param.max_value,diff()(i,j,k).len()*m_param.velocity_scale) - m_param.threshold_u);
 		if( m_param.mode==0 || m_param.mode==2 ) {
 			double val = fluid(i,j,k);
 			if( val < 0 && val > -0.5*m_dx ) {
-				value1 = std::max(0.0, m_param.amplification * std::abs(fluid_blurred()(i,j,k)-val) / m_dx - m_param.threshold_g);
+				const double a = m_param.amplification * std::min(m_param.max_value,std::abs(fluid_blurred()(i,j,k)-val) / m_dx) - m_param.threshold_g;
+				value1 = std::max(0.0,a);
 			} else {
 				value1 = 0.0;
 			}
@@ -133,6 +135,8 @@ void macexnbflip3::configure( configuration &config ) {
 	config.get_double("Threshold_U",m_param.threshold_u,"Threshold velocity for sizing function evaluation");
 	config.get_double("Threshold_G",m_param.threshold_g,"Threshold geometry for sizing function evaluation");
 	config.get_double("Amplification",m_param.amplification,"Amplification velocity for sizing function evaluation");
+	config.get_double("VelocityScale",m_param.velocity_scale,"Velocity scale");
+	config.get_double("MaxValue",m_param.max_value,"Maximal value of the initial sizing value");
 	config.get_double("SizingBlurRadius",m_param.radius,"Gaussian blur radius for velocity sizing function");
 	std::string mode_str("both");
 	config.get_string("SizingMode",mode_str,"Sizing function combination mode (both,velocity,geometry)");

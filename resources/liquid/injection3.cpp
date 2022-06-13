@@ -33,10 +33,14 @@
 SHKZ_USING_NAMESPACE
 //
 static double g_water_radius (0.05);
-static double g_water_level (0.1);
+static double g_water_level (0.15);
 static double g_inject_height (0.4);
 static double g_inject_speed (1.5);
 static double g_inject_time (5.0);
+static bool g_container (false);
+static double g_container_thickness (0.03);
+static double g_container_radius (0.5);
+static double g_container_height (0.3);
 static bool g_fix_volume (false);
 static vec3d g_inject_center (0.1,0.4,0.5);
 static int g_version (0);
@@ -52,6 +56,18 @@ extern "C" void configure( configuration &config ) {
 	config.get_double("InjectTime",g_inject_time,"Injection time");
 	config.get_bool("FixVolume",g_fix_volume,"Fix total volume");
 	config.get_integer("Version",g_version,"Scene version");
+	config.get_bool("Container",g_container,"Add container");
+	if( g_container ) {
+		config.get_double("ContainerRadius",g_container_radius,"Radius of the solid hemisphere container");
+		config.get_double("ContainerThickness",g_container_thickness,"Thickness of the solid hemisphere container");
+		config.get_double("ContainerHeight",g_container_height,"Height of the solid hemisphere container");
+	}
+}
+//
+extern "C" std::map<std::string,std::string> get_default_parameters() {
+	std::map<std::string,std::string> dictionary;
+	dictionary["RegionalVolumeCorrection"] = "Yes";
+	return dictionary;
 }
 //
 extern "C" void initialize( const shape3 &shape, double dx ) {
@@ -65,7 +81,11 @@ extern "C" double fluid( const vec3d &p ) {
 //
 extern "C" double solid( const vec3d &p ) {
 	if( g_version == 0 ) {
-		return 1.0;
+		if( g_container ) {
+			return g_container_radius-g_container_thickness-(p-vec3d(0.5,0.5,0.5)).len();
+		} else {
+			return 1.0;
+		}
 	} else if( g_version == 1 ) {
 		double value (1.0);
 		const double height (0.22);
@@ -81,13 +101,18 @@ extern "C" double solid( const vec3d &p ) {
 extern "C" bool check_inject( double dx, double dt, double time, unsigned step ) {
 	g_counter ++;
 	if( g_version == 2 ) {
-		std::uniform_real_distribution<double> rand_dist_x(0.1,0.2);
-		std::uniform_real_distribution<double> rand_dist_y(0.2,0.45);
-		std::uniform_real_distribution<double> rand_dist_z(0.2,0.8);
-		g_inject_center = vec3d(
-			rand_dist_x(g_rand_src),
-			rand_dist_y(g_rand_src),
-			rand_dist_z(g_rand_src));
+		if( g_counter % 20 == 1 ) {
+			std::uniform_real_distribution<double> rand_dist_x(0.1,0.2);
+			std::uniform_real_distribution<double> rand_dist_y(0.2,0.45);
+			std::uniform_real_distribution<double> rand_dist_z(0.2,0.8);
+			g_inject_center = vec3d(
+				rand_dist_x(g_rand_src),
+				rand_dist_y(g_rand_src),
+				rand_dist_z(g_rand_src));
+			return true;
+		} else {
+			return false;
+		}
 	}
 	return time < g_inject_time;
 }
@@ -99,10 +124,8 @@ extern "C" bool inject( const vec3d &p, double dx, double dt, double time, unsig
 		fluid = (p-g_inject_center).len()-g_water_radius;
 		result = true;
 	} else {
-		if( g_counter % 20 == 1 ) {
-			fluid = (p-g_inject_center).len()-g_water_radius;
-			result = true;
-		}
+		fluid = (p-g_inject_center).len()-g_water_radius;
+		result = true;
 	}
 	//
 	if( g_version == 0 || g_version == 2 ) {
@@ -123,6 +146,11 @@ extern "C" void post_inject( double dx, double dt, double time, unsigned step, d
 			volume_change = (4.0/3.0*M_PI) * (g_water_radius*g_water_radius*g_water_radius);
 		}
 	}
+}
+//
+extern "C" double solid_visualize( const vec3d &p ) {
+	if( g_container ) return std::max(p[1]-g_container_height,std::max(solid(p),-solid(p)-g_container_thickness));
+	else return 1.0;
 }
 //
 extern "C" const char *license() {

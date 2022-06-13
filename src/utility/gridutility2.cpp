@@ -142,6 +142,28 @@ protected:
 			fluid.flood_fill();
 		}
 	}
+	virtual vec2d get_upwind_levelset_gradient( const array2<Real> &levelset, const vec2i &pi ) const override {
+		//
+		vec2d result;
+		const Real phi0 = levelset(pi);
+		const Real sgn = phi0 > 0.0 ? 1.0 : -1.0;
+		//
+		for( int dim : DIMS2 ) {
+			for( int dir=-1; dir<=1; dir+=2) {
+				const vec2i qi = pi+dir*vec2i(dim==0,dim==1);
+				if( levelset.safe_active(qi)) {
+					const Real phi1 = levelset(qi);
+					if( sgn*phi1 < sgn*phi0 ) {
+						const double grad = (phi1-phi0) / m_dx * static_cast<double>(dir);
+						if( std::abs(grad) > std::abs(result[dim])) {
+							result[dim] = grad;
+						}
+					}
+				}
+			}
+		}
+		return result;
+	}
 	virtual void compute_gradient( const array2<Real> &levelset, array2<vec2r> &gradient ) const override {
 		//
 		gradient.activate_as(levelset);
@@ -216,15 +238,47 @@ protected:
 		volume = (m_dx*m_dx) * volume;
 		return volume;
 	}
+	virtual bool assign_visualizable_solid( const dylibloader &dylib, double dx, array2<Real> &solid ) const override {
+		//
+		bool is_nodal = solid.shape() == m_shape.nodal();
+		bool is_cell = solid.shape() == m_shape.cell();
+		//
+		auto solid_visualize_func = reinterpret_cast<double(*)(const vec2d &)>(dylib.load_symbol("solid_visualize"));
+		if( ! solid_visualize_func ) solid_visualize_func = reinterpret_cast<double(*)(const vec2d &)>(dylib.load_symbol("solid"));
+		solid.clear(1.0);
+		//
+		if( solid_visualize_func ) {
+			solid.parallel_all([&](int i, int j, auto &it) {
+				double value = (*solid_visualize_func)( is_nodal ? dx*vec2i(i,j).nodal() : dx*vec2i(i,j).cell());
+				if( ! m_param.narrowband_dist || std::abs(value) < m_param.narrowband_dist*dx ) it.set(value);
+			});
+			if( m_param.narrowband_dist ) {
+				solid.set_as_levelset(m_param.narrowband_dist*dx);
+				solid.flood_fill();
+			}
+			return true;
+		} else {
+			return false;
+		}
+	}
 	//
 	virtual void configure( configuration &config ) override {
 		config.get_bool("SolidWallExtrapolation", m_param.solid_wall_extrapolation,"Should extrapolate towards solid");
 		config.get_bool("HorizontalSolidWallExtrapolation", m_param.horizontal_solid_extrapolation,"Should extrapolate horizontally");
 		config.get_double("ExtrapolationDepth",m_param.extrapolation_toward_solid,"Solid extrapolation depth");
+		config.get_double("NarrowBandDist",m_param.narrowband_dist);
 	}
 	virtual void initialize( const shape2 &shape, double dx ) override {
 		m_shape = shape;
 		m_dx = dx;
+	}
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
 	}
 	//
 	struct Parameters {
@@ -232,6 +286,7 @@ protected:
 		bool solid_wall_extrapolation {true};
 		bool horizontal_solid_extrapolation {true};
 		double extrapolation_toward_solid {1.0};
+		double narrowband_dist {sqrt(2.0)};
 	};
 	//
 	Parameters m_param;

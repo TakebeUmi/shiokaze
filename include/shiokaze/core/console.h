@@ -125,6 +125,17 @@ namespace console {
 	 @param[in] number ログファイルに記録する数字。
 	*/
 	void write( std::string name, double number );
+	/**
+	 \~english @brief Export number associated with the name as log file.
+	 @param[in] name Name associated with the number.
+	 @param[in] number1 Number (first column) to record.
+	 @param[in] number2 Number (second column) to record.
+	 \~japanese @brief ラベル名前に関する数字をログファイルとして出力する。
+	 @param[in] name 数字に関連した名前。
+	 @param[in] number1 ログファイル(最初の列)に記録する数字。
+	 @param[in] number2 ログファイル(二番目の列)に記録する数字。
+	*/
+	void write( std::string name, double number1, double number2 );
 }
 //
 SHKZ_END_NAMESPACE

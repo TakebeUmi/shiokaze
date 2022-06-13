@@ -45,9 +45,14 @@ protected:
 		m_target_volume = target_volume;
 	}
 	//
+	virtual void set_solid_density( const macarray2<Real> *solid_density ) override {
+		m_solid_density = solid_density;
+	}
+	//
 	virtual void project(double dt,
 						macarray2<Real> &velocity,
 						const array2<Real> &solid,
+						const macarray2<Real> &solid_velocity,
 						const array2<Real> &fluid,
 						double surface_tension,
 						const std::vector<signed_rigidbody2_interface *> *rigidbodies ) override {
@@ -58,6 +63,14 @@ protected:
 		// Compute fractions
 		m_macutility->compute_area_fraction(solid,areas());
 		m_macutility->compute_fluid_fraction(fluid,rhos());
+		//
+		// Modify solid faces according to the areas
+		if( m_solid_density ) {
+			areas->parallel_actives([&](int dim, int i, int j, auto &it, int tn ) {
+				const Real density = (*m_solid_density)[dim](i,j);
+				it.set(density*it()+(1.0-density));
+			});
+		}
 		//
 		// Enforce first order accuracy
 		if( ! m_param.second_order_accurate_fluid ) {
@@ -142,99 +155,114 @@ protected:
 			});
 		}
 		//
-		auto Lhs = m_factory->allocate_matrix(index,index);
-		auto rhs = m_factory->allocate_vector(index);
-		//
-		index_map->const_parallel_actives([&]( int i, int j, const auto &it, int tn ) {
+		if( index ) {
 			//
-			size_t n_index = it();
-			rhs->set(n_index,0.0);
+			auto Lhs = m_factory->allocate_matrix(index,index);
+			auto rhs = m_factory->allocate_vector(index);
 			//
-			vec2i query[] = {vec2i(i+1,j),vec2i(i-1,j),vec2i(i,j+1),vec2i(i,j-1)};
-			vec2i face[] = {vec2i(i+1,j),vec2i(i,j),vec2i(i,j+1),vec2i(i,j)};
-			int direction[] = {0,0,1,1};
-			int sgn[] = {1,-1,1,-1};
-			//
-			double diagonal (0.0);
-			for( int nq=0; nq<4; nq++ ) {
-				int dim = direction[nq];
-				if( ! m_shape.out_of_bounds(query[nq]) ) {
-					double area = areas()[dim](face[nq]);
-					if( area ) {
-						double rho = rhos()[dim](face[nq]);
-						if( rho ) {
-							double value = dt*area/(m_dx*m_dx*rho);
-							if( fluid(query[nq]) < 0.0 ) {
-								assert(index_map->active(query[nq]));
-								size_t m_index = index_map()(query[nq]);
-								Lhs->add_to_element(n_index,m_index,-value);
+			index_map->const_parallel_actives([&]( int i, int j, const auto &it, int tn ) {
+				//
+				const size_t n_index = it();
+				rhs->set(n_index,0.0);
+				//
+				const vec2i query[] = {vec2i(i+1,j),vec2i(i-1,j),vec2i(i,j+1),vec2i(i,j-1)};
+				const vec2i face[] = {vec2i(i+1,j),vec2i(i,j),vec2i(i,j+1),vec2i(i,j)};
+				const int direction[] = {0,0,1,1};
+				const int sgn[] = {1,-1,1,-1};
+				//
+				double diagonal (0.0);
+				for( int nq=0; nq<4; nq++ ) {
+					const int dim = direction[nq];
+					const double area = areas()[dim](face[nq]);
+					if( ! m_shape.out_of_bounds(query[nq]) ) {
+						if( area ) {
+							const double rho = rhos()[dim](face[nq]);
+							if( rho ) {
+								const double value = dt*area/(m_dx*m_dx*rho);
+								if( fluid(query[nq]) < 0.0 ) {
+									assert(index_map->active(query[nq]));
+									size_t m_index = index_map()(query[nq]);
+									Lhs->add_to_element(n_index,m_index,-value);
+								}
+								diagonal += value;
 							}
-							diagonal += value;
 						}
 					}
 					rhs->add(n_index,-sgn[nq]*area*velocity[dim](face[nq])/m_dx);
+					if( area < 1.0 ) {
+						const double u = solid_velocity[dim](face[nq]);
+						rhs->add(n_index,-sgn[nq]*(1.0-area)*u/m_dx);
+					}
 				}
-			}
-			Lhs->add_to_element(n_index,n_index,diagonal);
-		});
-		//
-		// Volume correction
-		double rhs_correct = 0.0;
-		if( m_param.gain && m_target_volume ) {
-			double x = (m_current_volume-m_target_volume)/m_target_volume;
-			double y = m_y_prev + x*dt; m_y_prev = y;
-			double kp = m_param.gain * 2.3/(25.0*0.01);
-			double ki = kp*kp/16.0;
-			rhs_correct = -(kp*x+ki*y)/(x+1.0);
-			rhs->for_each([&]( unsigned row, double &value ) {
-				value += rhs_correct;
+				Lhs->add_to_element(n_index,n_index,diagonal);
 			});
-		}
-		//
-		if( m_param.warm_start ) {
-			// Tweak the linear system
-			if( ! m_prev_pressure ) {
-				m_prev_pressure = m_factory->allocate_vector(index);
-			} else {
-				m_prev_pressure->resize(index);
+			//
+			// Volume correction
+			double rhs_correct = 0.0;
+			if( m_param.gain && m_target_volume ) {
+				double x = (m_current_volume-m_target_volume)/m_target_volume;
+				double y = m_y_prev + x*dt; m_y_prev = y;
+				double kp = m_param.gain * 2.3/(25.0*0.01);
+				double ki = kp*kp/16.0;
+				rhs_correct = -(kp*x+ki*y)/(x+1.0);
+				rhs->for_each([&]( unsigned row, double &value ) {
+					value += rhs_correct;
+				});
 			}
-			auto new_rhs = Lhs->multiply(m_prev_pressure.get());
-			rhs->subtract(new_rhs.get());
-		}
-		//
-		// Solve the linear system
-		auto result = m_factory->allocate_vector(index);
-		m_solver->solve(Lhs.get(),rhs.get(),result.get());
-		//
-		if( m_param.warm_start ) {
-			result->add(m_prev_pressure.get());
-			m_prev_pressure->copy(result.get());
-		}
-		//
-		// Re-arrange to the array
-		m_pressure.clear();
-		index_map->const_serial_actives([&](int i, int j, const auto& it) {
-			m_pressure.set(i,j,result->at(it()));
-		});
-		//
-		// Update the full velocity
-		velocity.parallel_actives([&](int dim, int i, int j, auto &it, int tn ) {
-			double rho = rhos()[dim](i,j);
-			vec2i pi(i,j);
-			if( areas()[dim](i,j) && rho ) {
-				if( pi[dim] == 0 || pi[dim] == velocity.shape()[dim] ) it.set(0.0);
-				else {
-					it.subtract(dt * (
-						+ m_pressure(i,j)
-						- m_pressure(i-(dim==0),j-(dim==1))
-					) / (rho*m_dx));
+			//
+			if( m_param.warm_start ) {
+				// Tweak the linear system
+				if( ! m_prev_pressure ) {
+					m_prev_pressure = m_factory->allocate_vector(index);
+				} else {
+					m_prev_pressure->resize(index);
 				}
-			} else {
-				if( pi[dim] == 0 && fluid(pi) < 0.0 && it() < 0.0 ) it.set(0.0);
-				else if( pi[dim] == velocity.shape()[dim] && fluid(pi-vec2i(dim==0,dim==1)) < 0.0 && it() > 0.0 ) it.set(0.0);
-				else it.set_off();
+				auto new_rhs = Lhs->multiply(m_prev_pressure.get());
+				rhs->subtract(new_rhs.get());
 			}
-		});
+			//
+			// Solve the linear system
+			auto result = m_factory->allocate_vector(index);
+			m_solver->solve(Lhs.get(),rhs.get(),result.get());
+			//
+			if( m_param.warm_start ) {
+				result->add(m_prev_pressure.get());
+				m_prev_pressure->copy(result.get());
+			}
+			//
+			// Re-arrange to the array
+			m_pressure.clear();
+			index_map->const_serial_actives([&](int i, int j, const auto& it) {
+				m_pressure.set(i,j,result->at(it()));
+			});
+			//
+			// Update the full velocity
+			velocity.parallel_actives([&](int dim, int i, int j, auto &it, int tn ) {
+				const double rho = rhos()[dim](i,j);
+				const vec2i pi(i,j);
+				const double solid_u = solid_velocity[dim](i,j);
+				if( areas()[dim](i,j) && rho ) {
+					if( pi[dim] == 0 || pi[dim] == m_shape[dim] ) it.set(solid_u);
+					else {
+						it.subtract(dt * (
+							+ m_pressure(i,j)
+							- m_pressure(i-(dim==0),j-(dim==1))
+						) / (rho*m_dx));
+					}
+				} else {
+					it.set_off();
+				}
+			});
+			//
+			// Modify velocity accoring to the density
+			if( m_solid_density ) {
+				velocity.parallel_actives([&](int dim, int i, int j, auto &it, int tn ) {
+					const Real density = (*m_solid_density)[dim](i,j);
+					const Real scale = 1.0-(1.0-areas()[dim](i,j))*density;
+					it.set(scale*it());
+				});
+			}
+		}
 	}
 	//
 	virtual const array2<Real> * get_pressure() const override {
@@ -245,7 +273,7 @@ protected:
 		if( m_param.draw_pressure ) {
 			//
 			// Visualize pressure
-			m_gridvisualizer->visualize_cell_scalar(g,m_pressure);
+			m_gridvisualizer->visualize_cell_scalar(g,m_pressure,m_param.visualize_min,m_param.visualize_max);
 		}
 	}
 	//
@@ -255,6 +283,8 @@ protected:
 		config.get_bool("DrawPressure",m_param.draw_pressure,"Whether to draw pressure");
 		config.get_double("Gain",m_param.gain,"Rate for volume correction");
 		config.get_bool("WarmStart",m_param.warm_start,"Start from the solution of previous pressure");
+		config.get_double("VisualizeMin",m_param.visualize_min,"Visualize min value");
+		config.get_double("VisualizeMax",m_param.visualize_max,"Visualize max value");
 		config.set_default_bool("ReportProgress",false);
 	}
 	//
@@ -264,10 +294,34 @@ protected:
 		m_dx = dx;
 	}
 	//
-	virtual void post_initialize() override {
+	virtual void post_initialize( bool initialized_from_file ) override {
 		//
 		m_pressure.initialize(m_shape);
 		m_target_volume = m_current_volume = m_y_prev = 0.0;
+	}
+	//
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+		file.r(m_target_volume);
+		file.r(m_current_volume);
+		file.r(m_y_prev);
+		if( m_param.warm_start ) {
+			m_prev_pressure = m_factory->allocate_vector();
+			m_prev_pressure->initialize(file);
+		}
+	}
+	//
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
+		file.w(m_target_volume);
+		file.w(m_current_volume);
+		file.w(m_y_prev);
+		if( m_param.warm_start ) {
+			assert(m_prev_pressure);
+			m_prev_pressure->serialize(file);
+		}
 	}
 	//
 	struct Parameters {
@@ -278,6 +332,8 @@ protected:
 		bool second_order_accurate_fluid {true};
 		bool second_order_accurate_solid {true};
 		bool warm_start {false};
+		double visualize_min {0.0};
+		double visualize_max {0.0};
 	};
 	Parameters m_param;
 	//
@@ -290,12 +346,12 @@ protected:
 	RCMatrix_factory_driver<size_t,double> m_factory{this,"RCMatrix"};
 	RCMatrix_solver_driver<size_t,double> m_solver{this,"pcg"};
 	//
-	double m_assemble_time {0.0};
 	double m_target_volume {0.0};
 	double m_current_volume {0.0};
 	double m_y_prev {0.0};
 	//
 	RCMatrix_vector_ptr<size_t,double> m_prev_pressure;
+	const macarray2<Real> *m_solid_density {nullptr};
 };
 //
 extern "C" module * create_instance() {

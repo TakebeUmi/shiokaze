@@ -8,7 +8,12 @@ import sys
 import os
 import time
 import math
-
+import ConfigParser, json
+#
+# Load variables
+config = ConfigParser.ConfigParser()
+config.read('../mesh/common.ini')
+#
 # Start up the scheduling system with one worker per local core
 scheduler = Scheduler.getInstance()
 for i in range(0, multiprocessing.cpu_count()):
@@ -16,15 +21,12 @@ for i in range(0, multiprocessing.cpu_count()):
 scheduler.start()
 
 end = int(sys.argv[1])
-SampleCount = sys.argv[2]
-target_x = float(sys.argv[3])
-target_y = float(sys.argv[4])
-target_z = float(sys.argv[5])
-origin_x = float(sys.argv[6])
-origin_y = float(sys.argv[7])
-origin_z = float(sys.argv[8])
-xml_name = sys.argv[9]
-
+xml_name = sys.argv[2]
+#
+SampleCount = config.getint('Common','SampleCount')
+TargetPos = json.loads(config.get('Common','TargetPos'))
+OriginPos = json.loads(config.get('Common','OriginPos'))
+#
 img_path = '../'+xml_name+'_img'
 if not os.path.exists(img_path):
 	os.system('mkdir '+img_path)
@@ -52,18 +54,40 @@ for frame in range(0,end+1):
 		#
 		# Scene parameters
 		paramMap = StringMap()
-		paramMap['target_x'] = str(target_x)
-		paramMap['target_y'] = str(target_y)
-		paramMap['target_z'] = str(target_z)
-		paramMap['origin_x'] = str(origin_x)
-		paramMap['origin_y'] = str(origin_y)
-		paramMap['origin_z'] = str(origin_z)
+		paramMap['target_x'] = str(TargetPos[0])
+		paramMap['target_y'] = str(TargetPos[1])
+		paramMap['target_z'] = str(TargetPos[2])
+		paramMap['origin_x'] = str(OriginPos[0])
+		paramMap['origin_y'] = str(OriginPos[1])
+		paramMap['origin_z'] = str(OriginPos[2])
 		paramMap['up'] = '0, 1, 0'
-		paramMap['sample_count'] = SampleCount
+		paramMap['sample_count'] = str(SampleCount)
 		#
 		paramMap['mesh_filename'] = mesh_file
 		paramMap['solid_filename'] = '../mesh/static_solids/levelset_solid.serialized'
 		scene = SceneHandler.loadScene(fileResolver.resolve(xml_name+'.xml'),paramMap)
+		#
+		# Append moving solids if exists
+		transforms_file = '../mesh/'+str(frame)+'_transforms.dat'
+		if os.path.exists(transforms_file):
+			print 'Loading moving solids...'
+			pmgr = PluginManager.getInstance()
+			f = open(transforms_file,'rb')
+			(number,) = unpack('I',f.read(4))
+			print 'Adding '+str(number)+' moving solids...'
+			for i in range(0,number):
+				(x,y,z) = unpack('fff',f.read(12))
+				(r,rx,ry,rz) = unpack('ffff',f.read(16))
+				scene.addChild(pmgr.create(
+					{	'type' : 'serialized',
+						'maxSmoothAngle' : 30.0,
+						'filename' : '../mesh/moving_solids/polygon_'+str(i)+'.serialized',
+						'toWorld' : Transform.translate(Vector(x,y,z)) * Transform.rotate(Vector(rx,ry,rz),r),
+						'bsdf' : {
+							'type' : 'diffuse',
+							'reflectance' : Spectrum(0.6)
+						}
+					}))
 		#
 		# Create a queue for tracking render jobs
 		queue = RenderQueue()

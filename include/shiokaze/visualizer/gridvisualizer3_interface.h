@@ -112,20 +112,28 @@ public:
 	 \~english @brief Draw cell-based scalar.
 	 @param[in] g Graphics engine.
 	 @param[in] q Target grid.
+	 @param[in] min_value Min value.
+	 @param[in] max_value Max value.
 	 \~japanese @brief セルベースのスカラー値を描画する。
 	 @param[in] g グラフィックスエンジン。
 	 @param[in] q 目標となるグリッド。
+	 @param[in] min_value 最小値。
+	 @param[in] max_value 最大値。
 	 */
-	virtual void visualize_cell_scalar( graphics_engine &g, const array3<Real> &q ) const = 0;
+	virtual void visualize_cell_scalar( graphics_engine &g, const array3<Real> &q, double min_value=0.0, double max_value=0.0 ) const = 0;
 	/**
 	 \~english @brief Draw nodal scalar.
 	 @param[in] g Graphics engine.
 	 @param[in] q Target grid.
+	 @param[in] min_value Min value.
+	 @param[in] max_value Max value.
 	 \~japanese @brief 節点ベースのスカラー値を描画する。
 	 @param[in] g グラフィックスエンジン。
 	 @param[in] q 目標となるグリッド。
+	 @param[in] min_value 最小値。
+	 @param[in] max_value 最大値。
 	 */
-	virtual void visualize_nodal_scalar( graphics_engine &g, const array3<Real> &q ) const = 0;
+	virtual void visualize_nodal_scalar( graphics_engine &g, const array3<Real> &q, double min_value=0.0, double max_value=0.0 ) const = 0;
 	//
 private:
 	virtual void initialize( const shape3 &shape, double dx ) = 0;

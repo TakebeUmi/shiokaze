@@ -54,7 +54,7 @@ private:
 		set_environment("dx",&m_dx);
 	}
 	//
-	virtual void post_initialize() override {
+	virtual void post_initialize( bool initialized_from_file ) override {
 		m_array.initialize(m_shape);
 		m_camera->set_bounding_box(vec3d().v,m_shape.box(m_dx).v);
 	}

@@ -35,6 +35,7 @@
 #include <vector>
 #include <functional>
 #include <limits>
+#include <shiokaze/core/filesystem.h>
 //
 #include <shiokaze/math/vec.h>
 #include <shiokaze/math/vec.h>
@@ -68,6 +69,17 @@ public:
 		unsigned char result (0);
 		while( tmp >>= 1 ) ++ result;
 		return result;
+	}
+	/**
+	 \~english @brief Get of the hostname.
+	 @return Hostname string.
+	 \~japanese @brief ホスト名を得る。
+	 @return ホスト名の文字列。
+	 */
+	static std::string gethostname() {
+		char buffer[64];
+		::gethostname(buffer,sizeof(buffer));
+		return std::string(buffer);
 	}
 	/**
 	 \~english @brief Get microseconds.

@@ -43,9 +43,10 @@ void macbackwardflipsmoke3::idle() {
 	//
 	// Compute the timestep size
 	scoped_timer timer{this};
-	double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
-	double CFL = m_timestepper->get_current_CFL();
-	unsigned step = m_timestepper->get_step_count();
+	const double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
+	const double time = m_timestepper->get_current_time();
+	const double CFL = m_timestepper->get_current_CFL();
+	const unsigned step = m_timestepper->get_step_count();
 	timer.tick(); console::dump( ">>> %s step (dt=%.2e,CFL=%.2f) started...\n", dt, CFL, console::nth(step).c_str());
 	//
 	// Set of variables
@@ -55,6 +56,9 @@ void macbackwardflipsmoke3::idle() {
 	// Save the current density and velocity
 	shared_array3<Real> density0 (m_density);
 	shared_macarray3<Real> velocity0(m_velocity);
+	//
+	// Update solid
+	m_macutility->update_solid_variables(m_dylib,time,&m_solid,&m_solid_velocity);
 	//
 	// Backtrace the velocity back in time
 	m_backwardflip->backtrace(m_solid,m_fluid);
@@ -99,7 +103,7 @@ void macbackwardflipsmoke3::idle() {
 	add_source(m_velocity,density_added(),m_timestepper->get_current_time(),dt);
 	//
 	// Project
-	m_macproject->project(dt,m_velocity,m_solid,m_fluid);
+	m_macproject->project(dt,m_velocity,m_solid,m_solid_velocity,m_fluid,0.0);
 	//
 	if( m_use_regular_velocity_advection ) {
 		m_backwardflip->register_buffer(m_velocity,velocity0(),nullptr,nullptr,&m_density,&density0(),&density_added(),dt);

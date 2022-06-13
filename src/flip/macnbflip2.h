@@ -33,6 +33,7 @@
 #include <shiokaze/utility/gridutility2_interface.h>
 #include <shiokaze/visualizer/gridvisualizer2_interface.h>
 #include <shiokaze/utility/macutility2_interface.h>
+#include <shiokaze/utility/gridutility2_interface.h>
 #include <shiokaze/particlerasterizer/particlerasterizer2_interface.h>
 #include <shiokaze/redistancer/redistancer2_interface.h>
 #include <shiokaze/advection/macadvection2_interface.h>
@@ -52,7 +53,7 @@ protected:
 						 std::function<bool(const vec2d &p)> mask ) override;
 	//
 	// Map FLIP momentum from particles to grid
-	virtual void splat( macarray2<macflip2_interface::mass_momentum2> &mass_and_momentum ) const override;
+	virtual void splat( double time, macarray2<macflip2_interface::mass_momentum2> &mass_and_momentum ) const override;
 	//
 	// Advcect particles through the velocity field
 	virtual void advect( std::function<double(const vec2d &p)> solid,
@@ -66,7 +67,7 @@ protected:
 	virtual void correct( std::function<double(const vec2d &p)> fluid, const macarray2<Real> &velocity ) override;
 	//
 	// Update fluid level set
-	virtual void update( std::function<double(const vec2d &p)> solid, array2<Real> &fluid ) override;
+	virtual void update( std::function<double(const vec2d &p)> solid, array2<Real> &fluid, double time, bool alter_active ) override;
 	//
 	// Update FLIP velocity
 	virtual void update( const macarray2<Real> &prev_velocity,
@@ -89,7 +90,7 @@ protected:
 	virtual std::vector<macflip2_interface::particle2> get_particles() const override;
 	//
 	virtual void initialize( const shape2 &shape, double dx ) override;
-	virtual void post_initialize() override;
+	virtual void post_initialize( bool initialized_from_file ) override;
 	virtual void configure( configuration &config ) override;
 	//
 	virtual bool const_send_message( std::string message, void *ptr=nullptr ) const override {
@@ -108,14 +109,17 @@ protected:
 		unsigned narrowband {3};
 		int RK_order {2};
 		double erosion {0.5};
-		unsigned min_particles_per_cell {6};
-		unsigned max_particles_per_cell {6};
+		double min_mass_per_cell {1.0};
+		double max_mass_per_cell {1.5};
 		unsigned minimal_live_count {5};
 		double stiff {1.0};
 		bool velocity_correction {true};
 		double bullet_maximal_time {0.5};
+		bool splat_bullet_particle {false};
 		bool draw_particles {true};
 		double decay_rate {10.0};
+		bool collision_domain_boundary {true};
+		bool rescale_gradient {true};
 	};
 	//
 	Parameters m_param;
@@ -138,14 +142,25 @@ protected:
 	double m_dx;						// Grid cell size
 	std::vector<Particle> m_particles;	// FLIP particle array
 	//
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+		file.read(m_particles);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
+		file.write(m_particles);
+	}
+	//
 	gridvisualizer2_driver m_gridvisualizer{this,"gridvisualizer2"};
+	gridutility2_driver m_gridutility{this,"gridutility2"};
 	pointgridhash2_driver m_pointgridhash{this,"pointgridhash2"};
-	particlerasterizer2_driver m_particlerasterizer{this,"convexhullrasterizer2"};
+	particlerasterizer2_driver m_particlerasterizer{this,"flatrasterizer2"};
 	parallel_driver m_parallel{this};
 	//
 	virtual void sort_particles();
 	virtual void update_velocity_derivative( Particle& particle, const macarray2<Real> &velocity );
-	virtual void additionally_apply_velocity_derivative( macarray2<macflip2_interface::mass_momentum2> &mass_and_momentum ) const;
 	//
 	static double grid_kernel( const vec2d &r, double dx );
 	static vec2d grid_gradient_kernel( const vec2d &r, double dx );
@@ -155,13 +170,10 @@ protected:
 	virtual vec2d interpolate_fluid_gradient( std::function<double(const vec2d &p)> fluid, const vec2d &p ) const;
 	virtual vec2d interpolate_fluid_gradient( const array2<Real> &fluid, const vec2d &p ) const;
 	virtual vec2d interpolate_solid_gradient( std::function<double(const vec2d &p)> solid, const vec2d &p ) const;
-	virtual void draw_flip_circle ( graphics_engine &g, const vec2d &p, double r, bool bullet ) const;
+	virtual void draw_flip_circle ( graphics_engine &g, const vec2d &p, double r, bool bullet, double sizing_value ) const;
 	//
 	virtual void fit_particle( std::function<double(const vec2d &p)> fluid, Particle &particle, const vec2d &gradient ) const;
 	virtual void collision( std::function<double(const vec2d &p)> solid );
-	virtual size_t mark_bullet( double time, std::function<double(const vec2d &p)> fluid, std::function<vec2d(const vec2d &p)> velocity );
-	virtual size_t remove_bullet( double time );
-	//
 };
 //
 SHKZ_END_NAMESPACE

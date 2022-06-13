@@ -257,6 +257,9 @@ namespace console {
 		g_time = time;
 	}
 	void write( std::string name, double number ) {
+		write(name,g_time,number);
+	}
+	void write( std::string name, double number1, double number2 ) {
 		if( ! g_root_path.empty()) {
 			std::lock_guard<std::mutex> guard(g_console_mutex);
 			static bool firstTime = true;
@@ -269,17 +272,12 @@ namespace console {
 			if( ! g_root_path.empty() ) {
 				FILE *console = fopen(format_str("%s/%s.out",record_path.c_str(),name.c_str()).c_str(),"a");
 				if( console ) {
-					if( number == (int)number ) {
-						fprintf( console, "%lf %d\n", g_time, (int)number );
-					} else {
-						fprintf( console, "%lf %e\n", g_time, number );
-					}
+					fprintf( console, "%g %g\n", number1, number2 );
 					fclose(console);
 				}
 			}
 		}
 	}
-	//
 }
 //
 SHKZ_END_NAMESPACE

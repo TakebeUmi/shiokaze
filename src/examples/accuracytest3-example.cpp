@@ -77,18 +77,15 @@ private:
 		return -2.0*r;
 	}
 	//
-	virtual void post_initialize() override {
+	virtual void post_initialize( bool initialized_from_file ) override {
 		//
-		if( typeid(Real) == typeid(double)) {
-			console::dump( "Real = double\n");
-		} else if( typeid(Real) == typeid(float)) {
-			console::dump( "Real = float\n");
-		}
+		assert( typeid(Real) == typeid(double));
 		//
 		m_fluid.initialize(m_shape);
 		m_fluid.set_as_levelset(2.0*m_dx);
 		m_solid.initialize(m_shape,1.0);
 		m_velocity.initialize(m_shape);
+		m_solid_velocity.initialize(m_shape);
 		//
 		console::set_time(m_shape[0]);
 		//
@@ -105,7 +102,7 @@ private:
 				else it.set_off();
 			});
 			m_fluid.flood_fill();
-			m_macproject->project(1.0,m_velocity,m_solid,m_fluid);
+			m_macproject->project(1.0,m_velocity,m_solid,m_solid_velocity,m_fluid);
 		};
 		//
 		double max_norm (0.0);
@@ -192,6 +189,7 @@ private:
 	array3<Real> m_fluid{this};
 	array3<Real> m_solid{this};
 	macarray3<Real> m_velocity{this};
+	macarray3<Real> m_solid_velocity{this};
 	//
 	shape3 m_shape {8,8,8};
 	double m_dx;

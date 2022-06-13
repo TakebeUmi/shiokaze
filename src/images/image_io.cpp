@@ -98,6 +98,17 @@ private:
 	unsigned m_width;
 	unsigned m_height;
 	std::vector<unsigned char> m_data;
+	//
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_width);
+		file.r(m_height);
+		file.read(m_data);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_width);
+		file.w(m_height);
+		file.write(m_data);
+	}
 };
 //
 extern "C" module * create_instance() {

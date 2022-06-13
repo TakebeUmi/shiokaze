@@ -127,9 +127,12 @@ public:
 								double A = det.norm2();
 								double B = 2.*det*coef;
 								double C = coef.norm2()-1.0;
-								assert(A);
-								double D = B/A;
-								levelset[n] = sgn*0.5*sqrtf(std::max(1e-8,D*D-4.0*C/A))-0.5*D;
+								if( A ) {
+									double D = B/A;
+									levelset[n] = sgn*0.5*sqrtf(std::max(1e-8,D*D-4.0*C/A))-0.5*D;
+								} else {
+									num_valid = 2;
+								}
 								//
 							} else {
 								num_valid = 2;

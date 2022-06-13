@@ -24,6 +24,7 @@
 //
 #include <shiokaze/polygon/polygon3_interface.h>
 #include <shiokaze/core/console.h>
+#include <shiokaze/utility/utility.h>
 #include "rply/rply.h"
 //
 SHKZ_USING_NAMESPACE
@@ -135,6 +136,15 @@ protected:
 	virtual void get_mesh( std::vector<vec3d> &vertices, std::vector<std::vector<size_t> > &faces ) override {
 		vertices = m_vertices;
 		faces = m_faces;
+	}
+	//
+	virtual void initialize( const filestream &file ) override {
+		file.read(m_vertices);
+		file.read(m_faces);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.write(m_vertices);
+		file.write(m_faces);
 	}
 	//
 	std::vector<vec3d> m_vertices;

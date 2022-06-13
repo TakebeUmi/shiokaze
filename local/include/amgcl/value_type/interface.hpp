@@ -133,7 +133,7 @@ struct constant_impl {
 template <typename ValueType, class Enable = void>
 struct inverse_impl {
     static ValueType get(const ValueType &x) {
-        return identity_impl<ValueType>::get() / x;
+        return x ? identity_impl<ValueType>::get() / x : identity_impl<ValueType>::get(); // Modified by Ryoichi
     }
 };
 

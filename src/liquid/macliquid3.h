@@ -60,14 +60,15 @@ protected:
 	virtual void setup_window( std::string &name, int &width, int &height ) const override;
 	virtual void idle() override;
 	virtual void draw( graphics_engine &g ) const override;
-	virtual bool should_quit() const override { return m_timestepper->should_quit(); }
 	virtual bool should_screenshot() const override { return m_timestepper->should_export_frame(); }
 	//
 	virtual void load( configuration &config ) override;
 	virtual void configure( configuration &config ) override;
-	virtual void post_initialize() override;
+	virtual void post_initialize( bool initialized_from_file ) override;
+	virtual bool should_quit() const override;
 	//
 	macarray3<Real> m_velocity{this};
+	macarray3<Real> m_solid_velocity{this};
 	macarray3<Real> m_external_force{this};
 	array3<Real> m_fluid{this};
 	array3<Real> m_solid{this};
@@ -82,10 +83,42 @@ protected:
 	double m_target_volume;
 	unsigned m_prev_frame;
 	unsigned m_graph_lists[4];
+	bool m_should_quit_on_save {false}; // should not be saved
+	//
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+		file.r(m_doubled_shape);
+		file.r(m_half_dx);
+		file.r(m_force_exist);
+		file.r(m_target_volume);
+		file.r(m_prev_frame);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
+		file.w(m_doubled_shape);
+		file.w(m_half_dx);
+		file.w(m_force_exist);
+		file.w(m_target_volume);
+		file.w(m_prev_frame);
+	}
+	virtual bool keyboard( int key, int action, int mods ) override {
+		if( action == UI_interface::PRESS ) {
+			if ( key == UI_interface::KEY_S ) {
+				filestream file("macliquid3.dat",filestream::WRITE);
+				recursive_serialize(file);
+				printf("File saved.\n");
+				return true;
+			}
+		}
+		return false;
+	}
 	//
 	std::function<bool( double dx, double dt, double time, unsigned step )> m_check_inject_func;
 	std::function<bool( const vec3d &p, double dx, double dt, double time, unsigned step, double &fluid, vec3d &velocity )> m_inject_func;
 	std::function<void( double dx, double dt, double time, unsigned step, double &volume_change )> m_post_inject_func;
+	std::function<vec3d(double)> m_gravity_func;
 	//
 	environment_setter arg_shape{this,"shape",&m_shape};
 	environment_setter arg_dx{this,"dx",&m_dx};
@@ -118,21 +151,26 @@ protected:
 		bool render_transparent {false};
 		unsigned render_sample_count {8};
 		unsigned render_transparent_sample_count {32};
+		unsigned save_interval {100};
 		vec3d target {0.5,0.15,0.5};
 		vec3d origin {0.5,1.5,3.0};
+		bool draw_mac {false};
 	};
 	//
 	Parameters m_param;
 	//
-	virtual void inject_external_force( macarray3<Real> &velocity, double dt );
+	virtual void inject_external_force( macarray3<Real> &velocity, double dt, bool clear=true );
 	virtual void inject_external_fluid( array3<Real> &fluid, macarray3<Real> &velocity, double dt, double time );
 	virtual size_t do_inject_external_fluid( array3<Real> &fluid, macarray3<Real> &velocity, double dt, double time, unsigned step );
 	virtual void set_volume_correction( macproject3_interface *macproject );
 	virtual void extend_both( int w=2 );
 	virtual void export_mesh() const;
 	virtual void do_export_mesh( unsigned frame ) const;
+	virtual void do_export_solid_transform( unsigned frame ) const;
 	virtual void do_export_solid_mesh() const;
+	virtual void export_moving_polygon() const;
 	virtual void render_mesh( unsigned frame ) const;
+	virtual void save_state();
 	virtual void add_to_graph();
 	//
 };

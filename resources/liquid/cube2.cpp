@@ -49,7 +49,8 @@ extern "C" std::map<std::string,std::string> get_default_parameters() {
 	dictionary["Gravity"] = "0.0,0.0";
 	dictionary["SurfaceTension"] = "5e-3";
 	dictionary["RegionalVolumeCorrection"] = "Yes";
-	dictionary["TimeStep"] = "1.5e-2";
+	dictionary["CFL"] = "80";
+	dictionary["UseSquaredCFL"] = "Yes";
 	return dictionary;
 }
 //

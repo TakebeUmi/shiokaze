@@ -28,6 +28,7 @@
 #include <shiokaze/math/RCMatrix_interface.h>
 #include <shiokaze/core/console.h>
 #include <cmath>
+#include <limits>
 //
 SHKZ_BEGIN_NAMESPACE
 //
@@ -70,6 +71,21 @@ public:
 		return max_error;
 	}
 	/**
+	 \~english @brief Get the minimal diagonal entry in the matrix.
+	 @param[in] matrix Matrix to measure.
+	 @return The minimal diagonal entry.
+	 \~japanese @brief 行列の対角成分のうち最小なエントリーを返す。
+	 @param[in] matrix 検証する行列。
+	 @return 最小のエントリー。
+	 */
+	static T min_diag ( const RCMatrix_interface<N,T> *matrix ) {
+		T min_diag = std::numeric_limits<T>::max();
+		for( N row=0; row<matrix->rows(); ++row ) {
+			min_diag = std::min(min_diag,matrix->get(row,row));
+		}
+		return min_diag;
+	}
+	/**
 	 \~english @brief Report matrix properties.
 	 @param[in] matrix Matrix to examine.
 	 @param[in] name Name of the matrix used in the reporting text.
@@ -87,24 +103,22 @@ public:
 		bool symm_postive_diag (true);
 		bool has_nan (false);
 		for( N i=0; i<matrix->rows(); i++ ) {
-			if( ! matrix->empty(i) ) {
-				N row_nonzero = matrix->non_zeros(i);
-				active += row_nonzero;
-				max_row = std::max(max_row,row_nonzero);
-				min_row = std::min(min_row,row_nonzero);
-				avg_row += row_nonzero;
-				T diag (0.0);
-				T max_nondiag (0.0);
-				matrix->const_for_each(i,[&]( N column, T value ) {
-					if( column == i ) diag = value;
-					else max_nondiag = std::max(max_nondiag,std::abs(value));
-					if( value!=value ) has_nan = true;
-				});
-				max_diag = std::max(max_diag,diag);
-				min_diag = std::min(min_diag,diag);
-				if( diag ) diag_ratio = std::max( diag_ratio, max_nondiag / diag );
-				active_rows ++;
-			}
+			N row_nonzero = matrix->non_zeros(i);
+			active += row_nonzero;
+			max_row = std::max(max_row,row_nonzero);
+			min_row = std::min(min_row,row_nonzero);
+			avg_row += row_nonzero;
+			T diag (0.0);
+			T max_nondiag (0.0);
+			matrix->const_for_each(i,[&]( N column, T value ) {
+				if( column == i ) diag = value;
+				else max_nondiag = std::max(max_nondiag,std::abs(value));
+				if( value!=value ) has_nan = true;
+			});
+			max_diag = std::max(max_diag,diag);
+			min_diag = std::min(min_diag,diag);
+			if( diag ) diag_ratio = std::max( diag_ratio, max_nondiag / diag );
+			active_rows ++;
 		}
 		if( active_rows ) avg_row /= (T)active_rows;
 		double symmetric_error = symmetricity_error(matrix);

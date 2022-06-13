@@ -33,14 +33,43 @@
 SHKZ_USING_NAMESPACE
 //
 static double g_water_level (0.245);
+static double g_speed (4.0);
+static double g_amplitude (0.25);
+static vec2d g_center (0.5,0.25);
+static double g_r (0.1);
+static double g_flux_flow (0.0);
 //
 extern "C" void configure( configuration &config ) {
+	//
 	configuration::auto_group group(config,"Moving Solid Scene 2D","MovingSolid");
 	config.get_double("WaterLevel",g_water_level,"Water level");
+	config.get_double("Speed",g_speed,"Speed of obstacle");
+	config.get_double("Amplitude",g_amplitude,"Speed of obstacle");
+	config.get_double("Radius",g_r,"Radius");
+	config.get_vec2d("Center",g_center.v,"Center position");
+	config.get_double("Flux",g_flux_flow,"Flux velocity on walls");
 }
 //
-extern "C" std::tuple<double,vec2d> moving_solid( double time, const vec2d &p ) {
-	return std::make_tuple(0.0,vec2d());
+extern "C" std::pair<double,vec2d> moving_solid( double time, const vec2d &p ) {
+	//
+	const vec2d center = g_center+vec2d(-g_amplitude*cos(g_speed*time),0.0);
+	const double d = (center-p).len()-g_r;
+	//
+	vec2d u;
+	if( d <= 0.0 ) {
+		u = vec2d(g_amplitude*g_speed*sin(g_speed*time),0.0);
+	}
+	return std::make_pair(d,u);
+}
+//
+extern "C" vec2d velocity( const vec2d &p ) {
+	return vec2d(g_flux_flow,0.0);
+}
+//
+extern "C" void set_boundary_flux( double time, Real flux[DIM2][2] ) {
+	//
+	flux[0][0] = g_flux_flow;
+	flux[0][1] = g_flux_flow;
 }
 //
 extern "C" double fluid( const vec2d &p ) {
@@ -49,14 +78,13 @@ extern "C" double fluid( const vec2d &p ) {
 //
 extern "C" void draw( graphics_engine &g, double time ) {
 	//
-	const vec2d center(0.5+0.25*sin(2.5*time),0.25);
-	const double r (0.1);
+	const vec2d center = g_center+vec2d(-g_amplitude*cos(g_speed*time),0.0);
 	//
 	g.color4(0.5,0.5,0.4,1.0);
-	graphics_utility::draw_circle(g,center.v,r,graphics_engine::MODE::TRIANGLE_FAN);
+	graphics_utility::draw_circle(g,center.v,g_r,graphics_engine::MODE::TRIANGLE_FAN);
 	//
 	g.color4(1.0,1.0,1.0,1.0);
-	graphics_utility::draw_circle(g,center.v,r,graphics_engine::MODE::LINE_LOOP);
+	graphics_utility::draw_circle(g,center.v,g_r,graphics_engine::MODE::LINE_LOOP);
 }
 //
 extern "C" const char *license() {

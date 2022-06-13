@@ -102,7 +102,7 @@ private:
 		m_core->recursive_configure(config);
 	}
 	//
-	virtual void post_initialize() override {
+	virtual void post_initialize( bool initialized_from_file ) override {
 		if( shape().count() && ! m_is_initialized ) {
 			initialize(m_shape);
 		}
@@ -1144,6 +1144,38 @@ private:
 	bool m_is_initialized {false};
 	array2_ptr m_core;
 	std::string m_core_name;
+	//
+	virtual void initialize( const filestream &file ) override {
+		//
+		file.r(m_shape);
+		m_core->initialize(m_shape.w,m_shape.h,0);
+		size_t total;
+		file.r(total);
+		//
+		for( size_t n=0; n<total; ++n ) {
+			vec2i pi;
+			file.r(pi);
+			set(pi);
+		}
+		m_is_initialized = true;
+	}
+	virtual void serialize( const filestream &file ) const override {
+		//
+		file.w(m_shape);
+		size_t total = count();
+		file.w(total);
+		//
+		size_t write_count (0);
+		const_serial_actives([&](int i, int j) {
+			vec2i pi(i,j);
+			file.w(pi);
+			++ write_count;
+		});
+		if( write_count != total ) {
+			printf( "bitarray2: write_count = %zu, total = %zu\n", write_count, total );
+			exit(0);
+		}
+	}
 };
 //
 SHKZ_END_NAMESPACE

@@ -48,6 +48,7 @@ protected:
 	virtual void project(double dt,
 						macarray2<Real> &velocity,
 						const array2<Real> &solid,
+						const macarray2<Real> &solid_velocity,
 						const array2<Real> &fluid,
 						double surface_tension,
 						const std::vector<signed_rigidbody2_interface *> *rigidbodies ) override {
@@ -614,11 +615,45 @@ protected:
 		m_dx = dx;
 	}
 	//
-	virtual void post_initialize() override {
+	virtual void post_initialize( bool initialized_from_file ) override {
 		//
 		m_vecpotential_array.initialize(m_shape.nodal());
 		m_target_volume = m_current_volume = m_y_prev = 0.0;
 		m_C = nullptr;
+	}
+	//
+	virtual void initialize( const filestream &file ) override {
+		//
+		file.r(m_shape);
+		file.r(m_dx);
+		file.r(m_target_volume);
+		file.r(m_current_volume);
+		file.r(m_y_prev);
+		file.r(m_vecpotential);
+		//
+		m_C = m_factory->allocate_matrix(); m_C->initialize(file);
+		m_Ct = m_factory->allocate_matrix(); m_Ct->initialize(file);
+		m_Z = m_factory->allocate_matrix(); m_Z->initialize(file);
+		m_CZ = m_factory->allocate_matrix(); m_CZ->initialize(file);
+		m_CZ_t = m_factory->allocate_matrix(); m_CZ_t->initialize(file);
+		m_P = m_factory->allocate_matrix(); m_P->initialize(file);
+	}
+	//
+	virtual void serialize( const filestream &file ) const override {
+		//
+		file.w(m_shape);
+		file.w(m_dx);
+		file.w(m_target_volume);
+		file.w(m_current_volume);
+		file.w(m_y_prev);
+		file.write(m_vecpotential);
+		//
+		m_C->serialize(file);
+		m_Ct->serialize(file);
+		m_Z->serialize(file);
+		m_CZ->serialize(file);
+		m_CZ_t->serialize(file);
+		m_P->serialize(file);
 	}
 	//
 	struct Parameters {

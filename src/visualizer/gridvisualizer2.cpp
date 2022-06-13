@@ -198,15 +198,23 @@ protected:
 			}
 		}
 	}
-	virtual void visualize_cell_scalar( graphics_engine &g, const array2<Real> &q ) const override {
+	virtual void visualize_cell_scalar( graphics_engine &g, const array2<Real> &q, double min_value, double max_value ) const override {
+		//
 		double maxv = -1e18;
 		double minv = 1e18;
 		double alpha = 0.5;
-		q.const_serial_actives([&](int i, int j, const auto &it) {
-			double value = it();
-			maxv = std::max(maxv,value);
-			minv = std::min(minv,value);
-		});
+		//
+		if( ! min_value && ! max_value ) {
+			q.const_serial_actives([&](int i, int j, const auto &it) {
+				double value = it();
+				maxv = std::max(maxv,value);
+				minv = std::min(minv,value);
+			});
+		} else {
+			maxv = max_value;
+			minv = min_value;
+		}
+		//
 		double det = maxv-minv;
 		if( std::abs(det) > 1e-2 ) {
 			(q.shape()-shape2(1,1)).for_each([&](int i, int j) {
@@ -232,15 +240,22 @@ protected:
 			});
 		}
 	}
-	virtual void visualize_nodal_scalar( graphics_engine &g, const array2<Real> &q ) const override {
+	virtual void visualize_nodal_scalar( graphics_engine &g, const array2<Real> &q, double min_value, double max_value ) const override {
+		//
 		double maxv = -1e18;
 		double minv = 1e18;
 		double alpha = 0.5;
-		q.const_serial_actives([&](int i, int j, const auto &it) {
-			double value = it();
-			maxv = std::max(maxv,value);
-			minv = std::min(minv,value);
-		});
+		//
+		if( ! min_value && ! max_value ) {
+			q.const_serial_actives([&](int i, int j, const auto &it) {
+				double value = it();
+				maxv = std::max(maxv,value);
+				minv = std::min(minv,value);
+			});
+		} else {
+			maxv = max_value;
+			minv = min_value;
+		}
 		double det = maxv-minv;
 		if( std::abs(det) > 1e-2 ) {
 			(q.shape()-shape2(1,1)).for_each([&](int i, int j) {
@@ -279,6 +294,14 @@ protected:
 	virtual void initialize( const shape2 &shape, double dx ) override {
 		m_shape = shape;
 		m_dx = dx;
+	}
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
 	}
 	//
 	shape2 m_shape;

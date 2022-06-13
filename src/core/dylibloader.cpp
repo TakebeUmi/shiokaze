@@ -79,10 +79,16 @@ void dylibloader::close_library() {
 	m_path = "";
 }
 //
-void* dylibloader::load_symbol( std::string name ) const {
+void* dylibloader::load_symbol( std::string name, bool exit_if_not_found ) const {
 	if ( m_handle ) {
-		return ::dlsym(m_handle,name.c_str());
+		void *result = ::dlsym(m_handle,name.c_str());
+		if( ! result && exit_if_not_found ) {
+			console::dump("Symbol %s was not found.\n",name.c_str());
+			exit(0);
+		}
+		return result;
 	} else {
+		console::dump("Handle is nullptr\n");
 		return nullptr;
 	}
 }

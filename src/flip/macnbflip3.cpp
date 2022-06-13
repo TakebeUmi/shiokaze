@@ -42,20 +42,20 @@ SHKZ_USING_NAMESPACE
 static const double default_mass = 1.0 / 8.0;
 //
 double macnbflip3::grid_kernel( const vec3d &r, double dx ) {
-	double x = std::abs(r[0]) / dx;
-	double y = std::abs(r[1]) / dx;
-	double z = std::abs(r[2]) / dx;
+	const double x = std::abs(r[0]) / dx;
+	const double y = std::abs(r[1]) / dx;
+	const double z = std::abs(r[2]) / dx;
 	return std::max(0.0,1.0-x) * std::max(0.0,1.0-y) * std::max(0.0,1.0-z);
 }
 //
 vec3d macnbflip3::grid_gradient_kernel( const vec3d &r, double dx ) {
-	double x = std::abs(r[0]) / dx;
-	double y = std::abs(r[1]) / dx;
-	double z = std::abs(r[2]) / dx;
+	const double x = std::abs(r[0]) / dx;
+	const double y = std::abs(r[1]) / dx;
+	const double z = std::abs(r[2]) / dx;
 	if( x <= 1.0 && y <= 1.0 && z <= 1.0 ) {
-		double u = std::copysign((y-1.0)*(z-1.0),r[0]);
-		double v = std::copysign((x-1.0)*(z-1.0),r[1]);
-		double w = std::copysign((x-1.0)*(y-1.0),r[2]);
+		const double u = std::copysign((y-1.0)*(z-1.0),r[0]);
+		const double v = std::copysign((x-1.0)*(z-1.0),r[1]);
+		const double w = std::copysign((x-1.0)*(y-1.0),r[2]);
 		return vec3d(u,v,w) / dx;
 	} else {
 		return vec3d();
@@ -69,15 +69,18 @@ void macnbflip3::configure( configuration &config ) {
 	config.get_double("FitParticleDist",m_param.fit_particle_dist,"FLIP particle fitting threshold");
 	config.get_integer("RK_Order",m_param.RK_order,"Order of accuracy for Runge-kutta integration");
 	config.get_double("Erosion",m_param.erosion,"Rate of erosion for internal levelset");
-	config.get_unsigned("MinParticlesPerCell",m_param.min_particles_per_cell,"Minimal target number of particles per cell");
-	config.get_unsigned("MaxParticlesPerCell",m_param.max_particles_per_cell,"Maximal target number of particles per cell");
+	config.get_double("MinMassPerCell",m_param.min_mass_per_cell,"Minimal target mass per cell");
+	config.get_double("MaxMassPerCell",m_param.max_mass_per_cell,"Maximal target mass per cell");
 	config.get_unsigned("MiminalLiveCount",m_param.minimal_live_count,"Minimal step of particles to stay alive");
 	config.get_double("CorrectStiff",m_param.stiff,"Position correction strength");
 	config.get_bool("VelocityCorrection",m_param.velocity_correction,"Should do velocity correction");
-	config.get_double("BulletMaximalTime",m_param.bullet_maximal_time,"Maximal time for bullet particles to survive");
+	config.get_double("BulletMaximalTime",m_param.bullet_maximal_time,"Maximal time for bullet particles to scale smaller");
+	config.get_bool("SplatBulletParticle",m_param.splat_bullet_particle,"Splat bullet particles");
 	config.get_bool("DrawFLIPParticles",m_param.draw_particles,"Whether to draw FLIP particles.");
 	config.get_double("DecayRate",m_param.decay_rate,"Decay rate for tracer particles");
-	//
+	config.get_double("ViewScale",m_param.view_scale,"View scale");
+	config.get_bool("CollisionDomainBoundary",m_param.collision_domain_boundary,"Collision domain boundary");
+	config.get_bool("RescaleGradient",m_param.rescale_gradient,"Rescale gradient");
 }
 //
 void macnbflip3::initialize( const shape3 &shape, double dx ) {
@@ -86,72 +89,10 @@ void macnbflip3::initialize( const shape3 &shape, double dx ) {
 	m_dx = dx;
 }
 //
-void macnbflip3::post_initialize() {
+void macnbflip3::post_initialize( bool initialized_from_file ) {
 	//
-	m_particles.resize(0);
+	if( ! initialized_from_file ) m_particles.resize(0);
 	sort_particles();
-}
-//
-size_t macnbflip3::mark_bullet( double time, std::function<double(const vec3d &p)> fluid, std::function<vec3d(const vec3d &p)> velocity) {
-	//
-	if( m_particles.size()) {
-		//
-		m_parallel.for_each(m_particles.size(),[&]( size_t n ) {
-			Particle &particle = m_particles[n];
-			char new_status (0);
-			if( fluid(particle.p) > 0.0 ) {
-				new_status = 1;
-				for( int dim : DIMS3 ) particle.c[dim] = vec3d();
-			}
-			if( new_status != particle.bullet ) {
-				particle.bullet = new_status;
-				particle.bullet_time = new_status ? time : 0.0;
-				if( ! particle.bullet ) {
-					particle.mass = default_mass;
-					particle.r = 0.25 * m_dx;
-					particle.velocity = velocity(particle.p);
-				}
-			}
-		});
-		//
-		size_t num_bullet(0);
-		for( size_t n=0; n<m_particles.size(); ++n ) if( m_particles[n].bullet ) ++ num_bullet;
-		return num_bullet;
-	} else {
-		return 0;
-	}
-}
-//
-size_t macnbflip3::remove_bullet( double time ) {
-	//
-	if( ! m_param.bullet_maximal_time || m_particles.empty()) return 0;
-	std::vector<char> remove_flag(m_particles.size(),0);
-	m_parallel.for_each(m_particles.size(),[&]( size_t n ) {
-		Particle &particle = m_particles[n];
-		if( particle.bullet ) {
-			if( time-particle.bullet_time > m_param.bullet_maximal_time ) {
-				remove_flag[n] = 1;
-			} else {
-				double scale = std::max(0.01,1.0 - std::max(0.0,time-particle.bullet_time) / m_param.bullet_maximal_time);
-				particle.r = 0.25 * m_dx * scale;
-				particle.mass = scale * default_mass;
-			}
-		}
-	});
-	//
-	// Reconstruct a new particle array
-	std::vector<Particle> old_particles (m_particles);
-	m_particles.clear();
-	size_t removed_total (0);
-	for( size_t i=0; i<old_particles.size(); ++i) {
-		if( ! remove_flag[i] ) m_particles.push_back(old_particles[i]);
-		else ++ removed_total;
-	}
-	m_particles.shrink_to_fit();
-	//
-	// Update hash table
-	sort_particles();
-	return removed_total;
 }
 //
 typedef struct {
@@ -159,39 +100,42 @@ typedef struct {
 	Real momentum;
 } mass_momentum3;
 //
-void macnbflip3::splat( macarray3<macflip3_interface::mass_momentum3> &mass_and_momentum ) const {
+void macnbflip3::splat( double time, macarray3<macflip3_interface::mass_momentum3> &mass_and_momentum ) const {
 	scoped_timer timer(this);
 	if( m_particles.size()) {
-		timer.tick(); console::dump( ">>> Splatting FLIP particles...\n");
 		//
 		// Splat
 		timer.tick(); console::dump( "Splatting momentum...");
-		//
 		mass_and_momentum.clear();
-		shared_bitarray3 cell_mask(m_shape);
 		for( size_t n=0; n<m_particles.size(); ++n ) {
-			cell_mask().set(m_shape.clamp(m_particles[n].p/m_dx));
-		}
-		cell_mask->const_serial_actives([&]( int i, int j, int k ) {
-			const vec3i pi(i,j,k);
-			for( int dim : DIMS3 ) {
-				mass_and_momentum[dim].set(pi,{0.,0.});
-				mass_and_momentum[dim].set(pi+vec3i(dim==0,dim==1,dim==2),{0.,0.});
+			if( m_param.splat_bullet_particle || ! m_particles[n].bullet ) {
+				for( int dim : DIMS3 ) {
+					const vec3d p = m_particles[n].p;
+					const vec3i pi = vec3i(p[0]/m_dx-0.5*(dim!=0),p[1]/m_dx-0.5*(dim!=1),p[2]/m_dx-0.5*(dim!=2));
+					for( int ii=0; ii<=1; ++ii ) for( int jj=0; jj<=1; ++jj ) for( int kk=0; kk<=1; ++kk ) {
+						mass_and_momentum[dim].set(m_shape.clamp(pi+vec3i(ii,jj,kk)),{0.0,0.0});
+					}
+				}
 			}
-		});
-		//
-		mass_and_momentum.dilate();
+		}
 		mass_and_momentum.parallel_actives([&]( int dim, int i, int j, int k, auto &it, int tn ) {
 			//
 			Real mom (0.0), m (0.0);
 			vec3d pos = m_dx*vec3i(i,j,k).face(dim);
 			std::vector<size_t> neighbors = m_pointgridhash->get_face_neighbors(vec3i(i,j,k),dim);
 			for( size_t k : neighbors ) {
-				const Particle &p = m_particles[k];
-				double w = grid_kernel(p.p-pos,m_dx);
-				if( w ) {
-					mom += w*p.mass*p.velocity[dim];
-					m += w*p.mass;
+				if( m_param.splat_bullet_particle || ! m_particles[k].bullet ) {
+					const Particle &p = m_particles[k];
+					const double w = grid_kernel(p.p-pos,m_dx);
+					if( w ) {
+						mom += w*p.mass*p.velocity[dim];
+						m += w*p.mass;
+						if( m_param.use_apic ) {
+							const vec3d &c = (p.c)[dim];
+							const vec3d r = pos-p.p;
+							mom += w*p.mass*(c*r);
+						}
+					}
 				}
 			}
 			if( m ) it.set({m,mom});
@@ -199,13 +143,6 @@ void macnbflip3::splat( macarray3<macflip3_interface::mass_momentum3> &mass_and_
 		});
 		//
 		console::dump( "Done. Took %s\n", timer.stock("splat_momentum").c_str());
-		//
-		if( m_param.use_apic ) {
-			timer.tick(); console::dump( "Additionally applying velocity derivative...");
-			additionally_apply_velocity_derivative(mass_and_momentum);
-			console::dump( "Done. Took %s\n", timer.stock("splat_velocity_derivative").c_str());
-		}
-		console::dump( "<<< Done. Took %s\n", timer.stock("splat_particles").c_str());
 	} else {
 		mass_and_momentum.clear();
 	}
@@ -250,7 +187,7 @@ void macnbflip3::advect( std::function<double(const vec3d &p)> solid,
 				}
 			}
 			// Decay particle sizing value
-			m_particles[n].sizing_value -= m_param.decay_rate * dt;
+			m_particles[n].sizing_value = std::max(0.0,m_particles[n].sizing_value-m_param.decay_rate*dt);
 		});
 		//
 		sort_particles();
@@ -268,20 +205,70 @@ void macnbflip3::mark_bullet( std::function<double(const vec3d &p)> fluid, std::
 		// Mark bullet
 		scoped_timer timer(this);
 		timer.tick(); console::dump( "Marking bullet particles...");
-		size_t num_bullet = mark_bullet(time,fluid,velocity);
+		//
+		m_parallel.for_each(m_particles.size(),[&]( size_t n ) {
+			Particle &particle = m_particles[n];
+			char new_status (0);
+			if( fluid(particle.p) > 0.0 ) {
+				new_status = 1;
+				for( int dim : DIMS3 ) particle.c[dim] = vec3d();
+			}
+			if( new_status != particle.bullet ) {
+				particle.bullet = new_status;
+				particle.bullet_time = new_status ? time : 0.0;
+				if( new_status == 0 ) {
+					particle.velocity = velocity(particle.p);
+				}
+			}
+		});
+		//
+		size_t num_bullet(0);
+		for( size_t n=0; n<m_particles.size(); ++n ) if( m_particles[n].bullet ) ++ num_bullet;
+		//
 		console::write("number_bullet",num_bullet);
 		console::dump( "Done. Bullet count = %u, Took %s.\n", num_bullet, timer.stock("mark_bullet").c_str());
 		//
 		// Remove long-term ballistic particles
 		timer.tick(); console::dump( "Removing bullet particles...");
-		size_t removed_total = remove_bullet(time);
+		//
+		std::vector<char> remove_flag(m_particles.size(),0);
+		m_parallel.for_each(m_particles.size(),[&]( size_t n ) {
+			Particle &particle = m_particles[n];
+			if( particle.bullet ) {
+				if( time-particle.bullet_time > m_param.bullet_maximal_time ) {
+					remove_flag[n] = 1;
+				} else {
+					const double scale = std::max(0.01,1.0 - std::max(0.0,time-particle.bullet_time) / m_param.bullet_maximal_time);
+					particle.r = 0.25 * m_dx * scale;
+					particle.mass = (scale*scale*scale) * default_mass;
+				}
+			}
+		});
+		//
+		// Reconstruct a new particle array
+		size_t removed_total (0);
+		for( size_t i=0; i<m_particles.size(); ++i) {
+			if(  remove_flag[i] ) ++ removed_total;
+		}
+		//
+		if( removed_total ) {
+			//
+			std::vector<Particle> old_particles (m_particles);
+			m_particles.clear();
+			for( size_t i=0; i<old_particles.size(); ++i) {
+				if( ! remove_flag[i] ) m_particles.push_back(old_particles[i]);
+			}
+			m_particles.shrink_to_fit();
+			sort_particles();
+		}
+		//
 		num_bullet = 0;
 		for( size_t n=0; n<m_particles.size(); ++n ) if( m_particles[n].bullet ) ++ num_bullet;
-		console::dump( "Done. Removed = %u. Bullet count = %u. Took %s.\n", removed_total,num_bullet, timer.stock("mark_bullet").c_str());
+		console::dump( "Done. Removed = %u. Bullet count = %u. Took %s.\n", removed_total,num_bullet, timer.stock("remove_bullet").c_str());
 	}
 }
 //
-void macnbflip3::update( std::function<double(const vec3d &p)> solid, array3<Real> &fluid ) {
+void macnbflip3::update( std::function<double(const vec3d &p)> solid, array3<Real> &fluid, double time, bool add_active ) {
 	//
 	if( m_particles.size()) {
 		//
@@ -296,47 +283,64 @@ void macnbflip3::update( std::function<double(const vec3d &p)> solid, array3<Rea
 		});
 		//
 		shared_bitarray3 mask(fluid.shape());
-		std::vector<particlerasterizer3_interface::Particle3> points(m_particles.size());
+		std::vector<particlerasterizer3_interface::Particle3> points;
 		for( int n=0; n<m_particles.size(); ++n ) {
+			particlerasterizer3_interface::Particle3 point;
 			vec3d p = m_particles[n].p;
-			points[n].p = p;
-			points[n].r = m_particles[n].r;
-			mask->set(mask->shape().clamp(p/m_dx));
+			point.p = p;
+			point.r = m_particles[n].r;
+			points.push_back(point);
+			const vec3i pi = mask->shape().clamp(p/m_dx);
+			if( add_active || fluid.active(pi)) {
+				mask->set(pi);
+			}
 		}
-		//
 		mask->dilate(2);
-		fluid.activate_as_bit(mask());
-		shared_array3<Real> particle_levelset(m_shape,1.0);
+		if( add_active ) fluid.activate_as_bit(mask());
+		shared_array3<Real> particle_levelset(m_shape,0.125*m_dx);
 		m_particlerasterizer->build_levelset(particle_levelset(),mask(),points);
+		//
+		// Safety check
+		particle_levelset->parallel_actives([&]( int i, int j, int k, auto &it, int tn ) {
+			bool edge_flag (false);
+			for( int dim : DIMS3 ) for( int dir=-1; dir<=1; dir+=2 ) {
+				const vec3i pi = vec3i(i,j,k)+dir*vec3i(dim==0,dim==1,dim==2);
+				if( pi[dim] >= 0 && pi[dim] < m_shape[dim] && ! particle_levelset->active(pi)) {
+					edge_flag = true;
+				}
+			}
+			if( edge_flag ) it.set(std::max((Real)(0.125*m_dx),it()));
+		});
+		//
+		if( m_param.rescale_gradient ) {
+			particle_levelset->parallel_actives([&](int i, int j, int k, auto &it, int tn) {
+				it.multiply(m_gridutility->get_upwind_levelset_gradient(fluid,vec3i(i,j,k)).len());
+			});
+		}
 		//
 		fluid.parallel_actives([&](int i, int j, int k, auto &it, int tn) {
 			//
-			const Real fluid_value (it());
-			const Real save_value (save_fluid()(i,j,k));
+			const double fluid_value (it());
+			const double save_value (save_fluid()(i,j,k));
 			//
 			double sizing_sum (0.0);
 			double sizing_weight (0.0);
-			//
 			std::vector<size_t> list = m_pointgridhash->get_points_in_cell(vec3i(i,j,k));
 			for( const auto &n : list ) {
 				double w (m_particles[n].mass);
-				sizing_sum += w*m_particles[n].sizing_value;
+				sizing_sum += w*std::min((Real)1.0,m_particles[n].sizing_value);
 				sizing_weight += w;
 			}
 			if( sizing_weight ) sizing_sum /= sizing_weight;
 			//
-			double value = sizing_sum * std::min(fluid_value,particle_levelset()(i,j,k)) + (1.0-sizing_sum) * save_value;
+			double value = sizing_sum * particle_levelset()(i,j,k) + (1.0-sizing_sum) * save_value;
 			for( const auto &n : list ) {
-				value = std::min(value,(m_particles[n].p-m_dx*vec3i(i,j,k).cell()).len()-m_particles[n].r);
+				const double theta = std::min((Real)1.0,m_particles[n].sizing_value);
+				const double particle_value = (m_particles[n].p-m_dx*vec3i(i,j,k).cell()).len()-m_particles[n].r;
+				value = std::min(value,theta*particle_value+(1.0-theta)*save_value);
 			}
-			it.set(value);
+			it.set(std::min(fluid_value,value));
 		});
-		//
-		for( int n=0; n<m_particles.size(); ++n ) {
-			vec3d p = m_particles[n].p;
-			vec3i pi = m_shape.find_cell(p/m_dx);
-			fluid.set(pi,std::min(fluid(pi),(Real)(p-m_dx*vec3i(pi).cell()).len()-m_particles[n].r));
-		}
 		//
 		console::dump("Done. Took %s.\n", timer.stock("levelset_correction").c_str());
 	}
@@ -358,14 +362,16 @@ void macnbflip3::collision( std::function<double(const vec3d &p)> solid ) {
 				double dot = gradient * u;
 				if( dot < 0.0 ) u = u - gradient*dot;
 			}
-			for( unsigned dim : DIMS3 ) {
-				if( p[dim] < r ) {
-					p[dim] = r;
-					if( u[dim] < 0.0 ) u[dim] = 0.0;
-				}
-				if( p[dim] > m_dx*m_shape[dim]-r ) {
-					p[dim] = m_dx*m_shape[dim]-r;
-					if( u[dim] > 0.0 ) u[dim] = 0.0;
+			if( m_param.collision_domain_boundary ) {
+				for( unsigned dim : DIMS3 ) {
+					if( p[dim] < r ) {
+						p[dim] = r;
+						if( u[dim] < 0.0 ) u[dim] = 0.0;
+					}
+					if( p[dim] > m_dx*m_shape[dim]-r ) {
+						p[dim] = m_dx*m_shape[dim]-r;
+						if( u[dim] > 0.0 ) u[dim] = 0.0;
+					}
 				}
 			}
 		});
@@ -505,7 +511,9 @@ size_t macnbflip3::resample(const array3<Real> &fluid,
 	if( m_particles.size()) {
 		m_parallel.for_each(m_particles.size(),[&]( size_t n, int tn ) {
 			Particle &p = m_particles[n];
-			p.sizing_value = std::max((Real)p.sizing_value,sizing_array()(m_shape.find_cell(p.p/m_dx)));
+			if( ! p.bullet ) {
+				p.sizing_value = std::max((Real)p.sizing_value,sizing_array()(m_shape.find_cell(p.p/m_dx)));
+			}
 		});
 	}
 	//
@@ -516,7 +524,7 @@ size_t macnbflip3::resample(const array3<Real> &fluid,
 	std::vector<char> remove_particles(m_particles.size(),0);
 	//
 	// Bucket cell method to remove too dense particles
-	shared_array3<char> cell_bucket(m_shape);
+	shared_array3<float> cell_bucket(m_shape);
 	if( m_particles.size()) {
 		for( size_t n=0; n<m_particles.size(); ++n ) {
 			const Particle &p = m_particles[n];
@@ -525,7 +533,7 @@ size_t macnbflip3::resample(const array3<Real> &fluid,
 				int i (pi[0]), j (pi[1]), k (pi[2]);
 				m_shape.clamp(i,j,k);
 				if( ! p.bullet ) {
-					if( ! sizing_array()(i,j,k) || cell_bucket()(i,j,k) >= m_param.max_particles_per_cell || p.sizing_value < 0.0 ) {
+					if( ! sizing_array()(i,j,k) || cell_bucket()(i,j,k) > m_param.max_mass_per_cell || p.sizing_value <= 0.0 ) {
 						if( p.live_count > m_param.minimal_live_count ) {
 							remove_particles[n] = 1;
 						}
@@ -537,11 +545,13 @@ size_t macnbflip3::resample(const array3<Real> &fluid,
 				if( ! remove_particles[n] && solid(p.p) < -p.r ) {
 					remove_particles[n] = 1;
 				}
-				if( utility::box(p.p,vec3d(0.0,0.0,0.0),m_dx*vec3d(m_shape[0],m_shape[1],m_shape[2])) > -p.r ) {
-					remove_particles[n] = 1;
+				if( ! m_param.collision_domain_boundary ) {
+					if( utility::box(p.p,vec3d(0.0,0.0,0.0),m_dx*vec3d(m_shape[0],m_shape[1],m_shape[2])) > -p.r ) {
+						remove_particles[n] = 1;
+					}
 				}
 				if( ! remove_particles[n] ) {
-					cell_bucket().increment(i,j,k,1);
+					cell_bucket().increment(i,j,k,p.mass);
 				}
 			}
 		}
@@ -555,12 +565,12 @@ size_t macnbflip3::resample(const array3<Real> &fluid,
 	// Particle reseeding...
 	narrowband_mask->const_parallel_actives([&]( int i, int j, int k, int tn ) {
 		//
-		size_t num_added (0);
+		double mass_added (0.0);
 		double sizing_value = sizing_array()(i,j,k);
 		auto attempt_resample = [&]( const vec3d &p ) {
 			//
 			double r = 0.25 * m_dx;
-			if( mask(p) && cell_bucket()(i,j,k)+num_added < m_param.min_particles_per_cell ) {
+			if( mask(p) && cell_bucket()(i,j,k)+mass_added < m_param.min_mass_per_cell ) {
 				//
 				if( smoke_simulation_flag || this->interpolate_fluid(fluid,p) < -r ) {
 					//
@@ -588,7 +598,7 @@ size_t macnbflip3::resample(const array3<Real> &fluid,
 							return this->interpolate_fluid(fluid,p);
 						},new_particle,this->interpolate_fluid_gradient(fluid,new_particle.p));
 						new_particles_t[tn].push_back(new_particle);
-						num_added ++;
+						mass_added += new_particle.mass;
 					}
 				}
 			}
@@ -821,27 +831,6 @@ void macnbflip3::update_velocity_derivative( Particle& particle, const macarray3
 			}
 		}
 	}
-}
-//
-void macnbflip3::additionally_apply_velocity_derivative( macarray3<macflip3_interface::mass_momentum3> &mass_and_momentum ) const {
-	//
-	// Written by Takahiro Sato
-	mass_and_momentum.parallel_actives([&]( int dim, int i, int j, int k, auto &it ) {
-		vec3d pos = m_dx*vec3d(i+0.5*(dim!=0),j+0.5*(dim!=1),k+0.5*(dim!=2));
-		std::vector<size_t> neighbors = m_pointgridhash->get_face_neighbors(vec3i(i,j,k),dim);
-		double mom (0.0);
-		for( size_t k : neighbors ) {
-			const Particle &p = m_particles[k];
-			const vec3d &c = (p.c)[dim];
-			const vec3d r = pos-p.p;
-			double w = grid_kernel(r,m_dx);
-			if( w ) {
-				mom += w*p.mass*(c*r);
-			}
-		}
-		const auto value = it();
-		it.set({value.mass,(Real)(value.momentum+mom)});
-	});
 }
 //
 double macnbflip3::interpolate_fluid( const array3<Real> &fluid, const vec3d &p ) const {

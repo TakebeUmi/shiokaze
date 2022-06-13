@@ -29,6 +29,7 @@
 #include <amgcl/adapter/crs_tuple.hpp>
 #include <amgcl/coarsening/smoothed_aggregation.hpp>
 #include <amgcl/relaxation/gauss_seidel.hpp>
+#include <amgcl/relaxation/spai0.hpp>
 #include <amgcl/solver/cg.hpp>
 #include <amgcl/solver/bicgstab.hpp>
 #include <amgcl/solver/bicgstabl.hpp>
@@ -56,8 +57,14 @@ protected:
 		config.get_double("Residual",m_param.residual,"Tolerable residual");
 		config.get_double("AbsResidual",m_param.abs_residual,"Absolute tolerable residual");
 		config.get_unsigned("MaxIterations",m_param.max_iterations,"Maximal iteration count");
+		config.get_unsigned("NumPreSmooth",m_param.num_presmooth,"Pres smoothing count");
+		config.get_unsigned("NumPostSmooth",m_param.num_postsmooth,"Pres smoothing count");
+		config.get_unsigned("NumCycles",m_param.num_cycles,"Cycle number");
+		config.get_unsigned("MaxLevels",m_param.max_levels,"Maximal levels");
 		config.get_string("Solver",m_param.method,"Solver name");
 		config.get_bool("ForceGlobalResidual",m_param.force_global_residual,"Force using the global residual");
+		config.get_bool("UseDirectCoarseSolve",m_param.use_direct_coarse,"Use direct solver for coarse grids");
+		config.get_bool("EstimateSpectralRadius",m_param.estimate_spectral_radius,"Estimate the matrix spectral radius");
 	}
 	virtual void register_vector_norm_kind( const std::vector<unsigned char> &kind ) override {
 		m_kind = &kind;
@@ -85,7 +92,15 @@ protected:
 			});
 		}
 		//
-		AMG amg(std::tie(rows,rowstart,index,value));
+		typename AMG::params amg_param;
+		amg_param.direct_coarse = m_param.use_direct_coarse;
+		amg_param.coarsening.estimate_spectral_radius = m_param.estimate_spectral_radius;
+		amg_param.npre = m_param.num_presmooth;
+		amg_param.npost = m_param.num_postsmooth;
+		amg_param.ncycle = m_param.num_cycles;
+		amg_param.max_levels = m_param.max_levels;
+		//
+		AMG amg(std::tie(rows,rowstart,index,value),amg_param);
 		std::vector<T> rhs;
 		std::vector<T> result(rows);
 		b->convert_to(rhs);
@@ -102,8 +117,14 @@ protected:
 		if( m_param.method == "CG") {
 			typedef amgcl::solver::cg<amgcl::backend::builtin<T> > Solver;
 			typename Solver::params param; set_param(param);
+			param.force_global_residual = m_param.force_global_residual;
 			Solver solve(rows,param);
+			if( m_kind ) solve.kind = m_kind;
 			std::tie(iteration_count,reresid) = solve(amg,rhs,result);
+			if( m_kind ) {
+				vector_reresid = solve.vector_reresid;
+				vector_absresid = solve.vector_absresid;
+			}
 		} else if( m_param.method == "BICGSTAB") {
 			typedef amgcl::solver::bicgstab<amgcl::backend::builtin<T> > Solver;
 			typename Solver::params param; set_param(param);
@@ -148,8 +169,14 @@ protected:
 		double residual {1e-4};
 		double abs_residual {1e-20};
 		unsigned max_iterations {300};
+		unsigned num_presmooth {1};
+		unsigned num_postsmooth {1};
+		unsigned num_cycles {1};
+		unsigned max_levels {128};
+		bool use_direct_coarse {false};
+		bool estimate_spectral_radius {true};
 		std::string method {"CG"};
-		bool force_global_residual;
+		bool force_global_residual {true};
 	};
 	Parameters m_param;
 	const std::vector<unsigned char> *m_kind {nullptr};

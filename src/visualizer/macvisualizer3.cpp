@@ -56,6 +56,12 @@ protected:
 	virtual void initialize( const shape3 &shape, double dx ) override {
 		m_dx = dx;
 	}
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_dx);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_dx);
+	}
 	virtual void configure( configuration &config ) override {
 		config.get_bool("drawVelocity",m_param.draw_velocity,"Should draw velocity");
 	}

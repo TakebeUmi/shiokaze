@@ -45,6 +45,7 @@ protected:
 		//
 		m_gridutility->trim_narrowband(phi_array);
 		phi_array.flood_fill();
+		//
 		for( int count=0; count<width; ++count) phi_array.dilate([&](int i, int j, int k, auto &it, int tn) {
 			vec3i query[] = {vec3i(i-1,j,k),vec3i(i+1,j,k),vec3i(i,j-1,k),vec3i(i,j+1,k),vec3i(i,j,k-1),vec3i(i,j,k+1)};
 			double extrapolated_value (0.0);
@@ -179,6 +180,7 @@ protected:
 		phi_array.parallel_actives([&](auto &it) {
 			if( std::abs(it()) > m_dx*(double)width ) it.set_off();
 		});
+		//
 		phi_array.set_as_levelset(m_dx*(double)width);
 		phi_array.flood_fill();
 	}
@@ -192,6 +194,12 @@ protected:
 	//
 	virtual void initialize( const shape3 &shape, double dx ) override {
 		m_dx = dx;
+	}
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_dx);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_dx);
 	}
 	//
 	struct Parameters {

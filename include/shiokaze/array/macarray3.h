@@ -89,6 +89,28 @@ public:
 		copy(v);
 	}
 	/**
+	 \~english @brief Set a writing function of an element.
+	 @param[in] func Function to write an element.
+	 \~japanese @brief 要素をファイルに書き出す関数を設定する。
+	 @param[in] func 要素を書き出す関数。
+	 */
+	virtual void set_write_function( std::function<void( const filestream &file, const T& e )> func ) {
+		m_array_0.set_write_function(func);
+		m_array_1.set_write_function(func);
+		m_array_2.set_write_function(func);
+	}
+	/**
+	 \~english @brief Set a reading function of an element.
+	 @param[in] func Function to read an element.
+	 \~japanese @brief 要素をファイルから読み出す関数を設定する。
+	 @param[in] func 要素を読み出す関数。
+	 */
+	virtual void set_read_function( std::function<void( const filestream &file, T& e )> func ) {
+		m_array_0.set_read_function(func);
+		m_array_1.set_read_function(func);
+		m_array_2.set_read_function(func);
+	}
+	/**
 	 \~english @brief Send a message to the core module.
 	 @param[in] message Message
 	 @param[in] ptr Pointer to some value.
@@ -1101,11 +1123,17 @@ public:
 	}
 private:
 	parallel_driver m_parallel{this};
-	array3<T> m_array_0;
-	array3<T> m_array_1;
-	array3<T> m_array_2;
+	array3<T> m_array_0{this};
+	array3<T> m_array_1{this};
+	array3<T> m_array_2{this};
 	shape3 m_shape;
 	//
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+	}
 };
 //
 template <class T> static inline macarray3<T> operator*(double s, const macarray3<T> &v) {

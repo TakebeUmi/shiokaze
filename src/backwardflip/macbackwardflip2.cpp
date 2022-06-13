@@ -70,7 +70,7 @@ void macbackwardflip2::initialize ( const shape2 &shape, double dx ) {
 	m_dx = dx;
 }
 //
-void macbackwardflip2::post_initialize () {
+void macbackwardflip2::post_initialize ( bool initialized_from_file ) {
 	//
 	m_exist_gradient = false;
 	m_exist_density = false;

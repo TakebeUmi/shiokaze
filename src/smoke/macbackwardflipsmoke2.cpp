@@ -39,7 +39,11 @@ void macbackwardflipsmoke2::configure( configuration &config ) {
 void macbackwardflipsmoke2::idle() {
 	//
 	// Compute the timestep size
-	double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
+	const double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
+	const double time = m_timestepper->get_current_time();
+	//
+	// Update solid
+	m_macutility->update_solid_variables(m_dylib,time,&m_solid,&m_solid_velocity);
 	//
 	// Set of variables
 	shared_macarray2<Real> velocity_reconstructed(m_shape);
@@ -91,7 +95,7 @@ void macbackwardflipsmoke2::idle() {
 	add_source(m_velocity,density_added(),m_timestepper->get_current_time(),dt);
 	//
 	// Project
-	m_macproject->project(dt,m_velocity,m_solid,m_fluid);
+	m_macproject->project(dt,m_velocity,m_solid,m_solid_velocity,m_fluid,0.0);
 	m_macutility->extrapolate_and_constrain_velocity(m_solid,m_velocity,(macsmoke2::m_param).extrapolated_width);
 	//
 	if( m_use_regular_velocity_advection ) {

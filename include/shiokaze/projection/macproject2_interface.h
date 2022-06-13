@@ -29,6 +29,7 @@
 #include <shiokaze/core/recursive_configurable_module.h>
 #include <shiokaze/array/macarray2.h>
 #include "signed_rigidbody2_interface.h"
+#include <functional>
 //
 SHKZ_BEGIN_NAMESPACE
 //
@@ -49,10 +50,18 @@ public:
 	 */
 	virtual void set_target_volume( double current_volume, double target_volume ) {}
 	/**
+	 \~english @brief Set solid density, allowing some fluid to pass through solid faces.
+	 @param[in] solid_density Solid face density array.
+	 \~japanese @brief 壁面の密度を設定する。流体の一部が壁を突き抜けられるようにする。
+	 @param[in] solid_density 密度の格子。
+	 */
+	virtual void set_solid_density( const macarray2<Real> *solid_density ) {}
+	/**
 	 \~english @brief Project a vector field onto an imcompressible vector field.
 	 @param[in] dt Time step size.
 	 @param[in-out] velocity Velocity field.
 	 @param[in] solid Solid level set.
+	 @param[in] solid_velocity Solid face velocity.
 	 @param[in] fluid Fluid level set.
 	 @param[in] surface_tension Surface tension coefficient.
 	 @param[in] rigidbodies Rigidbody list.
@@ -60,13 +69,16 @@ public:
 	 @param[in] dt タイムステップサイズ。
 	 @param[in-out] velocity ベクトル場。
 	 @param[in] solid 壁のレベルセット。
+	 @param[in] solid_velocity 壁の面の速度。
 	 @param[in] fluid 水のレベルセット。
 	 @param[in] surface_tension 表面張力の係数。
 	 @param[in] rigidbodies 剛体リスト。
 	 */
 	virtual void project (
 			double dt, macarray2<Real> &velocity,
-			const array2<Real> &solid, const array2<Real> &fluid,
+			const array2<Real> &solid,
+			const macarray2<Real> &solid_velocity,
+			const array2<Real> &fluid,
 			double surface_tension=0.0,
 			const std::vector<signed_rigidbody2_interface *> *rigidbodies=nullptr
 	) = 0;

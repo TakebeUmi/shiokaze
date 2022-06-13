@@ -28,10 +28,12 @@ def build(bld):
 			target = bld.get_target_name(bld,'box2d_rigidworld2'),
 			use = bld.get_target_name(bld,['core','box2d']))
 	#
-	bld.shlib(source = 'bullet3_rigidworld3.cpp',
-			target = bld.get_target_name(bld,'bullet3_rigidworld3'),
-			includes= bld.local_path+'/include/bullet3',
-			use = bld.get_target_name(bld,['core','bullet3']))
+	# Error: TO BE FIXED
+	#
+	#bld.shlib(source = 'bullet3_rigidworld3.cpp',
+	#		target = bld.get_target_name(bld,'bullet3_rigidworld3'),
+	#		includes= bld.local_path+'/include/bullet3',
+	#		use = bld.get_target_name(bld,['core','bullet3']))
 	#
 	bld.shlib(source = 'reactphysics3d_rigidworld3.cpp',
 			target = bld.get_target_name(bld,'reactphysics3d_rigidworld3'),

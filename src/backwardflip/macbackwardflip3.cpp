@@ -69,7 +69,7 @@ void macbackwardflip3::initialize ( const shape3 &shape, double dx ) {
 	m_dx = dx;
 }
 //
-void macbackwardflip3::post_initialize () {
+void macbackwardflip3::post_initialize ( bool initialized_from_file ) {
 	//
 	scoped_timer timer{this};
 	m_exist_gradient = false;

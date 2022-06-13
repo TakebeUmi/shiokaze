@@ -82,15 +82,22 @@ void macsmoke2::configure( configuration &config ) {
 	m_dx = view_scale * m_shape.dx();
 }
 //
-void macsmoke2::post_initialize () {
+void macsmoke2::post_initialize ( bool initialized_from_file ) {
 	//
 	// Initialize scene
 	auto initialize_func = reinterpret_cast<void(*)(const shape2 &shape, double dx)>(m_dylib.load_symbol("initialize"));
 	if( initialize_func ) initialize_func(m_shape,m_dx);
 	//
+	// Get functions
+	m_solid_func = reinterpret_cast<double(*)(const vec2d &)>(m_dylib.load_symbol("solid"));
+	m_draw_func = reinterpret_cast<void(*)(graphics_engine &,double)>(m_dylib.load_symbol("draw"));
+	m_moving_solid_func = reinterpret_cast<std::pair<double,vec2d>(*)(double time, const vec2d &p)>(m_dylib.load_symbol("moving_solid"));
+	m_set_boundary_flux = reinterpret_cast<void(*)( double, Real [DIM2][2] )>(m_dylib.load_symbol("set_boundary_flux"));
+	//
 	// Initialize arrays
 	m_force_exist = false;
 	m_velocity.initialize(m_shape);
+	m_solid_velocity.initialize(m_shape);
 	m_external_force.initialize(m_shape);
 	//
 	m_solid.initialize(m_shape.nodal());
@@ -103,14 +110,13 @@ void macsmoke2::post_initialize () {
 	m_dust_particles.clear();
 	//
 	// Assign initial variables from scene
-	m_velocity.activate_all();
-	m_macutility->assign_initial_variables(m_dylib,m_velocity,&m_solid,nullptr,&m_density);
+	m_macutility->assign_initial_variables(m_dylib,&m_solid,&m_solid_velocity,nullptr,&m_velocity,&m_density);
 	//
 	// Project to make sure that the velocity field is divergence free at the beggining
 	double max_u = m_macutility->compute_max_u(m_velocity);
 	if( max_u ) {
 		double CFL = m_timestepper->get_target_CFL();
-		m_macproject->project(CFL*m_dx/max_u,m_velocity,m_solid,m_fluid);
+		m_macproject->project(CFL*m_dx/max_u,m_velocity,m_solid,m_solid_velocity,m_fluid);
 	}
 	//
 	// Seed dust particles if requested
@@ -238,7 +244,11 @@ void macsmoke2::idle() {
 	add_to_graph();
 	//
 	// Compute the timestep size
-	double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
+	const double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
+	const double time = m_timestepper->get_current_time();
+	//
+	// Update solid
+	m_macutility->update_solid_variables(m_dylib,time,&m_solid,&m_solid_velocity);
 	//
 	// Advect density and velocity
 	if( m_param.use_dust ) advect_dust_particles(m_velocity,dt);
@@ -263,7 +273,7 @@ void macsmoke2::idle() {
 	inject_external_force(m_velocity);
 	//
 	// Project
-	m_macproject->project(dt,m_velocity,m_solid,m_fluid);
+	m_macproject->project(dt,m_velocity,m_solid,m_solid_velocity,m_fluid,0.0);
 	m_macutility->extrapolate_and_constrain_velocity(m_solid,m_velocity,m_param.extrapolated_width);
 	//
 	// Report stats
@@ -279,6 +289,7 @@ void macsmoke2::advect_dust_particles( const macarray2<Real> &velocity, double d
 		p += 0.5 * dt * (u0+u1);
 	});
 	//
+	std::vector<char> remove_flags (m_dust_particles.size());
 	m_parallel.for_each( m_dust_particles.size(), [&]( size_t n, int tn ) {
 		vec2d &p = m_dust_particles[n];
 		Real phi = array_interpolator2::interpolate<Real>(m_solid,p/m_dx);
@@ -288,11 +299,15 @@ void macsmoke2::advect_dust_particles( const macarray2<Real> &velocity, double d
 			p = p - phi*vec2d(derivative).normal();
 		}
 		for( unsigned dim : DIMS2 ) {
-			if( p[dim] < 0.0 ) p[dim] = 0.0;
-			if( p[dim] > m_dx*m_shape[dim] ) p[dim] = m_dx*m_shape[dim];
+			if( p[dim] < 0.0 || p[dim] > m_dx*m_shape[dim] ) remove_flags[n] = true;
 		}
 	});
 	//
+	std::vector<vec2d> save_dust_particles (m_dust_particles);
+	m_dust_particles.clear();
+	for( size_t n=0; n<save_dust_particles.size(); ++n ) {
+		if( ! remove_flags[n] ) m_dust_particles.push_back(save_dust_particles[n]);
+	}
 	rasterize_dust_particles(m_density);
 }
 //
@@ -323,9 +338,17 @@ void macsmoke2::add_to_graph() {
 //
 void macsmoke2::draw( graphics_engine &g ) const {
 	//
-	// Draw density
-	if( m_param.use_dust ) draw_dust_particles(g);
-	else m_gridvisualizer->draw_density(g,m_density);
+	// Draw solid levelset
+	shared_array2<Real> solid_to_visualize(m_solid.shape());
+	m_gridutility->assign_visualizable_solid(m_dylib,m_dx,solid_to_visualize());
+	m_gridvisualizer->draw_solid(g,solid_to_visualize());
+	//
+	// Visualize moving solid
+	auto draw_func = reinterpret_cast<void(*)(graphics_engine &,double)>(m_dylib.load_symbol("draw"));
+	if( draw_func ) {
+		g.color4(1.0,0.8,0.5,0.3);
+		draw_func(g,m_timestepper->get_current_time());
+	}
 	//
 	// Draw grid edges
 	m_gridvisualizer->draw_grid(g);
@@ -333,11 +356,12 @@ void macsmoke2::draw( graphics_engine &g ) const {
 	// Draw projection component
 	m_macproject->draw(g);
 	//
-	// Draw solid levelset
-	m_gridvisualizer->draw_solid(g,m_solid);
-	//
 	// Draw velocity
 	m_macvisualizer->draw_velocity(g,m_velocity);
+	//
+	// Draw density
+	if( m_param.use_dust ) draw_dust_particles(g);
+	else m_gridvisualizer->draw_density(g,m_density);
 	//
 	// Draw graph
 	m_graphplotter->draw(g);

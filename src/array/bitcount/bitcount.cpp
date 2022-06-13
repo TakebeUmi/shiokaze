@@ -72,49 +72,7 @@ static inline uint64_t popcnt(const void* data, uint64_t size) {
 	return cnt;
 }
 //
-size_t bitcount::count( const unsigned char *bit_mask, size_t bit_mask_size, const parallel_driver *parallel ) {
-	//
-	if( parallel ) {
-		using T = uint64_t;
-		size_t num_threads = parallel->get_thread_num();
-		std::vector<size_t> total_slots(num_threads);
-		size_t chunk_size = bit_mask_size / num_threads;
-		size_t end_n (0);
-		//
-		if( num_threads > 1 && bit_mask_size > num_threads * sizeof(T)) {
-			parallel->for_each(num_threads,[&](size_t n, int q) {
-				size_t start (0), end (0), m (0);
-				const size_t terminal (chunk_size-sizeof(T));
-				while( m < terminal ) {
-					while( m < terminal ) {
-						if( *(T *)(bit_mask+m) ) {
-							start = m;
-							break;
-						} else {
-							m += sizeof(T);
-						}
-					}
-					end = chunk_size;
-					while( m < terminal ) {
-						m += sizeof(T);
-						if(! *(T *)(bit_mask+m) ) {
-							end = m;
-							break;
-						}
-					}
-					total_slots[n] += popcnt(bit_mask+n*chunk_size+start,end);
-				}
-			});
-			end_n = chunk_size * num_threads;
-		}
-		size_t total (0);
-		if( end_n < bit_mask_size ) {
-			total += popcnt(bit_mask+end_n,bit_mask_size-end_n);
-		}
-		for( const auto &e : total_slots ) total += e;
-		return total;
-	} else {
-		return popcnt(bit_mask,bit_mask_size);
-	}
+size_t bitcount::count( const unsigned char *bit_mask, size_t bit_mask_size ) {
+	return popcnt(bit_mask,bit_mask_size);
 }
 //

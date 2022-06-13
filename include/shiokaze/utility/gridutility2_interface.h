@@ -26,6 +26,7 @@
 #define SHKZ_GRIDUTILITY2_INTERFACE_H
 //
 #include <shiokaze/core/recursive_configurable_module.h>
+#include <shiokaze/core/dylibloader.h>
 #include <shiokaze/array/array2.h>
 //
 SHKZ_BEGIN_NAMESPACE
@@ -71,6 +72,19 @@ public:
 	 */
 	virtual void extrapolate_levelset( const array2<Real> &solid, array2<Real> &fluid, double threshold=0.0 ) const = 0;
 	/**
+	 \~english @brief Get upwind levelset gradient.
+	 @param[in] levelset Level set array.
+	 @param[in] dx Grid cell size.
+	 @param[in] pi Index coordinate evaluation position.
+	 @return Gradient output.
+	 \~japanese @brief 風上のレベルセット勾配を得る。
+	 @param[in] levelset レベルセットの配列。
+	 @param[in] dx グリッドのセルの大きさ。
+	 @param[in] pi インデックス座標の評価位置。
+	 @return 出力結果の勾配。
+	 */
+	virtual vec2d get_upwind_levelset_gradient( const array2<Real> &levelset, const vec2i &pi ) const = 0;
+	/**
 	 \~english @brief Compute the gradient of a level set.
 	 @param[in] levelset Level set.
 	 @param[out] gradient Output gradient.
@@ -97,6 +111,19 @@ public:
 	 @return 面積。
 	 */
 	virtual double get_area( const array2<Real> &solid, const array2<Real> &fluid ) const = 0;
+	/**
+	 \~english @brief Assign solid level set for visualization.
+	 @param[in] dylib Reference to an instance of dylibloader.
+	 @param[in] dx Grid cell size.
+	 @param[out] solid Output solid level set.
+	 @return \c true if visualizable solid level set is assigned.
+	 \~japanese @brief 可視化のためのレベルセットを設定する。
+	 @param[in] dylib dylibloader のインスタンスへのリファレンス。
+	 @param[in] dx グリッドセルの大きさ。
+	 @param[out] solid 出力の可視化のためのレベルセット。
+	 @return もし可視化のためのレベルセットがセットされたら、\c true を、そうでなければ \c false を返す。
+	 */
+	virtual bool assign_visualizable_solid( const dylibloader &dylib, double dx, array2<Real> &solid ) const = 0;
 	//
 private:
 	virtual void initialize( const shape2 &shape, double dx ) = 0;

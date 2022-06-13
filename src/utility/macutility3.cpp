@@ -65,33 +65,37 @@ protected:
 		//
 		if( levelset_exist(solid) ) {
 			//
-			for( int dim : DIMS3 ) {
-				velocity.parallel_actives([&](int dim, int i, int j, int k, auto &it, int tn) {
-					vec3i pi(i,j,k);
-					vec3d p(vec3i(i,j,k).face(dim));
-					if( interpolate<Real>(solid,p) < 0.0 ) {
-						Real derivative[DIM3];
-						array_derivative3::derivative(solid,p,derivative);
-						vec3d normal = vec3d(derivative)/m_dx;
-						if( normal.norm2() ) {
-							vec3d u = macarray_interpolator3::interpolate<Real>(velocity_save(),p);
-							if( u * normal < 0.0 ) {
-								it.set((u-normal*(u*normal))[dim]);
-							}
+			velocity.parallel_actives([&](int dim, int i, int j, int k, auto &it, int tn) {
+				vec3i pi(i,j,k);
+				vec3d p(vec3i(i,j,k).face(dim));
+				if( interpolate<Real>(solid,p) < 0.0 ) {
+					Real derivative[DIM3];
+					array_derivative3::derivative(solid,p,derivative);
+					vec3d normal = vec3d(derivative)/m_dx;
+					if( normal.norm2() ) {
+						vec3d u = macarray_interpolator3::interpolate<Real>(velocity_save(),p);
+						if( u * normal < 0.0 ) {
+							it.set((u-normal*(u*normal))[dim]);
 						}
 					}
-					if( pi[dim]==0 && it() < 0.0 ) it.set(0.0);
-					if( pi[dim]==m_shape[dim] && it() > 0.0 ) it.set(0.0);
-				});
-			}
+				}
+			});
 		}
+		//
+		velocity.parallel_actives([&](int dim, int i, int j, int k, auto &it, int tn) {
+				vec3i pi(i,j,k);
+			if( dim == 1 ) {
+				if( pi[dim]==0 && it() < 0.0 ) it.set(0.0);
+				if( pi[dim]==m_shape[dim] && it() > 0.0 ) it.set(0.0);
+			}
+		});
 	}
 	virtual void extrapolate_and_constrain_velocity( const array3<Real> &solid, macarray3<Real> &velocity, int extrapolate_width ) const override {
 		//
 		macarray_extrapolator3::extrapolate(velocity,extrapolate_width);
 		constrain_velocity(solid,velocity);
 	}
-	virtual void compute_area_fraction( const array3<Real> &solid, macarray3<Real> &areas ) const override {
+	virtual void compute_area_fraction( const array3<Real> &solid, macarray3<Real> &areas, bool enclose_domain_boundary=true ) const override {
 		//
 		if( levelset_exist(solid) ) {
 			//
@@ -117,7 +121,7 @@ protected:
 			areas.parallel_actives([&](int dim, int i, int j, int k, auto &it, int tn) {
 				double area;
 				vec3i pi(i,j,k);
-				if( pi[dim] == 0 || pi[dim] == solid.shape()[dim] ) area = 0.0;
+				if( enclose_domain_boundary && (pi[dim] == 0 || pi[dim] == m_shape[dim] )) area = 0.0;
 				else {
 					double quadsolid[2][2];
 					if( dim == 0 ) {
@@ -149,17 +153,19 @@ protected:
 		} else {
 			//
 			areas.clear(1.0);
-			for( int j=0; j<m_shape.h; ++j ) for( int k=0; k<m_shape.d; ++k ) {
-				areas[0].set(0,j,k,0.0);
-				areas[0].set(m_shape.w,j,k,0.0);
-			}
-			for( int i=0; i<m_shape.w; ++i ) for( int k=0; k<m_shape.d; ++k ) {
-				areas[1].set(i,0,k,0.0);
-				areas[1].set(i,m_shape.h,k,0.0);
-			}
-			for( int i=0; i<m_shape.w; ++i ) for( int j=0; j<m_shape.h; ++j ) {
-				areas[2].set(i,j,0,0.0);
-				areas[2].set(i,j,m_shape.d,0.0);
+			if( enclose_domain_boundary ) {
+				for( int j=0; j<m_shape.h; ++j ) for( int k=0; k<m_shape.d; ++k ) {
+					areas[0].set(0,j,k,0.0);
+					areas[0].set(m_shape.w,j,k,0.0);
+				}
+				for( int i=0; i<m_shape.w; ++i ) for( int k=0; k<m_shape.d; ++k ) {
+					areas[1].set(i,0,k,0.0);
+					areas[1].set(i,m_shape.h,k,0.0);
+				}
+				for( int i=0; i<m_shape.w; ++i ) for( int j=0; j<m_shape.h; ++j ) {
+					areas[2].set(i,j,0,0.0);
+					areas[2].set(i,j,m_shape.d,0.0);
+				}
 			}
 		}
 	}
@@ -305,8 +311,10 @@ protected:
 			jacobian[dim] /= m_dx;
 		}
 	}
-	virtual void assign_initial_variables( const dylibloader &dylib, macarray3<Real> &velocity,
-									array3<Real> *solid=nullptr, array3<Real> *fluid=nullptr,array3<Real> *density=nullptr ) const override {
+	virtual void assign_initial_variables( const dylibloader &dylib, 
+					array3<Real> *solid, macarray3<Real> *solid_velocity,
+					array3<Real> *fluid, macarray3<Real> *fluid_velocity,
+					array3<Real> *density ) const override {
 		//
 		// Scoped timer
 		scoped_timer timer(this,"assign_initial_variables");
@@ -314,74 +322,57 @@ protected:
 		timer.tick(); console::dump( ">>> Assigining variables...\n" );
 		//
 		// Assign velocity
-		velocity.set_touch_only_actives(true);
 		const double sqrt3 = sqrt(3.0);
-		auto velocity_func = reinterpret_cast<vec3d(*)(const vec3d &)>(dylib.load_symbol("velocity"));
-		if( velocity_func ) {
+		if( fluid_velocity ) {
+			fluid_velocity->set_touch_only_actives(true);
+			auto velocity_func = reinterpret_cast<vec3d(*)(const vec3d &)>(dylib.load_symbol("velocity"));
 			timer.tick(); console::dump( "Assigining velocity..." );
 			auto fluid_func = reinterpret_cast<double(*)(const vec3d &)>(dylib.load_symbol("fluid"));
-			velocity.parallel_all([&](int dim, int i, int j, int k, auto &it) {
+			fluid_velocity->parallel_all([&](int dim, int i, int j, int k, auto &it) {
 				bool skip (false);
 				if( fluid_func ) {
 					skip = (*fluid_func)(m_dx*vec3i(i,j,k).face(dim)) > sqrt3*m_dx;
 				}
 				if( ! skip ) {
-					vec3d value = (*velocity_func)(m_dx*vec3i(i,j,k).face(dim));
+					vec3d value = velocity_func ? (*velocity_func)(m_dx*vec3i(i,j,k).face(dim)) : 0.0;
 					it.set(value[dim]);
 				}
 			});
 			console::dump( "Done. Took %s.\n", timer.stock("assign_velocity").c_str());
 		}
 		//
-		// Assign solid levelset
-		if( solid ) {
-			auto solid_func = reinterpret_cast<double(*)(const vec3d &)>(dylib.load_symbol("solid"));
-			if( solid_func ) {
-				timer.tick(); console::dump( "Assigning solid levelset..." );
-				solid->parallel_all([&](int i, int j, int k, auto &it) {
-					double value = (*solid_func)(m_dx*vec3i(i,j,k).nodal());
-					if( std::abs(value) < sqrt3*m_dx ) it.set(value);
-				});
-				console::dump( "Done. Took %s.\n", timer.stock("evaluate_solid").c_str());
-			}
-			solid->set_as_levelset(sqrt3*m_dx);
-			solid->flood_fill();
-		}
-		//
-		// Assign fluid levelsets
+		// Assign fluid levelset
 		if( fluid ) {
+			//
 			auto fluid_func = reinterpret_cast<double(*)(const vec3d &)>(dylib.load_symbol("fluid"));
 			auto solid_func = reinterpret_cast<double(*)(const vec3d &)>(dylib.load_symbol("solid"));
+			auto moving_solid_func = reinterpret_cast<std::pair<double,vec3d>(*)(double time, const vec3d &p)>(dylib.load_symbol("moving_solid"));
 			if( fluid_func ) {
 				timer.tick(); console::dump( "Assigining fluid levelset..." );
-				if( solid_func ) {
+				if( solid_func || moving_solid_func ) {
 					fluid->parallel_all([&](int i, int j, int k, auto &it) {
 						vec3d p = m_dx*vec3i(i,j,k).cell();
-						double fluid_value = (*fluid_func)(p);
-						double solid_value = (*solid_func)(p)+m_dx;
-						double value = std::max(fluid_value,-solid_value);
-						if( std::abs(value) < sqrt3*m_dx ) it.set(value);
+						double value = (*fluid_func)(p);
+						double solid_value0 = solid_func ? (*solid_func)(p)+m_dx : 1.0;
+						double solid_value1 = moving_solid_func ? (*moving_solid_func)(0.0,p).first+m_dx : 1.0;
+						value = std::max(value,-solid_value0);
+						value = std::max(value,-solid_value1);
+						if( ! m_param.narrowband_dist || std::abs(value) < m_param.narrowband_dist*m_dx ) it.set(value);
 					});
 				} else {
 					fluid->parallel_all([&](int i, int j, int k, auto &it) {
 						double value = (*fluid_func)(m_dx*vec3i(i,j,k).cell());
-						if( std::abs(value) < sqrt3*m_dx ) it.set(value);
+						if( ! m_param.narrowband_dist || std::abs(value) < m_param.narrowband_dist*m_dx ) it.set(value);
 					});
 				}
 				console::dump( "Done. Took %s.\n", timer.stock("assign_fluid").c_str());
+			} else {
+				fluid->clear(-1.0);
 			}
-			fluid->set_as_levelset(sqrt3*m_dx);
-			fluid->flood_fill();
-			//
-			// Activate velocity inside fluid
-			shared_bitmacarray3 velocity_actives(velocity.shape());
-			for( int dim : DIMS3 ) {
-				velocity_actives()[dim].activate_inside_as(*fluid);
-				velocity_actives()[dim].activate_inside_as(*fluid,vec3i(dim==0,dim==1,dim==2));
+			if( m_param.narrowband_dist ) {
+				fluid->set_as_levelset(m_param.narrowband_dist*m_dx);
+				fluid->flood_fill();
 			}
-			velocity.activate_as_bit(velocity_actives());
-		} else {
-			velocity.activate_all();
 		}
 		//
 		// Assign density
@@ -397,6 +388,108 @@ protected:
 		}
 		//
 		console::dump( "<<< Done. Took %s.\n", timer.stock("assign_variables").c_str());
+		//
+		// Assign solid variables
+		update_solid_variables(dylib,0.0,solid,solid_velocity);
+	}
+	virtual void update_solid_variables( const dylibloader &dylib, double time, array3<Real> *solid, macarray3<Real> *solid_velocity ) const override {
+		//
+		auto moving_solid_func = reinterpret_cast<std::pair<double,vec3d>(*)(double time, const vec3d &p)>(dylib.load_symbol("moving_solid"));
+		auto solid_func = reinterpret_cast<double(*)(const vec3d &)>(dylib.load_symbol("solid"));
+		auto set_boundary_flux = reinterpret_cast<void(*)( double, Real [DIM3][2] )>(dylib.load_symbol("set_boundary_flux"));
+		//
+		if( solid ) {
+			solid->clear(1.0);
+			if( solid_func || moving_solid_func ) {
+				//
+				solid->parallel_all([&](int i, int j, int k, auto &it) {
+					const vec3d &p = m_dx*vec3i(i,j,k).nodal();
+					double value (1.0);
+					if( solid_func ) value = std::min(value,solid_func(p));
+					if( moving_solid_func ) value = std::min(value,moving_solid_func(time,p).first);
+					if( ! m_param.narrowband_dist || std::abs(value) < m_param.narrowband_dist*m_dx ) it.set(value);
+				});
+				//
+				if( m_param.narrowband_dist ) {
+					solid->set_as_levelset(m_param.narrowband_dist*m_dx);
+					solid->flood_fill();
+				}
+				//
+				if( solid_velocity && moving_solid_func ) {
+					//
+					shared_array3<vec3d> tmp_nodal_velocity(m_shape.nodal());
+					tmp_nodal_velocity->parallel_all([&](int i, int j, int k, auto &it) {
+						if( (*solid)(i,j,k) < 0.0 ) {
+							const auto info = moving_solid_func(time,m_dx*vec3i(i,j,k).nodal());
+							it.set(info.second);
+						}
+					});
+					//
+					const auto get_face_vertices = [&]( int dim, const vec3i &pi ) {
+						std::vector<vec3i> result(4);
+						int i(pi[0]), j(pi[1]), k(pi[2]);
+						if( dim == 0 ) {
+							result[0] = vec3i(i,j,k);
+							result[1] = vec3i(i,j+1,k);
+							result[2] = vec3i(i,j+1,k+1);
+							result[3] = vec3i(i,j,k+1);
+						} else if( dim == 1 ) {
+							result[0] = vec3i(i,j,k);
+							result[1] = vec3i(i+1,j,k);
+							result[2] = vec3i(i+1,j,k+1);
+							result[3] = vec3i(i,j,k+1);
+						} else if( dim == 2 ) {
+							result[0] = vec3i(i,j,k);
+							result[1] = vec3i(i+1,j,k);
+							result[2] = vec3i(i+1,j+1,k);
+							result[3] = vec3i(i,j+1,k);
+						}
+						return result;
+					};
+					//
+					solid_velocity->clear();
+					solid_velocity->parallel_all([&]( int dim, int i, int j, int k, auto &it ) {
+						std::vector<vec3i> results = get_face_vertices(dim,vec3i(i,j,k));
+						double wsum (0.0), sum (0.0);
+						for( const auto &pi : results ) {
+							if( (*solid)(pi) < 0.0 ) {
+								wsum += 1.0;
+								sum += tmp_nodal_velocity()(pi)[dim];
+							}
+						}
+						if( wsum ) {
+							it.set(sum/wsum);
+						}
+					});
+				}
+			}
+		}
+		//
+		if( set_boundary_flux && solid_velocity ) {
+			Real flux[DIM3][2] = {{0.0,0.0},{0.0,0.0},{0.0,0.0}};
+			set_boundary_flux(time,flux);
+			for( int j=0; j<m_shape.h; ++j ) for( int k=0; k<m_shape.d; ++k ) {
+				(*solid_velocity)[0].set(0,j,k,flux[0][0]);
+				(*solid_velocity)[0].set(m_shape.w,j,k,flux[0][1]);
+			}
+			for( int i=0; i<m_shape.w; ++i ) for( int k=0; k<m_shape.d; ++k ) {
+				(*solid_velocity)[1].set(i,0,k,flux[1][0]);
+				(*solid_velocity)[1].set(i,m_shape.h,k,flux[1][1]);
+			}
+			for( int i=0; i<m_shape.w; ++i ) for( int j=0; j<m_shape.h; ++j ) {
+				(*solid_velocity)[2].set(i,j,0,flux[2][0]);
+				(*solid_velocity)[2].set(i,j,m_shape.d,flux[2][1]);
+			}
+		}
+		//
+		auto velocity_func = reinterpret_cast<vec3d(*)(double, const vec3d &)>(dylib.load_symbol("boundary_velocity"));
+		if( velocity_func && solid_velocity ) {
+			solid_velocity->parallel_all([&]( int dim, int i, int j, int k, auto &it ) {
+				const double value = velocity_func(time,m_dx*vec3i(i,j,k).face(dim))[dim];
+				if( value ) it.set(value);
+				else it.set_off();
+			});
+		}
 	}
 	virtual void add_force( vec3d p, vec3d f, macarray3<Real> &external_force ) const override {
 		for( unsigned dim : DIMS3 ) {
@@ -406,19 +499,30 @@ protected:
 	}
 	//
 	virtual void configure( configuration &config ) override {
+		//
 		config.get_double("EpsFluid",m_param.eps_fluid,"Minimal bound for fluid fraction");
 		config.get_double("EpsSolid",m_param.eps_solid,"Minimal bound for solid fraction");
 		config.get_bool("WENO",m_param.weno_interpolation,"Whether to use WENO interpolation");
+		config.get_double("NarrowBandDist",m_param.narrowband_dist);
 	}
 	virtual void initialize( const shape3 &shape, double dx ) override {
 		m_shape = shape;
 		m_dx = dx;
+	}
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
 	}
 	struct Parameters {
 		//
 		double eps_fluid {1e-2};
 		double eps_solid {1e-2};
 		bool weno_interpolation {false};
+		double narrowband_dist {sqrt(3.0)};
 	};
 	Parameters m_param;
 	//

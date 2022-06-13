@@ -103,8 +103,49 @@ def build(bld):
 			target = bld.get_lib_name(bld,'injection3'),
 			cxxflags = ['-Wno-return-type-c-linkage'],
 			use = bld.get_target_name(bld,'core'))
+    
+    #
+	bld.shlib(source = 'rain2.cpp',
+			target = bld.get_lib_name(bld,'rain2'),
+			cxxflags = ['-Wno-return-type-c-linkage'],
+			use = bld.get_target_name(bld,'core'))
+	#
+	bld.shlib(source = 'rain3.cpp',
+			target = bld.get_lib_name(bld,'rain3'),
+			cxxflags = ['-Wno-return-type-c-linkage'],
+			use = bld.get_target_name(bld,'core'))
 	#
 	bld.shlib(source = 'movingsolid2.cpp',
 			target = bld.get_lib_name(bld,'movingsolid2'),
+			cxxflags = ['-Wno-return-type-c-linkage'],
+			use = bld.get_target_name(bld,'core'))
+	#
+	bld.shlib(source = 'throw2.cpp',
+			target = bld.get_lib_name(bld,'throw2'),
+			cxxflags = ['-Wno-return-type-c-linkage'],
+			use = bld.get_target_name(bld,'core'))
+	#
+	bld.shlib(source = 'throw3.cpp',
+			target = bld.get_lib_name(bld,'throw3'),
+			cxxflags = ['-Wno-return-type-c-linkage'],
+			use = bld.get_target_name(bld,'core'))
+	#
+	bld.shlib(source = 'movingsolid3.cpp',
+			target = bld.get_lib_name(bld,'movingsolid3'),
+			cxxflags = ['-Wno-return-type-c-linkage'],
+			use = bld.get_target_name(bld,'core'))
+	#
+	bld.shlib(source = 'seaplane3.cpp',
+			target = bld.get_lib_name(bld,'seaplane3'),
+			cxxflags = ['-Wno-return-type-c-linkage'],
+			use = bld.get_target_name(bld,'core'))
+	#
+	bld.shlib(source = 'river2.cpp',
+			target = bld.get_lib_name(bld,'river2'),
+			cxxflags = ['-Wno-return-type-c-linkage'],
+			use = bld.get_target_name(bld,'core'))
+	#
+	bld.shlib(source = 'river3.cpp',
+			target = bld.get_lib_name(bld,'river3'),
 			cxxflags = ['-Wno-return-type-c-linkage'],
 			use = bld.get_target_name(bld,'core'))

@@ -44,6 +44,8 @@ protected:
 		double threshold_g {1.5};
 		double radius {1.0};
 		double amplification{5.0};
+		double velocity_scale {1.0};
+		double max_value {2.0};
 		int mode {0};
 	};
 	//

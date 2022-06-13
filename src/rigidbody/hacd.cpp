@@ -79,7 +79,7 @@ private:
 		return false;
 	};
 	//
-	virtual void post_initialize() override {
+	virtual void post_initialize( bool initialized_from_file ) override {
 		//
 		console::dump( ">>> Running HACD on %s...\n", filename.c_str());
 		//

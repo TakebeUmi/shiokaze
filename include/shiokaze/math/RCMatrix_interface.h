@@ -81,6 +81,20 @@ public:
 		});
 	}
 	/**
+	 \~english @brief Initialize the program from a file.
+	 @param[in] file filestream input.
+	 \~japanese @brief ファイルからプログラムを初期化する。
+	 @param[in] file filestream の入力。
+	 */
+	virtual void initialize( const filestream &file ) {}
+	/**
+	 \~english @brief Initialize the program from a file.
+	 @param[in] file filestream input.
+	 \~japanese @brief ファイルからプログラムを初期化する。
+	 @param[in] file filestream の入力。
+	 */
+	virtual void serialize( const filestream &file ) const {}
+	/**
 	 \~english @brief Resize the dimension.
 	 @param[in] size New size of dimension.
 	 \~japanese @brief 次元をリサイズする。
@@ -334,6 +348,20 @@ public:
 	 @param[in] columns 列の大きさ。
 	 */
 	virtual void initialize( N rows, N columns ) = 0;
+	/**
+	 \~english @brief Initialize the program from a file.
+	 @param[in] file filestream input.
+	 \~japanese @brief ファイルからプログラムを初期化する。
+	 @param[in] file filestream の入力。
+	 */
+	virtual void initialize( const filestream &file ) {}
+	/**
+	 \~english @brief Initialize the program from a file.
+	 @param[in] file filestream input.
+	 \~japanese @brief ファイルからプログラムを初期化する。
+	 @param[in] file filestream の入力。
+	 */
+	virtual void serialize( const filestream &file ) const {}
 	/**
 	 \~english @brief Copy the input matrix.
 	 @param[in] m Matrix from which to copy.

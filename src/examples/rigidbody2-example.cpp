@@ -49,7 +49,7 @@ private:
 		height = width;
 	}
 	//
-	virtual void post_initialize() override {
+	virtual void post_initialize( bool initialized_from_file ) override {
 		//
 		m_world->clear();
 		//

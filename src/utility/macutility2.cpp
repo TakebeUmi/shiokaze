@@ -60,33 +60,37 @@ protected:
 		shared_macarray2<Real> velocity_save(velocity);
 		if( levelset_exist(solid) ) {
 			//
-			for( int dim : DIMS2 ) {
-				velocity.parallel_actives([&](int dim, int i, int j, auto &it, int tn) {
-					vec2i pi(i,j);
-					vec2d p(vec2i(i,j).face(dim));
-					if( interpolate<Real>(solid,p) < 0.0 ) {
-						Real derivative[DIM2];
-						array_derivative2::derivative(solid,p,derivative);
-						vec2d normal = vec2d(derivative)/m_dx;
-						if( normal.norm2() ) {
-							vec2d u = macarray_interpolator2::interpolate<Real>(velocity_save(),p);
-							if( u * normal < 0.0 ) {
-								it.set((u-normal*(u*normal))[dim]);
-							}
+			velocity.parallel_actives([&](int dim, int i, int j, auto &it, int tn) {
+				vec2i pi(i,j);
+				vec2d p(vec2i(i,j).face(dim));
+				if( interpolate<Real>(solid,p) < 0.0 ) {
+					Real derivative[DIM2];
+					array_derivative2::derivative(solid,p,derivative);
+					vec2d normal = vec2d(derivative)/m_dx;
+					if( normal.norm2() ) {
+						vec2d u = macarray_interpolator2::interpolate<Real>(velocity_save(),p);
+						if( u * normal < 0.0 ) {
+							it.set((u-normal*(u*normal))[dim]);
 						}
 					}
-					if( pi[dim]==0 && it() < 0.0 ) it.set(0.0);
-					if( pi[dim]==m_shape[dim] && it() > 0.0 ) it.set(0.0);
-				});
-			}
+				}
+			});
 		}
+		//
+		velocity.parallel_actives([&](int dim, int i, int j, auto &it, int tn) {
+				vec2i pi(i,j);
+			if( dim == 1 ) {
+				if( pi[dim]==0 && it() < 0.0 ) it.set(0.0);
+				if( pi[dim]==m_shape[dim] && it() > 0.0 ) it.set(0.0);
+			}
+		});
 	}
 	virtual void extrapolate_and_constrain_velocity( const array2<Real> &solid, macarray2<Real> &velocity, int extrapolate_width ) const override {
 		//
 		macarray_extrapolator2::extrapolate(velocity,extrapolate_width);
 		constrain_velocity(solid,velocity);
 	}
-	virtual void compute_area_fraction( const array2<Real> &solid, macarray2<Real> &areas ) const override {
+	virtual void compute_area_fraction( const array2<Real> &solid, macarray2<Real> &areas, bool enclose_domain_boundary=true ) const override {
 		//
 		if( levelset_exist(solid) ) {
 			//
@@ -100,7 +104,7 @@ protected:
 			areas.parallel_actives([&](int dim, int i, int j, auto &it, int tn) {
 				double area;
 				vec2i pi(i,j);
-				if( pi[dim] == 0 || pi[dim] == solid.shape()[dim] ) area = 0.0;
+				if( enclose_domain_boundary && (pi[dim] == 0 || pi[dim] == m_shape[dim] )) area = 0.0;
 				else area = 1.0-utility::fraction(solid(i,j),solid(i+(dim!=0),j+(dim!=1)));
 				if( area && area < m_param.eps_solid ) area = m_param.eps_solid;
 				it.set(area);
@@ -113,13 +117,15 @@ protected:
 		} else {
 			//
 			areas.clear(1.0);
-			for( int i=0; i<m_shape.w; ++i ) {
-				areas[1].set(i,0,0.0);
-				areas[1].set(i,m_shape.h,0.0);
-			}
-			for( int j=0; j<m_shape.h; ++j ) {
-				areas[0].set(0,j,0.0);
-				areas[0].set(m_shape.w,j,0.0);
+			if( enclose_domain_boundary ) {
+				for( int i=0; i<m_shape.w; ++i ) {
+					areas[1].set(i,0,0.0);
+					areas[1].set(i,m_shape.h,0.0);
+				}
+				for( int j=0; j<m_shape.h; ++j ) {
+					areas[0].set(0,j,0.0);
+					areas[0].set(m_shape.w,j,0.0);
+				}
 			}
 		}
 	}
@@ -265,72 +271,58 @@ protected:
 			jacobian[dim] /= m_dx;
 		}
 	}
-	virtual void assign_initial_variables( const dylibloader &dylib, macarray2<Real> &velocity,
-									array2<Real> *solid=nullptr, array2<Real> *fluid=nullptr, array2<Real> *density=nullptr ) const override {
+	virtual void assign_initial_variables( const dylibloader &dylib, 
+					array2<Real> *solid, macarray2<Real> *solid_velocity,
+					array2<Real> *fluid, macarray2<Real> *fluid_velocity,
+					array2<Real> *density ) const override {
 		//
 		// Assign initial velocity
-		velocity.set_touch_only_actives(true);
-		const double sqrt2 = sqrt(2.0);
-		auto velocity_func = reinterpret_cast<vec2d(*)(const vec2d &)>(dylib.load_symbol("velocity"));
-		if( velocity_func ) {
+		if( fluid_velocity ) {
+			auto velocity_func = reinterpret_cast<vec2d(*)(const vec2d &)>(dylib.load_symbol("velocity"));
 			auto fluid_func = reinterpret_cast<double(*)(const vec2d &)>(dylib.load_symbol("fluid"));
-			velocity.parallel_all([&](int dim, int i, int j, auto &it) {
+			fluid_velocity->parallel_all([&](int dim, int i, int j, auto &it) {
 				bool skip (false);
 				if( fluid_func ) {
-					skip = (*fluid_func)(m_dx*vec2i(i,j).face(dim)) > sqrt2*m_dx;
+					skip = (*fluid_func)(m_dx*vec2i(i,j).face(dim)) > m_param.narrowband_dist*m_dx;
 				}
 				if( ! skip ) {
-					vec2d value = (*velocity_func)(m_dx*vec2i(i,j).face(dim));
+					vec2d value = velocity_func ? (*velocity_func)(m_dx*vec2i(i,j).face(dim)) : 0.0;
 					it.set(value[dim]);
 				}
 			});
 		}
 		//
-		// Assign solid levelset
-		if( solid ) {
-			solid->set_as_levelset(sqrt2*m_dx);
-			auto solid_func = reinterpret_cast<double(*)(const vec2d &)>(dylib.load_symbol("solid"));
-			if( solid_func ) {
-				solid->parallel_all([&](int i, int j, auto &it) {
-					double value = (*solid_func)(m_dx*vec2i(i,j).nodal());
-					if( std::abs(value) < sqrt2*m_dx ) it.set(value);
-				});
-			}
-			solid->flood_fill();
-		}
-		//
 		// Assign fluid levelset
 		if( fluid ) {
-			fluid->set_as_levelset(sqrt2*m_dx);
+			//
 			auto fluid_func = reinterpret_cast<double(*)(const vec2d &)>(dylib.load_symbol("fluid"));
 			auto solid_func = reinterpret_cast<double(*)(const vec2d &)>(dylib.load_symbol("solid"));
+			auto moving_solid_func = reinterpret_cast<std::pair<double,vec2d>(*)(double time, const vec2d &p)>(dylib.load_symbol("moving_solid"));
 			if( fluid_func ) {
-				if( solid_func ) {
+				if( solid_func || moving_solid_func ) {
 					fluid->parallel_all([&](int i, int j, auto &it) {
 						vec2d p = m_dx*vec2i(i,j).cell();
-						double fluid_value = (*fluid_func)(p);
-						double solid_value = (*solid_func)(p)+m_dx;
-						double value = std::max(fluid_value,-solid_value);
-						if( std::abs(value) < sqrt2*m_dx ) it.set(value);
+						double value = (*fluid_func)(p);
+						double solid_value0 = solid_func ? (*solid_func)(p)+m_dx : 1.0;
+						double solid_value1 = moving_solid_func ? (*moving_solid_func)(0.0,p).first+m_dx : 1.0;
+						value = std::max(value,-solid_value0);
+						value = std::max(value,-solid_value1);
+						if( ! m_param.narrowband_dist || std::abs(value) < m_param.narrowband_dist*m_dx ) it.set(value);
 					});
 				} else {
 					fluid->parallel_all([&](int i, int j, auto &it) {
 						double value = (*fluid_func)(m_dx*vec2i(i,j).cell());
-						if( std::abs(value) < sqrt2*m_dx ) it.set(value);
+						if( ! m_param.narrowband_dist || std::abs(value) < m_param.narrowband_dist*m_dx ) it.set(value);
 					});
 				}
+			} else {
+				fluid->clear(-1.0);
 			}
-			fluid->flood_fill();
 			//
-			// Activate velocity inside fluid
-			shared_bitmacarray2 velocity_actives(velocity.shape());
-			for( int dim : DIMS2 ) {
-				velocity_actives()[dim].activate_inside_as(*fluid);
-				velocity_actives()[dim].activate_inside_as(*fluid,vec2i(dim==0,dim==1));
+			if( m_param.narrowband_dist ) {
+				fluid->set_as_levelset(m_param.narrowband_dist*m_dx);
+				fluid->flood_fill();
 			}
-			velocity.activate_as_bit(velocity_actives());
-		} else {
-			velocity.activate_all();
 		}
 		//
 		// Assign density
@@ -341,6 +333,87 @@ protected:
 					it.set((*density_func)(m_dx*vec2i(i,j).cell()));
 				});
 			}
+		}
+		//
+		// Assign solid variables
+		update_solid_variables(dylib,0.0,solid,solid_velocity);
+	}
+	virtual void update_solid_variables( const dylibloader &dylib, double time, array2<Real> *solid, macarray2<Real> *solid_velocity ) const override {
+		//
+		auto moving_solid_func = reinterpret_cast<std::pair<double,vec2d>(*)(double time, const vec2d &p)>(dylib.load_symbol("moving_solid"));
+		auto solid_func = reinterpret_cast<double(*)(const vec2d &)>(dylib.load_symbol("solid"));
+		auto set_boundary_flux = reinterpret_cast<void(*)( double, Real [DIM2][2] )>(dylib.load_symbol("set_boundary_flux"));
+		//
+		if( solid ) {
+			solid->clear(1.0);
+			if( solid_func || moving_solid_func ) {
+				//
+				solid->parallel_all([&](int i, int j, auto &it) {
+					const vec2d &p = m_dx*vec2i(i,j).nodal();
+					double value (1.0);
+					if( solid_func ) value = std::min(value,solid_func(p));
+					if( moving_solid_func ) value = std::min(value,moving_solid_func(time,p).first);
+					if( ! m_param.narrowband_dist || std::abs(value) < m_param.narrowband_dist*m_dx ) it.set(value);
+				});
+				if( m_param.narrowband_dist ) {
+					solid->set_as_levelset(m_param.narrowband_dist*m_dx);
+					solid->flood_fill();
+				}
+				//
+				if( solid_velocity && moving_solid_func ) {
+					//
+					shared_array2<vec2d> tmp_nodal_velocity(m_shape.nodal());
+					tmp_nodal_velocity->parallel_all([&](int i, int j, auto &it) {
+						if( (*solid)(i,j) < 0.0 ) {
+							it.set(moving_solid_func(time,m_dx*vec2i(i,j).nodal()).second);
+						}
+					});
+					//
+					const auto get_face_vertices = [&]( int dim, const vec2i &pi ) {
+						std::vector<vec2i> result(2);
+						result[0] = pi;
+						result[1] = pi+vec2i(dim!=0,dim!=1);
+						return result;
+					};
+					//
+					solid_velocity->clear();
+					solid_velocity->parallel_all([&]( int dim, int i, int j, auto &it ) {
+						std::vector<vec2i> results = get_face_vertices(dim,vec2i(i,j));
+						double wsum (0.0), sum (0.0);
+						for( const auto &pi : results ) {
+							if( (*solid)(pi) < 0.0 ) {
+								wsum += 1.0;
+								sum += tmp_nodal_velocity()(pi)[dim];
+							}
+						}
+						if( wsum ) {
+							it.set(sum/wsum);
+						}
+					});
+				}
+			}
+		}
+		//
+		if( set_boundary_flux && solid_velocity ) {
+			Real flux[DIM2][2] = {{0.0,0.0},{0.0,0.0}};
+			set_boundary_flux(time,flux);
+			for( int i=0; i<m_shape.w; ++i ) {
+				(*solid_velocity)[1].set(i,0,flux[1][0]);
+				(*solid_velocity)[1].set(i,m_shape.h,flux[1][1]);
+			}
+			for( int j=0; j<m_shape.h; ++j ) {
+				(*solid_velocity)[0].set(0,j,flux[0][0]);
+				(*solid_velocity)[0].set(m_shape.w,j,flux[0][1]);
+			}
+		}
+		//
+		auto velocity_func = reinterpret_cast<vec2d(*)(double, const vec2d &)>(dylib.load_symbol("boundary_velocity"));
+		if( velocity_func && solid_velocity ) {
+			solid_velocity->parallel_all([&]( int dim, int i, int j, auto &it ) {
+				const double value = velocity_func(time,m_dx*vec2i(i,j).face(dim))[dim];
+				if( value ) it.set(value);
+				else it.set_off();
+			});
 		}
 	}
 	virtual void add_force( vec2d p, vec2d f, macarray2<Real> &external_force ) const override {
@@ -354,10 +427,19 @@ protected:
 		m_shape = shape;
 		m_dx = dx;
 	}
+	virtual void initialize( const filestream &file ) override {
+		file.r(m_shape);
+		file.r(m_dx);
+	}
+	virtual void serialize( const filestream &file ) const override {
+		file.w(m_shape);
+		file.w(m_dx);
+	}
 	virtual void configure( configuration &config ) override {
 		config.get_double("EpsFluid",m_param.eps_fluid,"Minimal bound for fluid fraction");
 		config.get_double("EpsSolid",m_param.eps_solid,"Minimal bound for solid fraction");
 		config.get_bool("WENO",m_param.weno_interpolation,"Whether to use WENO interpolation");
+		config.get_double("NarrowBandDist",m_param.narrowband_dist);
 	}
 	//
 	struct Parameters {
@@ -365,6 +447,7 @@ protected:
 		double eps_fluid {1e-2};
 		double eps_solid {1e-2};
 		bool weno_interpolation {false};
+		double narrowband_dist {sqrt(2.0)};
 	};
 	//
 	Parameters m_param;

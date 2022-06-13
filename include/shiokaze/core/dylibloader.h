@@ -66,11 +66,15 @@ public:
 	const void *get_handle() const { return m_handle; }
 	/**
 	 \~english @brief Load function of global variable.
+	 @param[in] name Name of the variable.
+	 @param[in] exit_if_not_found Whether to exit program if not found.
 	 @return Pointer to the loaded function or global variable.
 	 \~japanese @brief 関数あるいはグローバル変数を読み込む。
+	 @param[in] name 変数の名前。
+	 @param[in] exit_if_not_found もし見つかなければプログラムを終了するかどうか。
 	 @return 読み込まれた関数あるいはグローバル変数へのポインタ。
 	 */
-	void* load_symbol( std::string name ) const;
+	void* load_symbol( std::string name, bool exit_if_not_found=false ) const;
 	/**
 	 \~english @brief Call the function symbol "load".
 	 @param[in] config Configuration setting.
