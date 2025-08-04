@@ -92,8 +92,27 @@ void macsmoke2::post_initialize ( bool initialized_from_file ) {
 	m_solid_func = reinterpret_cast<double(*)(const vec2d &)>(m_dylib.load_symbol("solid"));
 	m_draw_func = reinterpret_cast<void(*)(graphics_engine &,double)>(m_dylib.load_symbol("draw"));
 	m_moving_solid_func = reinterpret_cast<std::pair<double,vec2d>(*)(double time, const vec2d &p)>(m_dylib.load_symbol("moving_solid"));
+	
+	// m_check_inject_func = reinterpret_cast<bool(*)(double, double, double, unsigned)>(m_dylib.load_symbol("check_inject"));
+	// m_inject_func = reinterpret_cast<bool(*)(const vec2d &, double, double, double, unsigned, double &, vec2d &)>(m_dylib.load_symbol("inject"));
+	// m_post_inject_func = reinterpret_cast<void(*)(double, double, double, unsigned, double&)>(m_dylib.load_symbol("post_inject"));
+	// auto velocity_func = reinterpret_cast<vec2d(*)(const vec2d &)>(m_dylib.load_symbol("velocity"));
+	// m_gravity_func = reinterpret_cast<vec2d(*)(double)>(m_dylib.load_symbol("gravity"));
 	m_set_boundary_flux = reinterpret_cast<void(*)( double, Real [DIM2][2] )>(m_dylib.load_symbol("set_boundary_flux"));
-	//
+	//  m_combined_solid_func = [&]( const vec2d &p ) {
+	// 	double value (1.0);
+	// 	if( m_solid_func ) value = std::min(value,m_solid_func(p));
+	// 	if( m_moving_solid_func ) value = std::min(value,m_moving_solid_func(m_timestepper->get_current_time(),p).first);
+	// 	return value;
+	// };
+	// if( m_moving_solid_func ) {
+	// 	m_macoctreeproject.set_moving_solid([&]( const vec2d &p) {
+	// 		return m_moving_solid_func(m_timestepper->get_current_time(),p).first;
+	// 	});
+	// }
+	
+	//ここはmacoctreeliquidにあってmacsmokeにない部分。比較のために書き起こしてみた
+
 	// Initialize arrays
 	m_force_exist = false;
 	m_velocity.initialize(m_shape);
