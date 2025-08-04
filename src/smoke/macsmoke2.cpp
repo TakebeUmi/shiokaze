@@ -112,7 +112,14 @@ void macsmoke2::post_initialize ( bool initialized_from_file ) {
 	// }
 	
 	//ここはmacoctreeliquidにあってmacsmokeにない部分。比較のために書き起こしてみた
+	//macoctreeproject.set_moving_solidに引数を入れて何かをしているみたい。
 
+	// m_accumulated_CFL = 0.0;
+	// m_grid_0.clear();
+	// m_grid_1.clear();
+	// m_macoctreehelper.initialize();
+	//octreehelperというもので何かを初期化している（octreeの構造？）
+	
 	// Initialize arrays
 	m_force_exist = false;
 	m_velocity.initialize(m_shape);
