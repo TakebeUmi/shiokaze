@@ -39,3 +39,4 @@ def build(bld):
 			cxxflags = ['-DINDEX_TYPE=size_t','-DFLOAT_TYPE=double'],
 			target = bld.get_target_name(bld,'amg'),
 			use = bld.get_target_name(bld,'core'))
+

@@ -149,3 +149,8 @@ def build(bld):
 			target = bld.get_lib_name(bld,'river3'),
 			cxxflags = ['-Wno-return-type-c-linkage'],
 			use = bld.get_target_name(bld,'core'))
+	
+	bld.shlib(source = 'dambreak3_2.cpp',
+            target = 'dambreak3'+bld.env.suffix,
+            cxxflags = ['-Wno-return-type-c-linkage'],
+            use = bld.get_target_name(bld,'core'))

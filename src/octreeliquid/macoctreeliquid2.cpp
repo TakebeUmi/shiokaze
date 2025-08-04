@@ -708,3 +708,41 @@ extern "C" module * create_instance() {
 	return new macoctreeliquid2;
 }
 //
+
+// --- 適応的グリッド（AMR: Adaptive Mesh Refinement）の実装ポイント ---
+//
+// 1. グリッド構造
+//   - m_grid, m_grid_prev, m_grid_0, m_grid_1 などが octree ベースの多層グリッドを保持。
+//   - m_grid->layers で各解像度レベルのグリッドを管理（octreeの各深さが異なる解像度）。
+//
+// 2. 初期化・リファインメント
+//   - post_initialize() 内で
+//     - m_shape/n の最小値が min_resolution 以上になるまで add_layer() で多層グリッドを構築。
+//     - m_param.initial_refinement 回数だけ activate_cells() で細分化（リファインメント）を実施。
+//     - use_sizing_func=true の場合は m_macoctreesizingfunc.activate_cells() でセルごとに細分化基準を適用。
+//     - それ以外は fluid_func, m_combined_solid_func で流体/固体領域に応じて細分化。
+//     - balance_layers() で隣接セルのレベル差を1以内に調整（octreeのバランス化）。
+//
+// 3. 時間発展中のリメッシュ
+//   - idle() 内で
+//     - m_accumulated_CFL が閾値を超える or 流体注入時に std::swap(m_grid, m_grid_prev) でグリッドを入れ替え、
+//       activate_cells() で再細分化（リファインメント）を実施。
+//     - use_sizing_func=true の場合は sizing function に基づきセルごとに細分化。
+//     - それ以外は流体/固体領域や流体注入に応じて細分化。
+//     - balance_layers(), assign_indices() でグリッドを再構成。
+//
+// 4. 細分化基準
+//   - use_sizing_func=true の場合: m_macoctreesizingfunc.compute_sizing_function() で物理量やユーザー関数に基づき細分化レベルを決定。
+//   - それ以外: fluid_func, m_combined_solid_func で流体/固体の存在や注入条件に応じてセルを細分化。
+//   - activate_cells() のラムダでセルごとに細分化/縮退の判定を行う。
+//
+// 5. その他
+//   - balance_layers() でoctreeのバランスを保ち、隣接セルのレベル差が大きくならないようにしている。
+//   - assign_levelset(), assign_indices() で各セルの物理量やインデックスを再割り当て。
+//   - m_grid->reconstruct_fluid(), m_grid->reconstruct_velocity() で高解像度フィールドを再構築。
+
+// --- まとめ ---
+// ・octreeベースの多層グリッドを使い、セルごとに細分化/縮退をactivate_cells()で判定。
+// ・細分化基準はsizing functionまたは流体/固体領域・注入条件など。
+// ・balance_layers()でoctreeのバランスを維持。
+// ・時間発展ごとに必要に応じてグリッドをリファイン・リメッシュしている。
