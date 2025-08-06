@@ -22,6 +22,7 @@
 **	OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 //
+#include <limits>
 #include <shiokaze/ui/camera3_interface.h>
 #include <shiokaze/graphics/graphics_utility.h>
 #include <shiokaze/math/vec.h>

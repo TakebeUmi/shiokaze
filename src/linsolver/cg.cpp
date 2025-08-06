@@ -22,6 +22,7 @@
 **	OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 //
+#include <limits>
 #include <shiokaze/linsolver/RCMatrix_solver.h>
 #include <cmath>
 //

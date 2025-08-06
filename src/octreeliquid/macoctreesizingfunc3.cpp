@@ -21,6 +21,7 @@
 **	OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 //
+#include <limits>
 #include "macoctreesizingfunc3.h"
 #include <shiokaze/core/console.h>
 #include <numeric>

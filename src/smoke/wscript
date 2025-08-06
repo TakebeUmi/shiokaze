@@ -53,3 +53,8 @@ def build(bld):
 			target = bld.get_target_name(bld,'macbackwardflipsmoke3'),
 			cxxflags = ['-DSPATIAL_DIM=3'],
 			use = bld.get_target_name(bld,'macsmoke3'))
+	bld.shlib(source = 'macsmoke2_oc.cpp',
+			target = bld.get_target_name(bld,'macsmoke2_oc'),
+			cxxflags = ['-DSPATIAL_DIM=2'],
+			use = bld.get_target_name(bld,['core','timestepper','macutility2','images']))
+	#
