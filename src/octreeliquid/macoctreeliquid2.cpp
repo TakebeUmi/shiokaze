@@ -322,7 +322,7 @@ void macoctreeliquid2::idle() {
 	shared_macarray2<Real> highres_velocity(m_shape);
 	shared_macarray2<Real> save_velocity(m_shape);
 	//
-	// Define reconstruct test functions
+	// Define reconstruct test functions(レベルセット法の更新に使う)
 	auto reconstruct_test_func_cell = [&]( int i, int j, const Real &levelset_value ) {
 		return levelset_value < (m_param.erode_width+2)*m_dx && levelset_value > -m_narrowband_depth-(m_param.erode_width+2)*m_dx;
 	};
@@ -746,3 +746,23 @@ extern "C" module * create_instance() {
 // ・細分化基準はsizing functionまたは流体/固体領域・注入条件など。
 // ・balance_layers()でoctreeのバランスを維持。
 // ・時間発展ごとに必要に応じてグリッドをリファイン・リメッシュしている。
+
+// --- macoctreeliquid2とmacsmoke2の初期化・リファインメント処理の比較 ---
+//
+// macoctreeliquid2:
+//   - octreeベースの多層グリッド（m_grid, m_grid_prev, m_grid_0, m_grid_1など）を構築。
+//   - activate_cells()やbalance_layers()でセルごとに細分化/縮退を判定し、octreeのバランスを維持。
+//   - use_sizing_func=true時は物理量やユーザー関数に基づき細分化レベルを決定。
+//   - 流体/固体領域や注入条件に応じてセルを細分化。
+//   - assign_levelset(), assign_indices()で物理量やインデックスを再割り当て。
+//   - 高解像度フィールドの再構築やFLIP粒子のリサンプリングも実施。
+//
+// macsmoke2:
+//   - 均一格子ベースで、グリッド構造は単一解像度のみ。
+//   - m_velocity, m_solid, m_densityなどの配列を初期化し、assign_initial_variables()で一括設定。
+//   - リファインメントやバランス化、セルごとの細分化判定は行わない。
+//   - ダスト粒子（use_dust=true時）の初期化・ラスタライズもここで実施。
+//
+// --- まとめ ---
+// ・macoctreeliquid2はAMR（適応的グリッド）を活用し、細分化・バランス化・物理量再割り当てなど多段階の初期化を行う。
+// ・macsmoke2は均一格子ベースで、初期化処理がシンプル。

@@ -119,7 +119,29 @@ void macsmoke2::post_initialize ( bool initialized_from_file ) {
 	// m_grid_1.clear();
 	// m_macoctreehelper.initialize();
 	//octreehelperというもので何かを初期化している（octreeの構造？）
-	
+
+	// --- macsmoke2とmacoctreeliquid2の初期化・リファインメント処理の比較 ---
+	//
+	// macsmoke2:
+	//   - m_shape, m_dxを設定し、m_velocity, m_solid, m_densityなどの配列を初期化。
+	//   - 固体・流体・速度・密度などの初期値はassign_initial_variables()で一括設定。
+	//   - グリッド構造は単一解像度（均一格子）で、octreeや多層グリッドは使わない。
+	//   - リファインメントやバランス化、セルごとの細分化判定は行わない。
+	//   - ダスト粒子（use_dust=true時）の初期化・ラスタライズもここで実施。
+	//
+	// macoctreeliquid2:
+	//   - octreeベースの多層グリッド（m_grid, m_grid_prev, m_grid_0, m_grid_1など）を構築。
+	//   - activate_cells()やbalance_layers()でセルごとに細分化/縮退を判定し、octreeのバランスを維持。
+	//   - use_sizing_func=true時は物理量やユーザー関数に基づき細分化レベルを決定。
+	//   - 流体/固体領域や注入条件に応じてセルを細分化。
+	//   - assign_levelset(), assign_indices()で物理量やインデックスを再割り当て。
+	//   - 高解像度フィールドの再構築やFLIP粒子のリサンプリングも実施。
+	//
+	// --- まとめ ---
+	// ・macsmoke2は均一格子ベース、macoctreeliquid2はoctreeベースの適応的グリッドを利用。
+	// ・macsmoke2はリファインメントやバランス化処理がなく、初期化も単純。
+	// ・macoctreeliquid2は細分化基準やバランス化、セルごとの判定などAMR的な処理が多い。
+	//
 	// Initialize arrays
 	m_force_exist = false;
 	m_velocity.initialize(m_shape);
@@ -276,6 +298,11 @@ void macsmoke2::idle() {
 	// Update solid
 	m_macutility->update_solid_variables(m_dylib,time,&m_solid,&m_solid_velocity);
 	//
+	// macoctreeliquidでは密度の代わりにレベルセットを移流しており、タイムステップの計算から移流までに
+	// 1．流体の注入
+	// 2．グリッドのスワップとリメッシュ
+	// 3．レベルセットの更新
+
 	// Advect density and velocity
 	if( m_param.use_dust ) advect_dust_particles(m_velocity,dt);
 	else {
