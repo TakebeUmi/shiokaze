@@ -101,6 +101,12 @@ protected:
 		bool show_graph {false};
 		unsigned extrapolated_width {3};
 		double buoyancy_factor {2.0};
+
+		//以下はoctree導入にあたって追加するパラメータ
+        unsigned min_resolution {16};  // 最小解像度
+        bool use_sizing_func {true};   // サイジング関数を使用
+        unsigned initial_refinement {3}; // 初期リファインメント回数
+        double maximal_CFL_accumulation {1.0}; // リメッシュのCFL閾値
 	};
 	//
 	Parameters m_param;
