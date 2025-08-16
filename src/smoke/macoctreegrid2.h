@@ -21,8 +21,8 @@
 **	OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 //
-#ifndef SHKZ_OCTREEGRID2_H
-#define SHKZ_OCTREEGRID2_H
+// #ifndef SHKZ_OCTREEGRID2_H
+// #define SHKZ_OCTREEGRID2_H
 //
 #include <shiokaze/math/vec.h>
 #include <shiokaze/array/bitarray2.h>

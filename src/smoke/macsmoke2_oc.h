@@ -25,7 +25,7 @@
 #ifndef SHKZ_macsmoke2_oc_H
 #define SHKZ_macsmoke2_oc_H
 //
-#include <shiokaze/src/octreeliquid/macoctreegrid2.h>
+#include "../octreeliquid/macoctreegrid2.h"
 #include <shiokaze/array/array2.h>
 #include <shiokaze/array/macarray2.h>
 #include <shiokaze/parallel/parallel_driver.h>
