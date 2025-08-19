@@ -49,6 +49,8 @@
 //
 SHKZ_BEGIN_NAMESPACE
 //
+using namespace macotreeliquid2_namespace;
+
 class macsmoke2_oc : public drawable {
 public:
 	//
@@ -92,6 +94,11 @@ protected:
     grid2 *m_grid_prev {&m_grid_1};
     
     double m_accumulated_CFL {0.0};
+
+    
+    
+    // octreeプロジェクトの宣言
+    macoctreeproject2 m_macoctreeproject{this};
 	//追加分ここまで
 	//
 	struct Parameters {
@@ -131,6 +138,10 @@ protected:
 	std::function<double(const vec2d &)> m_solid_func;
 	std::function<void(double,Real [DIM2][2])> m_set_boundary_flux;
 	std::function<std::pair<double,vec2d>( double, const vec2d &)> m_moving_solid_func;
+	//
+
+	//added
+	std::function<double(const vec2d &)> m_combined_solid_func;
 	//
 	virtual void inject_external_force( macarray2<Real> &velocity );
 	virtual void add_buoyancy_force( macarray2<Real> &velocity, const array2<Real> &density, double dt );

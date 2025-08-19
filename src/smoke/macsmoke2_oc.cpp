@@ -99,26 +99,62 @@ void macsmoke2_oc::post_initialize ( bool initialized_from_file ) {
 	// auto velocity_func = reinterpret_cast<vec2d(*)(const vec2d &)>(m_dylib.load_symbol("velocity"));
 	// m_gravity_func = reinterpret_cast<vec2d(*)(double)>(m_dylib.load_symbol("gravity"));
 	m_set_boundary_flux = reinterpret_cast<void(*)( double, Real [DIM2][2] )>(m_dylib.load_symbol("set_boundary_flux"));
-	//  m_combined_solid_func = [&]( const vec2d &p ) {
-	// 	double value (1.0);
-	// 	if( m_solid_func ) value = std::min(value,m_solid_func(p));
-	// 	if( m_moving_solid_func ) value = std::min(value,m_moving_solid_func(m_timestepper->get_current_time(),p).first);
-	// 	return value;
-	// };
-	// if( m_moving_solid_func ) {
-	// 	m_macoctreeproject.set_moving_solid([&]( const vec2d &p) {
-	// 		return m_moving_solid_func(m_timestepper->get_current_time(),p).first;
-	// 	});
-	// }
+	m_combined_solid_func = [&]( const vec2d &p ) {
+		double value (1.0);
+		if( m_solid_func ) value = std::min(value,m_solid_func(p));
+		if( m_moving_solid_func ) value = std::min(value,m_moving_solid_func(m_timestepper->get_current_time(),p).first);
+		return value;
+	};
+	if( m_moving_solid_func ) {
+		m_macoctreeproject.set_moving_solid([&]( const vec2d &p) {
+			return m_moving_solid_func(m_timestepper->get_current_time(),p).first;
+		});
+	}
 	
 	//ここはmacoctreeliquidにあってmacsmokeにない部分。比較のために書き起こしてみた
 	//macoctreeproject.set_moving_solidに引数を入れて何かをしているみたい。
-
-	// m_accumulated_CFL = 0.0;
-	// m_grid_0.clear();
-	// m_grid_1.clear();
+	
+	//added
+	m_accumulated_CFL = 0.0;
+	m_grid_0.clear();
+	m_grid_1.clear();
 	// m_macoctreehelper.initialize();
 	//octreehelperというもので何かを初期化している（octreeの構造？）
+
+	//added
+
+    unsigned n = 1;
+    while( (m_shape/n).min() >= m_param.min_resolution ) {
+        shape2 shape = m_shape/n;
+        m_grid_0.add_layer(shape,n*m_dx);
+        m_grid_1.add_layer(shape,n*m_dx);
+        n *= 2;
+    }
+
+	int refinement_count = m_param.use_sizing_func ? m_param.initial_refinement : 1;
+    while( refinement_count-- ) {
+        std::swap(m_grid,m_grid_prev);
+
+        if( m_param.use_sizing_func ) {
+            if( refinement_count ) {
+                m_grid->activate_cells([&](char depth, const vec2d &p) {
+                    return depth > 3;
+                });
+            }
+        } else {
+            // 密度に基づいてセルを活性化
+            m_grid->activate_cells([&](const vec2d &p) {
+                return array_interpolator2::interpolate<Real>(m_density,p/m_dx) > m_param.minimal_density;
+            }, m_combined_solid_func);
+        }
+
+        m_grid->balance_layers();
+        m_grid->assign_indices();
+        m_grid->assign_levelset([&](const vec2d &p) {
+            return array_interpolator2::interpolate<Real>(m_density,p/m_dx);
+        }, m_combined_solid_func);
+    }
+
 	
 	// Initialize arrays
 	m_force_exist = false;
@@ -272,7 +308,41 @@ void macsmoke2_oc::idle() {
 	// Compute the timestep size
 	const double dt = m_timestepper->advance(m_macutility->compute_max_u(m_velocity),m_dx);
 	const double time = m_timestepper->get_current_time();
-	//
+	const double CFL = m_timestepper->get_current_CFL();
+	//added
+
+    // octreeグリッドのリメッシュ判定
+    m_accumulated_CFL += CFL;
+    std::swap(m_grid,m_grid_prev);
+    if( m_accumulated_CFL >= m_param.maximal_CFL_accumulation ) {
+        m_accumulated_CFL = 0.0;
+
+        if( m_param.use_sizing_func ) {
+			//ここでactivatecellsの引数がて不適切らしい。->よく考えたらactivate cellsを行う基準を考えてなかったのでそれはそうかも→あくまで練習だし適当に決めてもいいんじゃないかな～～～
+            m_grid->activate_cells([&](char depth, const vec2d &p) {
+                double density = array_interpolator2::interpolate<Real>(m_density,p/m_dx);
+                return density > m_param.minimal_density;
+            }, m_combined_solid_func);
+        } else {
+            m_grid->activate_cells([&](const vec2d &p) {
+                return array_interpolator2::interpolate<Real>(m_density,p/m_dx) > m_param.minimal_density;
+            }, m_combined_solid_func);
+        }
+
+        m_grid->balance_layers();
+        m_grid->assign_indices();
+    } else {
+        m_grid->copy(*m_grid_prev);
+    }
+	//added
+
+    m_grid->assign_levelset([&](const vec2d &p) {
+        vec2d u (m_grid_prev->sample_velocity(p));
+        double d = array_interpolator2::interpolate<Real>(m_density,p/m_dx);
+        return d > m_param.minimal_density ? -1.0 : 1.0;
+    }, m_combined_solid_func);
+	//added
+
 	// Update solid
 	m_macutility->update_solid_variables(m_dylib,time,&m_solid,&m_solid_velocity);
 	//
