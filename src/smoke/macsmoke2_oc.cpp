@@ -123,6 +123,27 @@ void macsmoke2_oc::post_initialize ( bool initialized_from_file ) {
 
 	//added
 
+
+
+	
+	// Initialize arrays
+	m_force_exist = false;
+	m_velocity.initialize(m_shape);
+	m_solid_velocity.initialize(m_shape);
+	m_external_force.initialize(m_shape);
+	//
+	m_solid.initialize(m_shape.nodal());
+	m_fluid.initialize(m_shape.cell(),-1.0);
+	m_density.initialize(m_shape.cell(),0.0);
+	//
+	if( m_param.use_dust ) {
+		m_accumulation.initialize(m_shape.cell(),0.0);
+	}
+	m_dust_particles.clear();
+	//
+	// Assign initial variables from scene
+	m_macutility->assign_initial_variables(m_dylib,&m_solid,&m_solid_velocity,nullptr,&m_velocity,&m_density);
+	//
     unsigned n = 1;
     while( (m_shape/n).min() >= m_param.min_resolution ) {
         shape2 shape = m_shape/n;
@@ -154,26 +175,6 @@ void macsmoke2_oc::post_initialize ( bool initialized_from_file ) {
             return array_interpolator2::interpolate<Real>(m_density,p/m_dx);
         }, m_combined_solid_func);
     }
-
-	
-	// Initialize arrays
-	m_force_exist = false;
-	m_velocity.initialize(m_shape);
-	m_solid_velocity.initialize(m_shape);
-	m_external_force.initialize(m_shape);
-	//
-	m_solid.initialize(m_shape.nodal());
-	m_fluid.initialize(m_shape.cell(),-1.0);
-	m_density.initialize(m_shape.cell(),0.0);
-	//
-	if( m_param.use_dust ) {
-		m_accumulation.initialize(m_shape.cell(),0.0);
-	}
-	m_dust_particles.clear();
-	//
-	// Assign initial variables from scene
-	m_macutility->assign_initial_variables(m_dylib,&m_solid,&m_solid_velocity,nullptr,&m_velocity,&m_density);
-	//
 	// Project to make sure that the velocity field is divergence free at the beggining
 	double max_u = m_macutility->compute_max_u(m_velocity);
 	if( max_u ) {
@@ -319,10 +320,11 @@ void macsmoke2_oc::idle() {
 
         if( m_param.use_sizing_func ) {
 			//ここでactivatecellsの引数がて不適切らしい。->よく考えたらactivate cellsを行う基準を考えてなかったのでそれはそうかも→あくまで練習だし適当に決めてもいいんじゃないかな～～～
-            m_grid->activate_cells([&](char depth, const vec2d &p) {
-                double density = array_interpolator2::interpolate<Real>(m_density,p/m_dx);
-                return density > m_param.minimal_density;
-            }, m_combined_solid_func);
+			//解決！
+           m_grid->activate_cells([&](char depth, const vec2d &p) {
+            double density = array_interpolator2::interpolate<Real>(m_density,p/m_dx);
+            return density > m_param.minimal_density;
+        	});
         } else {
             m_grid->activate_cells([&](const vec2d &p) {
                 return array_interpolator2::interpolate<Real>(m_density,p/m_dx) > m_param.minimal_density;
@@ -334,7 +336,7 @@ void macsmoke2_oc::idle() {
     } else {
         m_grid->copy(*m_grid_prev);
     }
-	//added
+
 
     m_grid->assign_levelset([&](const vec2d &p) {
         vec2d u (m_grid_prev->sample_velocity(p));
@@ -447,13 +449,17 @@ void macsmoke2_oc::draw( graphics_engine &g ) const {
 	}
 	//
 	// Draw grid edges
-	m_gridvisualizer->draw_grid(g);
+	//m_gridvisualizer->draw_grid(g);
+	//
+
+    m_grid->draw_grid(g);
+    //m_grid->draw_fluid(g);
 	//
 	// Draw projection component
-	m_macproject->draw(g);
+	// m_macproject->draw(g);
 	//
 	// Draw velocity
-	m_macvisualizer->draw_velocity(g,m_velocity);
+	// m_macvisualizer->draw_velocity(g,m_velocity);
 	//
 	// Draw density
 	if( m_param.use_dust ) draw_dust_particles(g);
