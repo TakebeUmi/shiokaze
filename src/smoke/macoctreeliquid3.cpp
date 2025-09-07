@@ -462,7 +462,6 @@ void macoctreeliquid3::idle() {
 	}
 	//
 	// Advect level set
-	//ここを見ると移流はセミラグランジュ法で行っており、欲しい位置をサンプリングする関数を引数にいれることでレベルセットを設定・更新できる
 	m_grid->assign_levelset([&]( const vec3d &p ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
 		return m_grid_prev->sample_levelset(p-dt*u);

@@ -58,4 +58,8 @@ def build(bld):
 			target = bld.get_target_name(bld,'macsmoke2_oc'),
 			cxxflags = ['-DSPATIAL_DIM=2', '-I../'],
 			use = bld.get_target_name(bld,['core','timestepper','macutility2','images','octreeliquid','macoctreegrid2','macoctreeproject2','macoctreehelper2','macoctreesegregator2','macoctreesizingfunc2']))
+	bld.shlib(source = 'macsmoke3_oc.cpp',
+			target = bld.get_target_name(bld,'macsmoke3_oc'),
+			cxxflags = ['-DSPATIAL_DIM=2', '-I../'],
+			use = bld.get_target_name(bld,['core','timestepper','macutility3','images','octreeliquid','macoctreegrid3','macoctreeproject3','macoctreehelper3','macoctreesegregator3','macoctreesizingfunc3']))
 	#

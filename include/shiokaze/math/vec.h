@@ -364,6 +364,7 @@ template <class T, unsigned D> struct vec {
 		for( int dim=0; dim<D; ++dim ) result[dim] = v[dim]+0.5;
 		return result;
 	}
+	//セルの面中心をの位置を取得。次元は
 	/**
 	 \~english @brief Compute the position of the nodal position from the index space.
 	 @return Nodal position.
@@ -416,6 +417,8 @@ template <class T, unsigned D> static inline vec<T,D> operator-(const vec<T,D> &
 //
 template <class T> using vec2 = vec<T,2>;
 template <class T> using vec3 = vec<T,3>;
+//added
+template <class T> using vec1 = vec<T,1>; 
 //
 using vec2r = vec2<Real>;
 using vec2f = vec2<float>;

@@ -180,6 +180,7 @@ void macsmoke2_oc::post_initialize ( bool initialized_from_file ) {
 	if( max_u ) {
 		double CFL = m_timestepper->get_target_CFL();
 		m_macproject->project(CFL*m_dx/max_u,m_velocity,m_solid,m_solid_velocity,m_fluid);
+		//m_macoctreeproject.project(CFL*m_dx/max_u, m_grid, m_solid, m_solid_velocity);
 	}
 	//
 	// Seed dust particles if requested
