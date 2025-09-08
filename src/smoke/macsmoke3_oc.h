@@ -112,6 +112,28 @@ protected:
         unsigned initial_refinement {3};
         double maximal_CFL_accumulation {1.0};
 		bool maccormack {false};
+
+	double surftens_k {0.0};
+	unsigned erode_width {0};
+	bool render_mesh {false};
+	bool render_wireframe {false};
+	bool render_grid {false};
+	bool remove_quater {false};
+	double z {0.5};
+	bool export_svg {true};
+	unsigned render_sample_count {8};
+	unsigned save_interval {100};
+	vec3d target {0.5,0.15,0.5};
+	vec3d origin {0.5,1.5,3.0};
+	vec3d gravity {0.0,-9.8,0.0};
+	double PICFLIP {0.98};
+	bool render_transparent {false};
+	bool volume_correction {true};
+	bool regional_volume_correction {false};
+	bool maccormack {false};
+	unsigned render_transparent_sample_count {32};
+	bool transfer_file {true};
+	int debug_mode {0};
 	};
 	//
 	Parameters m_param;

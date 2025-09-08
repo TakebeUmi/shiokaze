@@ -89,6 +89,42 @@ void macsmoke3_oc::configure( configuration &config ) {
 	config.get_unsigned("RenderSampleCount",m_param.render_sample_count,"Sample count for rendering");
 	config.get_double("VolumeScale",m_param.volume_scale,"Volume scaling for rendering");
 	//
+	//added
+	config.get_vec3d("Gravity",m_param.gravity.v,"Gravity vector");
+	config.get_bool("UseFLIP",m_param.use_FLIP,"Whether to use FLIP");
+	config.get_bool("RenderMesh",m_param.render_mesh,"Whether to render mesh files");
+	config.get_bool("RenderWireframe",m_param.render_wireframe,"Whether to render wireframe view");
+	config.get_bool("RenderGrid",m_param.render_grid,"Render grid");
+	config.get_bool("RemoveQuarter",m_param.remove_quater,"Remove front-left meshes");
+	config.get_double("ZPosition",m_param.z,"Z coordinate position");
+	config.get_bool("ExportSVG",m_param.export_svg,"Export cutaway SVG");
+	config.get_unsigned("MinResolution",m_param.min_resolution,"Minimal resolution");
+	config.get_unsigned("ErodeWidth",m_param.erode_width,"Erosion width");
+	config.get_double("SurfaceTension",m_param.surftens_k,"Surface tension coefficient");
+	config.get_unsigned("ResolutionX",m_shape[0],"Resolution towards X axis");
+	config.get_unsigned("ResolutionY",m_shape[1],"Resolution towards Y axis");
+	config.get_unsigned("ResolutionZ",m_shape[2],"Resolution towards Z axis");
+	config.get_vec3d("TargetPos",m_param.target.v,"Camera target position");
+	config.get_vec3d("OriginPos",m_param.origin.v,"Camera origin position");
+	config.get_double("PICFLIP",m_param.PICFLIP,"PICFLIP blending factor");
+	config.get_bool("RenderTransparent",m_param.render_transparent,"Whether to render transparent view");
+	config.get_unsigned("RenderSampleCount",m_param.render_sample_count,"Sample count for rendering");
+	config.get_unsigned("RenderTransparentSampleCount",m_param.render_transparent_sample_count,"Sample count for transparent rendering");
+	config.get_bool("TransferFile",m_param.transfer_file,"Tranfer file via rsync");
+	config.get_unsigned("SaveInterval",m_param.save_interval,"Saving state interval time steps");
+	config.get_bool("VolumeCorrection",m_param.volume_correction,"Whether to perform volume correction");
+	config.get_bool("RegionalVolumeCorrection",m_param.regional_volume_correction,"Regional volume correction");
+	config.get_bool("MacCormack",m_param.maccormack,"Use MacCormack method");
+	config.get_bool("UseSizingFunc",m_param.use_sizing_func,"Use sizing function");
+	config.get_unsigned("InitialRefinement",m_param.initial_refinement,"Initial refinement count");
+	config.get_double("MaxCFLAccumulation",m_param.maximal_CFL_accumulation,"CFL sum trigger for remeshing");
+	config.get_integer("DebugMode",m_param.debug_mode,"Debug mode");
+	//
+	if( m_param.use_sizing_func ) {
+		config.set_default_bool("SteepAdaptivity",false);
+		config.set_default_unsigned("DilateCount",2);
+	}
+	//added
 	double view_scale (1.0);
 	config.get_double("ViewScale",view_scale,"View scale");
 	//
@@ -97,6 +133,21 @@ void macsmoke3_oc::configure( configuration &config ) {
 	//
 	m_shape *= resolution_scale;
 	m_dx = view_scale * m_shape.dx();
+	//added
+	unsigned solid_max_resolution (512);
+	config.get_unsigned("SolidMaxResolution",solid_max_resolution,"Max resolution for solid level set for visualization");
+	m_solid_shape = m_shape;
+	m_solid_dx = m_dx;
+	while( m_solid_shape.max() > solid_max_resolution ) {
+		m_solid_shape = m_solid_shape/2;
+		m_solid_dx = 2.0 * m_solid_dx;
+	}
+	m_solid_gridvisualizer->set_environment("shape",&m_solid_shape);
+	m_solid_gridvisualizer->set_environment("dx",&m_solid_dx);
+	//
+	m_solid_mesher->set_environment("shape",&m_solid_shape);
+	m_solid_mesher->set_environment("dx",&m_solid_dx);
+	//added
 }
 //
 void macsmoke3_oc::post_initialize ( bool initialized_from_file ) {
@@ -113,6 +164,10 @@ void macsmoke3_oc::post_initialize ( bool initialized_from_file ) {
 	m_draw_func = reinterpret_cast<void(*)(graphics_engine &,double)>(m_dylib.load_symbol("draw"));
 	m_moving_solid_func = reinterpret_cast<std::pair<double,vec3d>(*)(double time, const vec3d &p)>(m_dylib.load_symbol("moving_solid"));
 	//
+	//added
+	auto fluid_func = reinterpret_cast<double(*)(const vec3d &)>(m_dylib.load_symbol("fluid"));
+	m_solid_func = reinterpret_cast<double(*)(const vec3d &)>(m_dylib.load_symbol("solid"));
+	//added
 	auto velocity_func = reinterpret_cast<vec3d(*)(const vec3d &)>(m_dylib.load_symbol("velocity"));
 	m_set_boundary_flux = reinterpret_cast<void(*)( double, Real [DIM3][2] )>(m_dylib.load_symbol("set_boundary_flux"));
 	m_combined_solid_func = [&]( const vec3d &p ) {
