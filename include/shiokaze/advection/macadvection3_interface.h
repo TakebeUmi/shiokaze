@@ -53,10 +53,10 @@ public:
 								const macarray3<Real> &velocity,	// Face-located
 								const array3<Real> &fluid,		// Fluid level set
 								double dt, std::string name="scalar" ) = 0;
-	virtual void advect_scalar( array3<Real> &scalar,				// Cell-centered
-								const std::vector<Real> &velocity,	// Face-located //ここを変更
-								const array3<Real> &fluid,		// Fluid level set
-								double dt, std::string name="scalar") = 0; //added
+	// virtual void advect_scalar( array3<Real> &scalar,				// Cell-centered
+	// 							const std::vector<Real> &velocity,	// Face-located //ここを変更
+	// 							const array3<Real> &fluid,		// Fluid level set
+	// 							double dt, std::string name="scalar") = 0; //added
 	/**
 	 \~english @brief Advect vector field.
 	 @param[in] u Vector field to advect.

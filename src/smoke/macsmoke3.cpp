@@ -375,17 +375,18 @@ void macsmoke3::draw( graphics_engine &g ) const {
 	}
 	//
 	// Draw velocity
-	m_macvisualizer->draw_velocity(g,m_velocity);
+	//m_macvisualizer->draw_velocity(g,m_velocity);
 	//
 	// Draw projection component
 	m_macproject->draw(g);
 	//
 	// Draw concentration
-	if( m_param.use_dust ) draw_dust_particles(g);
+	if( m_param.use_dust ); //draw_dust_particles(g);
 	else m_gridvisualizer->draw_density(g,m_density);
+	//ここでm_densityを描画してる
 	//
 	// Draw graph
-	m_graphplotter->draw(g);
+	//m_graphplotter->draw(g);
 }
 //
 void macsmoke3::export_density () const {

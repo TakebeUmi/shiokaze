@@ -1119,6 +1119,7 @@ void grid3::get_gradient( const face_id3 &face_id, std::function<void( const cel
 		const Real rho = utility::fraction(levelsets[0],levelsets[1]);
 		const bool cross_interface = rho > 0.0 && rho < 1.0;
 		//
+		//info3は{}で囲んで作る！！
 		func(forward_id,scale,{levelsets[0],dx,rho,area,false,cross_interface,false});
 		func(backward_id,-scale,{levelsets[1],dx,rho,area,false,cross_interface,false});
 		//

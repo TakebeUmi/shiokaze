@@ -27,6 +27,7 @@
 #include <shiokaze/cellmesher/cellmesher3_interface.h>
 #include <shiokaze/array/shared_array3.h>
 #include <algorithm>
+//#include <shiokaze/octreeliquid/macoctreegrid3.h>
 //
 SHKZ_USING_NAMESPACE
 //
@@ -72,6 +73,40 @@ protected:
 			g.point_size(1.0);
 		}
 	}
+	//added
+	// virtual void draw_density_oc( graphics_engine &g, const vector<Real> &density ) const override {
+	// 	if( m_param.draw_density ) {
+	// 		g.point_size(3.0);
+	// 		g.begin(graphics_engine::MODE::POINTS);
+	// 		// density.const_serial_actives([&](int i, int j, int k, const auto &it) {
+	// 		// 	g.color4(1.0,1.0,1.0,it());
+	// 		// 	g.vertex3v((m_dx*vec3i(i,j,k).cell()).v);
+	// 		// });
+			
+	// 		g.end();
+	// 		g.point_size(1.0);
+	// 	}
+	// }
+	//added
+    // virtual void draw_density_oc( graphics_engine &g, const macoctreegrid3 &grid ) const override {
+    //     if( m_param.draw_density ) {
+    //         g.point_size(3.0);
+    //         g.begin(graphics_engine::MODE::POINTS);
+            
+    //         //grid.densityを使用して密度を描画
+    //         grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+    //             double density_value = grid.density[cell_id.index];
+    //             vec3d pos = grid.get_cell_position(cell_id);
+    //             g.color4(1.0,1.0,1.0,density_value);
+    //             g.vertex3v(pos.v);
+    //         });
+
+            
+    //         g.end();
+    //         g.point_size(1.0);
+    //     }
+    // }
+
 	virtual void draw_velocity( graphics_engine &g, const array3<vec3r> &velocity ) const override {
 		if( m_param.draw_velocity ) {
 			//

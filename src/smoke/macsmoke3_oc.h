@@ -47,6 +47,9 @@
 #include "macoctreesegregator3.h"
 #include "macoctreesizingfunc3.h"
 #include <shiokaze/meshexporter/meshexporter3_interface.h>
+#include <shiokaze/cellmesher/cellmesher3_interface.h>
+#include <shiokaze/graphics/graphics_interface.h>
+#include "macoctreemesher3.h"
 //
 SHKZ_BEGIN_NAMESPACE
 //
@@ -86,6 +89,13 @@ protected:
 	double m_dx;
 	bool m_force_exist;
 	unsigned m_graph_id;
+	shape3 m_solid_shape;
+	double m_solid_dx;
+		 bool m_do_inject;
+		double m_injected_volume;
+
+	gridvisualizer3_driver m_solid_gridvisualizer{this,"gridvisualizer3"};
+	array3<Real> m_solid_visualize{this};
 	//
 	//追加
     grid3 m_grid_0{this};
@@ -96,6 +106,7 @@ protected:
     macoctreeproject3 m_macoctreeproject{this};
 
 	struct Parameters {
+		bool use_FLIP {false};
 		bool mouse_interaction {false};
 		bool use_dust {false};
 		double minimal_density {0.01};
@@ -111,7 +122,6 @@ protected:
         bool use_sizing_func {true};
         unsigned initial_refinement {3};
         double maximal_CFL_accumulation {1.0};
-		bool maccormack {false};
 
 	double surftens_k {0.0};
 	unsigned erode_width {0};
@@ -121,7 +131,7 @@ protected:
 	bool remove_quater {false};
 	double z {0.5};
 	bool export_svg {true};
-	unsigned render_sample_count {8};
+	//unsigned render_sample_count {8};
 	unsigned save_interval {100};
 	vec3d target {0.5,0.15,0.5};
 	vec3d origin {0.5,1.5,3.0};
@@ -157,14 +167,7 @@ protected:
 	bool m_should_quit_on_save {false}; 
 	//
 	//
-	std::function<void(graphics_engine &,double)> m_draw_func;
-	std::function<double(const vec3d &)> m_solid_func;
-	std::function<void(double,Real [DIM3][2])> m_set_boundary_flux;
-	std::function<std::pair<double,vec3d>( double, const vec3d &)> m_moving_solid_func;
-
 	//added
-	std::function<double(const vec3d &)> m_combined_solid_func;
-	parallel_driver m_parallel{this};
 		std::function<double(const vec3d &)> m_solid_func, m_combined_solid_func;
 		std::function<void(double,Real [DIM3][2])> m_set_boundary_flux;
 		std::function<vec3d(double)> m_gravity_func;
@@ -177,7 +180,7 @@ protected:
 		//
 		std::string m_export_path;
 		//
-		macoctreeproject3 m_macoctreeproject{this};
+
 		macoctreesegregator3 m_macoctreesegregator{this};
 		macoctreemesher3 m_macoctreemesher{this};
 		meshutility3_driver m_meshutility{this,"meshutility3"};
@@ -186,20 +189,20 @@ protected:
 		cellmesher3_driver m_solid_mesher{this,"marchingcubes"};
 		graphics_interface_driver m_svg_writer{this,"graphics_svg"};
 		//
-		environment_setter arg_shape{this,"shape",&m_shape};
-		environment_setter arg_dx{this,"dx",&m_dx};
 	//added
 	//
 	virtual void inject_external_force( macarray3<Real> &velocity );
 	virtual void add_buoyancy_force( macarray3<Real> &velocity, const array3<Real> &density, double dt );
 	virtual void advect_dust_particles( const macarray3<Real> &velocity, double dt );
 	virtual void add_source ( macarray3<Real> &velocity, array3<Real> &density, double time, double dt );
+	//virtual void add_source_oc ( grid3 &m_grid, double time, double dt );
 	virtual void rasterize_dust_particles( array3<Real> &rasterized_density );
 	virtual void draw_dust_particles( graphics_engine &g ) const;
 	virtual void export_density () const;
 	virtual void do_export_density( int frame ) const;
 	virtual void add_to_graph();
 	virtual void render_density( int frame ) const;
+	virtual void add_source_oc ( double time, double dt );
 	//
 	//added
 		void export_moving_polygon();
@@ -208,6 +211,9 @@ protected:
 		void export_mesh( int frame );
 		void render_mesh( unsigned frame ) const;
 		void save_state();
+
+		//virtual void do_inject_external_density( double dt, double time, unsigned step );
+
 	//added
 };
 //

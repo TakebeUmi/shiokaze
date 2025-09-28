@@ -59,9 +59,7 @@ void macsmoke3_oc::load( configuration &config ) {
 }
 
 //added
-void macsmoke3_oc::setup_window( std::string &name, int &width, int &height ) const {
-	height = width;
-}
+
 //
 bool macsmoke3_oc::should_quit() const {
 	return m_should_quit_on_save || m_timestepper->should_quit();
@@ -165,11 +163,11 @@ void macsmoke3_oc::post_initialize ( bool initialized_from_file ) {
 	m_moving_solid_func = reinterpret_cast<std::pair<double,vec3d>(*)(double time, const vec3d &p)>(m_dylib.load_symbol("moving_solid"));
 	//
 	//added
+	//m_inject_func = reinterpret_cast<bool(*)(const vec3d &, double, double, double, unsigned, double &, vec3d &)>(m_dylib.load_symbol("inject"));
 	auto fluid_func = reinterpret_cast<double(*)(const vec3d &)>(m_dylib.load_symbol("fluid"));
 	m_solid_func = reinterpret_cast<double(*)(const vec3d &)>(m_dylib.load_symbol("solid"));
 	//added
 	auto velocity_func = reinterpret_cast<vec3d(*)(const vec3d &)>(m_dylib.load_symbol("velocity"));
-	m_set_boundary_flux = reinterpret_cast<void(*)( double, Real [DIM3][2] )>(m_dylib.load_symbol("set_boundary_flux"));
 	m_combined_solid_func = [&]( const vec3d &p ) {
 		double value (1.0);
 		if( m_solid_func ) value = std::min(value,m_solid_func(p));
@@ -185,6 +183,7 @@ void macsmoke3_oc::post_initialize ( bool initialized_from_file ) {
 	m_grid_0.clear();
 	m_grid_1.clear();
 	//added
+
 
 	// Initialize arrays
 	m_force_exist = false;
@@ -212,29 +211,32 @@ void macsmoke3_oc::post_initialize ( bool initialized_from_file ) {
         n *= 2;
     }
 
-	int refinement_count = m_param.use_sizing_func ? m_param.initial_refinement : 1;
-    while( refinement_count-- ) {
-        std::swap(m_grid,m_grid_prev);
+	// int refinement_count = m_param.use_sizing_func ? m_param.initial_refinement : 1;
+    // while( refinement_count-- ) {
+    //     std::swap(m_grid,m_grid_prev);
 
-        if( m_param.use_sizing_func ) {
-            if( refinement_count ) {
-                m_grid->activate_cells([&](char depth, const vec3d &p) {
-                    return depth > 3;
-                });
-            }
-        } else {
-            // 密度に基づいてセルを活性化
-            m_grid->activate_cells([&](const vec3d &p) {
-                return array_interpolator3::interpolate<Real>(m_density,p/m_dx) > m_param.minimal_density;
-            }, m_combined_solid_func);
-        }
+    //     if( m_param.use_sizing_func ) {
+    //         if( refinement_count ) {
+    //             m_grid->activate_cells([&](char depth, const vec3d &p) {
+    //                 return depth > 3;
+    //             });
+    //         }
+    //     } else {
+    //         // 密度に基づいてセルを活性化
+    //         m_grid->activate_cells([&](const vec3d &p) {
+    //             return array_interpolator3::interpolate<Real>(m_density,p/m_dx) > m_param.minimal_density;
+    //         }, m_combined_solid_func);
+    //     }
 
-        m_grid->balance_layers();
-        m_grid->assign_indices();
-        m_grid->assign_levelset([&](const vec3d &p) {
-            return array_interpolator3::interpolate<Real>(m_density,p/m_dx);
-        }, m_combined_solid_func);
-    }
+    //     m_grid->balance_layers();
+    //     m_grid->assign_indices();
+    //     m_grid->assign_levelset([&](const vec3d &p) {
+    //         return array_interpolator3::interpolate<Real>(m_density,p/m_dx);
+    //     }, m_combined_solid_func);
+	// 	m_grid->assign_density([&](const vec3d &p) {
+	// 		return array_interpolator3::interpolate<Real>(m_density,p/m_dx);
+	// 	}, m_combined_solid_func);
+	// }
 
 	if( m_set_boundary_flux ) {
 		flux_boundary_condition3 boundary_cond;
@@ -242,6 +244,36 @@ void macsmoke3_oc::post_initialize ( bool initialized_from_file ) {
 		m_grid_0.set_flux_boundary_condition(boundary_cond);
 		m_grid_1.set_flux_boundary_condition(boundary_cond);
 	}
+		int refinement_count = m_param.use_sizing_func ? m_param.initial_refinement : 1;
+		int count (0);
+		while( refinement_count-- ) {
+			timer.tick(); console::dump( ">>> Refinement #%d...\n", count+1 );
+			//
+			std::swap(m_grid,m_grid_prev);
+			if( m_param.use_sizing_func ) {
+				if( count ) {
+					m_macoctreesizingfunc.activate_cells(*m_grid_prev,*m_grid,m_combined_solid_func,nullptr);
+				} else {
+					m_grid->activate_cells([&](char depth, const vec3d &p) {
+						return depth > 3;
+					});
+				}
+			} else {
+				m_grid->activate_cells(fluid_func,m_combined_solid_func);
+			}
+			m_grid->balance_layers();
+			m_grid->assign_indices();
+			m_grid->assign_levelset(fluid_func,m_combined_solid_func);
+			m_grid->assign_density(fluid_func,m_combined_solid_func);
+			//
+			if( m_param.use_sizing_func ) {
+				m_macoctreesizingfunc.compute_sizing_function(*m_grid_prev,*m_grid,0.0,m_combined_solid_func,[&]( const vec3d &p ) {
+					return m_moving_solid_func ? m_moving_solid_func(m_timestepper->get_current_time(),p).second : vec3d();
+				});
+			}
+			console::dump( "<<< Done. Took %s.\n", timer.stock("refinement"+std::to_string(count)).c_str());
+			count ++;
+		}
 
 	// velocity関数があれば速度場を初期化
 	if( velocity_func ) {
@@ -249,6 +281,7 @@ void macsmoke3_oc::post_initialize ( bool initialized_from_file ) {
         return velocity_func(p)[dim];
     	});
 	}
+
 	//added
 
 	// Ensure divergence free
@@ -261,26 +294,26 @@ void macsmoke3_oc::post_initialize ( bool initialized_from_file ) {
 	}
 	//
 	// Seed dust particles if requested
-	if( m_param.use_dust ) {
-		timer.tick(); console::dump( "Seeding dust particles..." );
-		//
-		shared_array3<Real> density_copy(m_density);
-		density_copy->dilate();
-		//
-		double space = 1.0 / m_param.r_sample;
-		density_copy->const_serial_actives([&]( int i, int j, int k, const auto &it ) {
-			for( int ii=0; ii<m_param.r_sample; ++ii ) for( int jj=0; jj<m_param.r_sample; ++jj ) for( int kk=0; kk<m_param.r_sample; ++kk ) {
-				vec3d unit_pos = 0.5*vec3d(space,space,space)+vec3d(ii*space,jj*space,kk*space);
-				vec3d pos = m_dx*(unit_pos+vec3d(i,j,k));
-				if( array_interpolator3::interpolate<Real>(m_solid,pos/m_dx) > 0.0 &&
-					array_interpolator3::interpolate<Real>(m_density,pos/m_dx-vec3d(0.5,0.5,0.5))) {
-					m_dust_particles.push_back(pos);
-				}
-			}
-		});
-		rasterize_dust_particles(m_density);
-		console::dump( "Done. Seeded=%d. Took %s.\n", m_dust_particles.size(), timer.stock("seed_m_dust_particles").c_str());
-	}
+	// if( m_param.use_dust ) {
+	// 	timer.tick(); console::dump( "Seeding dust particles..." );
+	// 	//
+	// 	shared_array3<Real> density_copy(m_density);
+	// 	density_copy->dilate();
+	// 	//
+	// 	double space = 1.0 / m_param.r_sample;
+	// 	density_copy->const_serial_actives([&]( int i, int j, int k, const auto &it ) {
+	// 		for( int ii=0; ii<m_param.r_sample; ++ii ) for( int jj=0; jj<m_param.r_sample; ++jj ) for( int kk=0; kk<m_param.r_sample; ++kk ) {
+	// 			vec3d unit_pos = 0.5*vec3d(space,space,space)+vec3d(ii*space,jj*space,kk*space);
+	// 			vec3d pos = m_dx*(unit_pos+vec3d(i,j,k));
+	// 			if( array_interpolator3::interpolate<Real>(m_solid,pos/m_dx) > 0.0 &&
+	// 				array_interpolator3::interpolate<Real>(m_density,pos/m_dx-vec3d(0.5,0.5,0.5))) {
+	// 				m_dust_particles.push_back(pos);
+	// 			}
+	// 		}
+	// 	});
+	// 	rasterize_dust_particles(m_density);
+	// 	console::dump( "Done. Seeded=%d. Took %s.\n", m_dust_particles.size(), timer.stock("seed_m_dust_particles").c_str());
+	// }
 	//
 	m_camera->set_bounding_box(vec3d().v,m_shape.box(m_dx).v);
 	console::dump( "<<< Initialization finished. Took %s\n", timer.stock("initialization").c_str());
@@ -370,6 +403,71 @@ void macsmoke3_oc::add_source ( macarray3<Real> &velocity, array3<Real> &density
 		else console::dump( "Done. Took %s.\n", timer.stock("add_func").c_str());
 	}
 }
+//これを
+void macsmoke3_oc::add_source_oc (double time, double dt ) {
+	//
+	scoped_timer timer(this);
+	//
+	auto add_func = reinterpret_cast<void(*)(const vec3d &, vec3d &, double &, double, double)>(m_dylib.load_symbol("add"));
+	if( add_func ) {
+		timer.tick(); console::dump( "Adding sources..." );
+		//
+		// Velocity
+		m_grid->iterate_active_faces([&](const face_id3 &face_id, int tid) {
+			const vec3d p = m_grid->get_face_position(face_id);
+			double d(0.0); vec3d u;
+			add_func (p,u,d,time,dt);
+			// density.increment(i,j,k,d);
+			m_grid->velocity[face_id.index] = u[face_id.dim];
+		});
+		//
+		// Density
+		auto add_density = [&]() {
+			m_grid->iterate_active_cells([&](const cell_id3 &cell_id, int tid) {
+				const vec3d p = m_grid->get_cell_position(cell_id);
+				//こっから
+				double d(0.0); vec3d dummy;
+				add_func (p,dummy,d,time,dt);
+				// density.increment(i,j,k,d);
+				m_grid->levelset[cell_id.index] = d;
+			});
+		};
+		//
+		// Density
+		unsigned seeded (0);
+		// if( m_param.use_dust ) {
+		// 	//
+		// 	std::random_device rd;
+		// 	std::mt19937 gen(rd());
+		// 	std::uniform_real_distribution<> dis(-1.0,1.0);
+		// 	//
+		// 	add_density(m_accumulation);
+		// 	//
+		// 	double scale = 1.0 / pow(m_param.r_sample,DIM3);
+		// 	bool should_re_rasterize (false);
+		// 	m_accumulation.serial_op([&]( int i, int j, int k, auto &it) {
+		// 		double d = it();
+		// 		while( d > scale ) {
+		// 			vec3d p = m_dx*vec3i(i,j,k).cell()+0.5*m_dx*vec3d(dis(gen),dis(gen),dis(gen));
+		// 			m_dust_particles.push_back(p); ++ seeded;
+		// 			should_re_rasterize = true;
+		// 			d -= scale;
+		// 		}
+		// 		it.set(d);
+		// 	});
+		// 	//
+		// 	if( should_re_rasterize ) {
+		// 		rasterize_dust_particles(density);
+		// 	}
+			//
+		//} else {
+			add_density();
+		//}
+		//
+		if( m_param.use_dust ) console::dump( "Done. Seeded=%d. Took %s.\n", seeded, timer.stock("add_func").c_str());
+		else console::dump( "Done. Took %s.\n", timer.stock("add_func").c_str());
+	}
+}
 //
 void macsmoke3_oc::rasterize_dust_particles( array3<Real> &rasterized_density ) {
 	//
@@ -430,29 +528,14 @@ void macsmoke3_oc::idle() {
         m_grid->copy(*m_grid_prev);
     }
 
-
-    m_grid->assign_levelset([&](const vec3d &p) {
-        vec3d u (m_grid_prev->sample_velocity(p));
-        double d = array_interpolator3::interpolate<Real>(m_density,p/m_dx);
-        return d > m_param.minimal_density ? -1.0 : 1.0;
-    }, m_combined_solid_func);
 	//added
-
+	// Advect density
+	m_grid->assign_density([&]( const vec3d &p ) {
+		vec3d u (m_grid_prev->sample_velocity(p));
+		return m_grid_prev->sample_density(p-dt*u);
+	},m_combined_solid_func);
 	// Update solid
 	m_macutility->update_solid_variables(m_dylib,time,&m_solid,&m_solid_velocity);
-	//
-	// Advection
-	if( m_param.use_dust ) advect_dust_particles(m_velocity,dt);
-	else {
-		m_density.dilate(std::ceil(m_timestepper->get_current_CFL()));
-		m_macadvection->advect_scalar(m_density,m_grid->velocity,m_fluid,dt,"density");
-		m_density.parallel_actives([&](auto &it) {
-			if( std::abs(it()) <= m_param.minimal_density ) it.set_off();
-		});
-	}
-	//ここあとでm_grid->velocity仕様に書き換える.
-	//1.advectscalarをコピーしてフォルダ上に移動
-	//2.advectscalarを書き換えてvector<Real>仕様にする！
 
 	//added
 	if( m_param.maccormack ) {
@@ -529,17 +612,28 @@ void macsmoke3_oc::idle() {
 			return m_grid_prev->sample_velocity(p-dt*u,dim);
 		});
 	}
+	auto solid_velocity_func = [&]( const vec3d &p ) {
+		return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
+	};
+	// Project(added)
+	m_macoctreeproject.project(*m_grid,dt,solid_velocity_func);
+	//added
+	m_grid->extrapolate_toward_solid(m_combined_solid_func);
+	m_grid->extrapolate(m_combined_solid_func);
 	//added
 	//
-	shared_macarray3<Real> velocity_save(m_velocity);
-	m_macadvection->advect_vector(m_velocity,velocity_save(),m_fluid,dt,"velocity");
+	// shared_macarray3<Real> velocity_save(m_velocity);
+	// m_macadvection->advect_vector(m_velocity,velocity_save(),m_fluid,dt,"velocity");
 	//
 	// Add buoyancy force
 	add_buoyancy_force(m_velocity,m_density,dt);
 	//
 	// Add source
 	add_source(m_velocity,m_density,m_timestepper->get_current_time(),dt);
+	
+	add_source_oc(m_timestepper->get_current_time(),dt);
 	//
+
 	// Add external force
 	inject_external_force(m_velocity);
 	//
@@ -629,8 +723,9 @@ void macsmoke3_oc::draw( graphics_engine &g ) const {
 	//
 	// Draw concentration
 	if( m_param.use_dust ) draw_dust_particles(g);
-	else m_gridvisualizer->draw_density(g,m_density);
+	//else m_gridvisualizer->draw_density(g,m_density);
 	//
+	m_grid->draw_density_oc(g);
 	// Draw graph
 	m_graphplotter->draw(g);
 }
@@ -722,6 +817,39 @@ void macsmoke3_oc::render_density( int frame ) const {
 	//
 	global_timer::resume();
 }
+//
+// void macsmoke3_oc::do_inject_external_density( double dt, double time, unsigned step ) {
+// 	//
+// 	if( m_do_inject ) {
+// 		//
+// 		std::vector<double> total_injected (m_grid->parallel.get_thread_num());
+// 		m_grid->iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+// 			//
+// 			const vec3d p = m_grid->get_cell_position(cell_id);
+// 			double value (0.0); vec3d u;
+// 			//
+// 			if( m_inject_func(p,m_dx,dt,time,step,value,u)) {
+// 				const double v = m_grid->density[cell_id.index];
+// 				m_grid->density[cell_id.index] = std::min(value,v);
+// 				if( value < 0.0 && v > 0.0 ) {
+// 					const double dx = m_grid->get_cell_dx(cell_id);
+// 					total_injected[tid] += dx*dx*dx;
+// 				}
+// 			}
+// 		});
+// 		m_grid->iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
+// 			const vec3d p = m_grid->get_face_position(face_id);
+// 			const double dx = m_grid->get_face_dx(face_id);
+// 			double value (0.0); vec3d u;
+// 			if( m_inject_func(p,m_dx,dt,time,step,value,u)) {
+// 				if( value < dx ) {
+// 					m_grid->velocity[face_id.index] = u[face_id.dim];
+// 				}
+// 			}
+// 		});
+// 		m_injected_volume = std::accumulate(total_injected.begin(),total_injected.end(),0.0);
+// 	}
+// }
 //
 extern "C" module * create_instance() {
 	return new macsmoke3_oc;

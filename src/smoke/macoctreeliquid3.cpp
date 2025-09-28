@@ -1294,12 +1294,12 @@ void macoctreeliquid3::draw( graphics_engine &g ) const {
 	std::vector<std::vector<size_t> > faces;
 	m_macoctreemesher.generate_mesh(*m_grid,m_grid->levelset,0.0,m_solid_func,vertices,faces,false);
 	//
-	g.color4(1.0,1.0,1.0,0.5);
-	for( unsigned i=0; i<faces.size(); i++ ) {
-		g.begin(graphics_engine::MODE::LINE_LOOP);
-		for( unsigned j=0; j<faces[i].size(); j++ ) g.vertex3v(vertices[faces[i][j]].v);
-		g.end();
-	}
+	// g.color4(1.0,1.0,1.0,0.5);
+	// for( unsigned i=0; i<faces.size(); i++ ) {
+	// 	g.begin(graphics_engine::MODE::LINE_LOOP);
+	// 	for( unsigned j=0; j<faces[i].size(); j++ ) g.vertex3v(vertices[faces[i][j]].v);
+	// 	g.end();
+	// }
 }
 //
 extern "C" module * create_instance() {
