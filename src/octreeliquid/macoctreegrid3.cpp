@@ -1385,7 +1385,7 @@ void grid3::get_scaled_gradient( const face_id3 &face_id, std::function<void( co
 	//
 	const auto &layer = *layers[face_id.depth];
 	const Real area = this->area[face_id.index];
-	console::dump( "area = %f\n", area );
+	//console::dump( "area = %f\n", area );
 	if( area ) {
 		//
 		using gradient_info_DIM = gradient_info3;
@@ -1456,7 +1456,7 @@ void grid3::get_scaled_gradient_density( const face_id3 &face_id, std::function<
 	//
 	const auto &layer = *layers[face_id.depth];
 	const Real area = this->area[face_id.index];
-	console::dump( "area = %f\n", area );
+	//console::dump( "area = %f\n", area );
 	//areaが0でなければ以下の処理を行うが0になっているので実行されない
 	if( area ) {
 		//
@@ -2771,6 +2771,7 @@ double grid3::get_volume() const {
 		bool rho_added (false);
 		get_scaled_gradient(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3 &info ) {
 			if( ! rho_added ) {
+				console::dump( "area=%f, rho=" );
 				volume_threads[tid] += info.area * (info.t_junction ? 0.75 : 1.0) * info.rho * (info.dx * info.dx * info.dx);
 				rho_added = true;
 			}
@@ -2779,7 +2780,8 @@ double grid3::get_volume() const {
 	double current_volume (0.0);
 	for( auto &e : volume_threads ) {
 		current_volume += e / DIM3;
-		console::dump( "current_volume: %e\n", current_volume );
+		//eがゼロなのがうまくいかない原因→2774行目の
+		//console::dump( "current_volume: %e\n", current_volume );
 	}
 	return current_volume;
 }
@@ -2799,6 +2801,7 @@ double grid3::get_volume_density() const {
 				volume_threads[tid] += info.area * (info.t_junction ? 0.75 : 1.0) * info.rho * (info.dx * info.dx * info.dx);
 				console::dump( "area: %e, rho: %e, dx: %e\n", info.area, info.rho, info.dx );
 				rho_added = true;
+				//ここでarea, rho, dxに正しい値が渡っていないっぽい
 			}
 		});
 	});
