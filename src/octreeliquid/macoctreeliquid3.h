@@ -71,7 +71,7 @@ namespace macotreeliquid3_namespace {
 		gridvisualizer3_driver m_solid_gridvisualizer{this,"gridvisualizer3"};
 		array3<Real> m_solid_visualize{this};
 		//
-		grid3 m_grid_0{this};
+		grid3 m_grid_0{this};        
 		grid3 m_grid_1{this};
 		//
 		grid3 *m_grid {&m_grid_0};

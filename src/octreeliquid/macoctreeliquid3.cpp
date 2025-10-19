@@ -250,6 +250,7 @@ void macoctreeliquid3::post_initialize( bool initialized_from_file ) {
 			m_grid->set_velocity([&]( const vec3d &p, char dim ) {
 				return velocity_func(p)[dim];
 			});
+			printf("Velocity initialized from a function.\n");
 		}
 		//
 		if( m_param.use_FLIP ) {
@@ -374,7 +375,7 @@ void macoctreeliquid3::idle() {
 	const double dt = m_timestepper->advance(max_u_per_unit,m_grid->get_finest_dx());
 	const double time = m_timestepper->get_current_time();
 	const double CFL = m_timestepper->get_current_CFL();
-	console::dump( "Done. time=%.2e. dt=%.2e,CFL=%.2f. Took %s\n", time, dt, CFL, timer.stock("compute_timestep").c_str());
+	console::dump( "Done. time=%.2e. max_u_perunit=%.2e, dx=%2.e, dt=%.2e,CFL=%.2f. Took %s\n", time, max_u_per_unit, m_grid->get_finest_dx(), dt, CFL, timer.stock("compute_timestep").c_str());
 	//
 	// Begin (check) injecting fluid
 	begin_inject_external_fluid(dt,time,step);

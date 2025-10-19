@@ -1,5 +1,5 @@
 /*
-**	macsmoke3_oc.h
+**	macsmoke3_oc_2.h
 **
 **	This is part of Shiokaze, a research-oriented fluid solver for computer graphics.
 **	Created by Ryoichi Ando <rand@nii.ac.jp> on April 10, 2017.
@@ -22,14 +22,14 @@
 **	OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 //
-#ifndef SHKZ_ADAPTIVELIQUID3_H
-#define SHKZ_ADAPTIVELIQUID3_H
+#ifndef SHKZ_macsmoke3_oc_2_H
+#define SHKZ_macsmoke3_oc_2_H
 //
-#include <shiokaze/array/array3.h>
-#include <shiokaze/array/macarray3.h>
+//#include <shiokaze/array/array3.h>
+//#include <shiokaze/array/macarray3.h>
 #include <shiokaze/parallel/parallel_driver.h>
 #include <shiokaze/ui/drawable.h>
-#include <shiokaze/advection/macadvection3_interface.h>
+//#include <shiokaze/advection/macadvection3_interface.h>
 #include <shiokaze/utility/gridutility3_interface.h>
 #include <shiokaze/utility/macutility3_interface.h>
 #include <shiokaze/utility/macstats3_interface.h>
@@ -55,17 +55,17 @@ SHKZ_BEGIN_NAMESPACE
 //
 using namespace macotreeliquid3_namespace;
 
-class macsmoke3_oc : public drawable {
+class macsmoke3_oc_2 : public drawable {
 public:
 	//
-	macsmoke3_oc();
+	macsmoke3_oc_2();
 	LONG_NAME("MAC Smoke 3D")
 	ARGUMENT_NAME("Smoke")
 	//
 protected:
 	//
 	virtual void setup_window( std::string &name, int &width, int &height ) const override;
-	virtual void drag( double x, double y, double z, double u, double v, double w ) override;
+	//virtual void drag( double x, double y, double z, double u, double v, double w ) override;
 	virtual void idle() override;
 	virtual void draw( graphics_engine &g ) const override;
 	virtual bool should_quit() const override; /*{ return m_timestepper->should_quit(); }*/
@@ -74,34 +74,34 @@ protected:
 	virtual void configure( configuration &config ) override;
 	virtual void post_initialize( bool initialized_from_file ) override;
 	//
-	macarray3<Real> m_velocity{this};
-	macarray3<Real> m_solid_velocity{this};
-	macarray3<Real> m_external_force{this};
-	array3<Real> m_density{this};
-	array3<Real> m_accumulation{this};
+	// macarray3<Real> m_velocity{this};
+	// macarray3<Real> m_solid_velocity{this};
+	// macarray3<Real> m_external_force{this};
+	// array3<Real> m_density{this};
+	// array3<Real> m_accumulation{this};
 	//
-	array3<Real> m_fluid{this};
-	array3<Real> m_solid{this};
+	// array3<Real> m_fluid{this};
+	// array3<Real> m_solid{this};
 	//
 	std::vector<vec3d> m_dust_particles;
 	//
 	shape3 m_shape;
 	double m_dx;
-	bool m_force_exist;
+	//bool m_force_exist;
 	unsigned m_graph_id;
 	shape3 m_solid_shape;
 	double m_solid_dx;
-		 bool m_do_inject;
-		double m_injected_volume;
+	bool m_do_inject;
+	double m_injected_volume;
 
-	gridvisualizer3_driver m_solid_gridvisualizer{this,"gridvisualizer3"};
-	array3<Real> m_solid_visualize{this};
+	//gridvisualizer3_driver m_solid_gridvisualizer{this,"gridvisualizer3"};
+	//array3<Real> m_solid_visualize{this};
 	//
 	//追加
     grid3 m_grid_0{this};
     grid3 m_grid_1{this};
-    grid3 *m_grid {&m_grid_0};
-    grid3 *m_grid_prev {&m_grid_1};
+    // grid3 *m_grid {&m_grid_0};
+    // grid3 *m_grid_prev {&m_grid_1};
     double m_accumulated_CFL {0.0};
     macoctreeproject3 m_macoctreeproject{this};
 
@@ -152,14 +152,14 @@ protected:
 	environment_setter arg_dx{this,"dx",&m_dx};
 	//
 	macproject3_driver m_macproject{this,"macpressuresolver3"};
-	macadvection3_driver m_macadvection{this,"macadvection3"};
+	//macadvection3_driver m_macadvection{this,"macadvection3"};
 	gridvisualizer3_driver m_gridvisualizer{this,"gridvisualizer3"};
 	gridutility3_driver m_gridutility{this,"gridutility3"};
 	graphplotter_driver m_graphplotter{this,"graphplotter"};
 	macstats3_driver m_macstats{this,"macstats3"};
 	macvisualizer3_driver m_macvisualizer{this,"macvisualizer3"};
 	timestepper_driver m_timestepper{this,"timestepper"};
-	macutility3_driver m_macutility{this,"macutility3"};
+	//macutility3_driver m_macutility{this,"macutility3"};
 	//
 	parallel_driver m_parallel{this};
 	dylibloader m_dylib;
@@ -191,18 +191,18 @@ protected:
 		//
 	//added
 	//
-	virtual void inject_external_force( macarray3<Real> &velocity );
-	virtual void add_buoyancy_force( macarray3<Real> &velocity, const array3<Real> &density, double dt );
-	virtual void advect_dust_particles( const macarray3<Real> &velocity, double dt );
-	virtual void add_source ( macarray3<Real> &velocity, array3<Real> &density, double time, double dt );
+	//virtual void inject_external_force( macarray3<Real> &velocity );
+	//virtual void add_buoyancy_force( macarray3<Real> &velocity, const array3<Real> &density, double dt );
+	//virtual void advect_dust_particles( const macarray3<Real> &velocity, double dt );
+	//virtual void add_source ( macarray3<Real> &velocity, array3<Real> &density, double time, double dt );
 	//virtual void add_source_oc ( grid3 &m_grid, double time, double dt );
-	virtual void rasterize_dust_particles( array3<Real> &rasterized_density );
-	virtual void draw_dust_particles( graphics_engine &g ) const;
+	// virtual void rasterize_dust_particles( array3<Real> &rasterized_density );
+	// virtual void draw_dust_particles( graphics_engine &g ) const;
 	virtual void export_density () const;
 	virtual void do_export_density( int frame ) const;
-	virtual void add_to_graph();
+	//virtual void add_to_graph();
 	virtual void render_density( int frame ) const;
-	virtual void add_source_oc ( double time, double dt );
+	//virtual void add_source_oc ( double time, double dt );
 	//
 	//added
 		void export_moving_polygon();

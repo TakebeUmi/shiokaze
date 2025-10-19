@@ -69,10 +69,20 @@ namespace macotreeliquid3_namespace {
 		Parameters m_param;
 		//
 		void assemble_matrix( grid3 &grid );
+		void assemble_matrix_density( grid3 &grid );
 		void clear_matrix();
 		void set_moving_solid( std::function<double(const vec3d &p)> moving_solid_func );
 		void project( grid3 &grid, double dt, std::function<vec3d(const vec3d &p)> solid_velocity=nullptr, std::vector<Real> *pressure=nullptr );
 		void project( grid3 &grid, double dt,
+					  size_t region_count,
+					  const std::vector<uint_type> &regions,
+					  const std::vector<Real> &current_volumes,
+					  const std::vector<Real> &target_volumes,
+					  std::vector<Real> &y_list,
+					  std::function<vec3d(const vec3d &p)> solid_velocity=nullptr,
+					  std::vector<Real> *pressure=nullptr );
+		void project_density( grid3 &grid, double dt, std::function<vec3d(const vec3d &p)> solid_velocity=nullptr, std::vector<Real> *pressure=nullptr );
+		void project_density( grid3 &grid, double dt,
 					  size_t region_count,
 					  const std::vector<uint_type> &regions,
 					  const std::vector<Real> &current_volumes,

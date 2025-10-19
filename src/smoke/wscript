@@ -60,7 +60,7 @@ def build(bld):
 			use = bld.get_target_name(bld,['core','timestepper','macutility2','images','octreeliquid','macoctreegrid2','macoctreeproject2','macoctreehelper2','macoctreesegregator2','macoctreesizingfunc2']))
 	bld.shlib(source = 'macsmoke3_oc.cpp',
 			target = bld.get_target_name(bld,'macsmoke3_oc'),
-			cxxflags = ['-DSPATIAL_DIM=2', '-I../'],
+			cxxflags = ['-DSPATIAL_DIM=3', '-I../'],
 			use = bld.get_target_name(bld,['core','timestepper','macutility3','images','octreeliquid','macoctreegrid3','macoctreeproject3','macoctreehelper3','macoctreesegregator3','macoctreesizingfunc3','macoctreemesher3']))
 
 	#
@@ -76,3 +76,7 @@ def build(bld):
 			target = bld.get_target_name(bld,'macoctreemesher3'),
 			use = bld.get_target_name(bld,['core','macoctreegrid3']))
 	#
+	bld.shlib(source = 'macsmoke3_oc_2.cpp',
+			target = bld.get_target_name(bld,'macsmoke3_oc_2'),
+			cxxflags = ['-DSPATIAL_DIM=3', '-I../'],
+			use = bld.get_target_name(bld,['core','timestepper','macutility3','images','octreeliquid','macoctreegrid3','macoctreeproject3','macoctreehelper3','macoctreesegregator3','macoctreesizingfunc3','macoctreemesher3']))

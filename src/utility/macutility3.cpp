@@ -58,6 +58,8 @@ protected:
 		for( double u : max_u_t ) max_u = std::max(max_u,u);
 		return max_u;
 	}
+
+	//virtual double compute_max_u_oc( const vector<Real> )
 	virtual void constrain_velocity( const array3<Real> &solid, macarray3<Real> &velocity ) const override {
 		//
 		shared_macarray3<Real> velocity_save = shared_macarray3<Real>(velocity.type());
