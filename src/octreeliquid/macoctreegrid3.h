@@ -332,7 +332,7 @@ namespace macotreeliquid3_namespace {
 		struct gradient_info3 {
 			Real levelset;
 			//added
-			Real density;
+			//Real density;
 			//added
 			Real dx;
 			Real rho;
@@ -346,11 +346,12 @@ namespace macotreeliquid3_namespace {
 			//added
 			Real density;
 			//added
+		
 			Real dx;
-			//Real rho;
-			Real area;
+			Real rho;
+			Real area = 1.0;
 			bool t_junction;
-			//bool cross_interface;
+			bool cross_interface;
 			bool compromised;
 		};
 		//
@@ -360,9 +361,9 @@ namespace macotreeliquid3_namespace {
 		void draw_density_oc( graphics_engine &g ) const;
 		//added
 		void get_gradient( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3 &info )> func ) const;
-		void get_gradient_scalar( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3 &info )> func ) const;
+		void get_gradient_scalar( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_scalar &info )> func ) const;
 		void get_scaled_gradient( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3 &info )> func ) const;
-		void get_scaled_gradient_density( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3 &info )> func ) const;
+		void get_scaled_gradient_density( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_scalar &info )> func ) const;
 		void get_divergence( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value0, double value1 )> func ) const;
 		void get_divergence_scalar( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value0, double value1 )> func ) const;
 		void get_unmofidied_divergence( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value )> func ) const;

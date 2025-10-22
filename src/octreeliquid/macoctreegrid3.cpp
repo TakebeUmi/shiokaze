@@ -257,7 +257,10 @@ void grid3::assign_density( std::function<double( const vec3d &p )> smoke) {
 	//
 	// Assigning fluid levelset
 	iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
-		density[cell_id.index] = smoke(get_cell_position(cell_id)); //セルの位置（ここでは面の中心）を取得してfluid関数に入れている
+
+		double d = smoke(get_cell_position(cell_id));
+		density[cell_id.index] = d; //セルの位置（ここでは面の中心）を取得してfluid関数に入れている
+		//console::dump( "density[%d] = %f\n", cell_id.index, d );
 	});
 	//
 	std::fill(area.begin(),area.end(),1.0);
@@ -1140,16 +1143,16 @@ void grid3::serial_iterate_active_faces( const std::function<void( const face_id
 	}
 }
 //
-void grid3::get_gradient_scalar( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3 &info )> func ) const {
+void grid3::get_gradient_scalar( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_scalar &info )> func ) const {
 	//
 	const auto &layer = *layers[face_id.depth];
 	const vec3i p_forward = face_id.pi; //差分において前方の位置
 	const vec3i p_backward = face_id.pi-vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2); //差分において後方の位置
 	const Real area = this->area[face_id.index];
-	console::dump( "area = %f\n", area );
+	//console::dump( "area = %f\n", area );
 	//
 	const Real dx = layer.dx;
-	console::dump( "dx = %f\n", dx );
+	//console::dump( "dx = %f\n", dx );
 	const double scale = 1.0 / dx;
 	//
 	if( layer.active_cells.active(p_forward) && layer.active_cells.active(p_backward)) {
@@ -1161,12 +1164,12 @@ void grid3::get_gradient_scalar( const face_id3 &face_id, std::function<void( co
 		const cell_id3 &backward_id = {face_id.depth,p_backward,backward_index};
 		//
 		const Real densities[] = { density[foward_index], density[backward_index] };
-		console::dump( "densities: %f , %f\n", densities[0], densities[1] );
-		// const Real rho = utility::fraction(levelsets[0],levelsets[1]); 
-		// const bool cross_interface = rho > 0.0 && rho < 1.0;
+		//console::dump( "densities: %f , %f\n", densities[0], densities[1] );
+		const Real rho = utility::fraction(densities[0],densities[1]); 
+		const bool cross_interface = rho > 0.0 && rho < 1.0;
 		//
-		func(forward_id,scale,{densities[0],dx,area,false,false});
-		func(backward_id,-scale,{densities[1],dx,area,false,false});
+		func(forward_id,scale,{densities[0],dx,rho,area,false,cross_interface,false});
+		func(backward_id,-scale,{densities[1],dx,rho,area,false,cross_interface,false});
 		//std::function<void( const cell_id3 &cell_id, double value, const gradient_info3 &info )> func
 		//scaleは差分を取るときの各項の係数。ここでは1/dx
 		//
@@ -1197,17 +1200,17 @@ void grid3::get_gradient_scalar( const face_id3 &face_id, std::function<void( co
 				vec3i hpi = forward_bottom+ii*ivec+jj*jvec;
 				indices.push_back({(char)(face_id.depth-1),hpi,high_layer.active_cells(hpi)});
 			}
-			// double min_levelset (0.0), max_levelset (0.0);
-			// for( unsigned n=0; n<indices.size(); ++n ) {
-			// 	min_levelset = std::min(min_levelset,(double)levelset[indices[n].index]);
-			// 	max_levelset = std::max(max_levelset,(double)levelset[indices[n].index]);
-			// }
-			//const bool cross_interface = min_levelset * max_levelset < 0.0;
-			//const Real rho = utility::fraction(min_levelset,max_levelset);
-			//
-			func(indices[0],-T_scale,{density[indices[0].index],dx,area,true,false});
+			double min_density (0.0), max_density (0.0);
+			for( unsigned n=0; n<indices.size(); ++n ) {
+				min_density = std::min(min_density,(double)density[indices[n].index]);
+				max_density = std::max(max_density,(double)density[indices[n].index]);
+			}
+			const bool cross_interface = min_density * max_density < 0.0;
+			const Real rho = utility::fraction(min_density,max_density);
+			
+			func(indices[0],-T_scale,{density[indices[0].index],dx,rho,area,true,false});
 			for( unsigned n=1; n<indices.size(); ++n ) {
-				func(indices[n],0.25*T_scale,{density[indices[n].index],dx,area,true,false});
+				func(indices[n],0.25*T_scale,{density[indices[n].index],dx,rho,area,true,false});
 			}
 			//
 		} else if( layer.active_cells.active(p_forward) && layer.fill_flags(p_backward)) {
@@ -1232,17 +1235,17 @@ void grid3::get_gradient_scalar( const face_id3 &face_id, std::function<void( co
 				indices.push_back({(char)(face_id.depth-1),hpi,high_layer.active_cells(hpi)});
 			}
 			//
-			// double min_levelset (0.0), max_levelset (0.0);
-			// for( unsigned n=0; n<indices.size(); ++n ) {
-			// 	min_levelset = std::min(min_levelset,(double)levelset[indices[n].index]);
-			// 	max_levelset = std::max(max_levelset,(double)levelset[indices[n].index]);
-			// }
-			// const bool cross_interface = min_levelset * max_levelset < 0.0;
-			// const Real rho = utility::fraction(min_levelset,max_levelset);
+			double min_density (0.0), max_density (0.0);
+			for( unsigned n=0; n<indices.size(); ++n ) {
+				min_density = std::min(min_density,(double)density[indices[n].index]);
+				max_density = std::max(max_density,(double)density[indices[n].index]);
+			}
+			const bool cross_interface = min_density * max_density < 0.0;
+			const Real rho = utility::fraction(min_density,max_density);
 			//
-			func(indices[0],T_scale,{density[indices[0].index],dx,area,true,false});
+			func(indices[0],T_scale,{density[indices[0].index],dx,rho,area,true,cross_interface,false});
 			for( unsigned n=1; n<indices.size(); ++n ) {
-				func(indices[n],-0.25*T_scale,{density[indices[n].index],dx,area,true,false});
+				func(indices[n],-0.25*T_scale,{density[indices[n].index],dx,rho,area,true,false});
 			}
 		}
 	}
@@ -1425,7 +1428,7 @@ void grid3::get_scaled_gradient( const face_id3 &face_id, std::function<void( co
 			//
 			if( info.levelset < 0.0 ) {
 				if( t_junction_compute ) {
-					console::dump( "t_junction_compute = %e", t_junction_compute );
+					//console::dump( "t_junction_compute = %e", t_junction_compute );
 					gradient_info_DIM new_info (info);
 					double a;
 					if( fluid_average * W2 > 0.0 ) {
@@ -1452,7 +1455,7 @@ void grid3::get_scaled_gradient( const face_id3 &face_id, std::function<void( co
 		});
 	}
 }
-void grid3::get_scaled_gradient_density( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3 &info )> func ) const {
+void grid3::get_scaled_gradient_density( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_scalar &info )> func ) const {
 	//
 	const auto &layer = *layers[face_id.depth];
 	const Real area = this->area[face_id.index];
@@ -1460,7 +1463,7 @@ void grid3::get_scaled_gradient_density( const face_id3 &face_id, std::function<
 	//areaが0でなければ以下の処理を行うが0になっているので実行されない
 	if( area ) {
 		//
-		using gradient_info_DIM = gradient_info3;
+		using gradient_info_DIM_scalar = gradient_info3_scalar;
 		using cell_id_DIM = cell_id3;
 		//
 		double fluid_average (0.0);
@@ -1468,7 +1471,7 @@ void grid3::get_scaled_gradient_density( const face_id3 &face_id, std::function<
 		bool has_solid (false);
 		//
 		auto compute_fluid_average = [&]() {
-			get_gradient_scalar(face_id,[&]( const cell_id_DIM &cell_id, double value, const gradient_info_DIM &info ) {
+			get_gradient_scalar(face_id,[&]( const cell_id_DIM &cell_id, double value, const gradient_info_DIM_scalar &info ) {
 				//if( info.density < 0.0 ) {
 					W1 += info.density;
 					W2 += value * info.density;
@@ -1483,7 +1486,7 @@ void grid3::get_scaled_gradient_density( const face_id3 &face_id, std::function<
 		bool rescale_computed (false), t_junction_compute (false);
 		double scale (1.0);
 		//
-		get_gradient_scalar(face_id,[&]( const cell_id_DIM &cell_id, double value, const gradient_info_DIM &info ) {
+		get_gradient_scalar(face_id,[&]( const cell_id_DIM &cell_id, double value, const gradient_info_DIM_scalar &info ) {
 			//
 			if( info.cross_interface && ! rescale_computed ) {
 				compute_fluid_average();
@@ -1495,10 +1498,10 @@ void grid3::get_scaled_gradient_density( const face_id3 &face_id, std::function<
 				rescale_computed = true;
 			}
 			//
-			console::dump( "t_junction_compute = %d\n", t_junction_compute );
+			//console::dump( "t_junction_compute = %d\n", t_junction_compute );
 			//if( info.levelset < 0.0 ) {
 				if( t_junction_compute ) {
-					gradient_info_DIM new_info (info);
+					gradient_info_DIM_scalar new_info (info);
 					double a;
 					if( fluid_average * W2 > 0.0 ) {
 						a = fluid_average / W2 * value;
@@ -2771,7 +2774,7 @@ double grid3::get_volume() const {
 		bool rho_added (false);
 		get_scaled_gradient(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3 &info ) {
 			if( ! rho_added ) {
-				console::dump( "area=%f, rho=" );
+				//console::dump( "area: %e, rho: %e, dx: %e\n", info.area, info.rho, info.dx );
 				volume_threads[tid] += info.area * (info.t_junction ? 0.75 : 1.0) * info.rho * (info.dx * info.dx * info.dx);
 				rho_added = true;
 			}
@@ -2795,11 +2798,11 @@ double grid3::get_volume_density() const {
 	iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
 		bool rho_added (false);
 		//get_scaled_gradient_densityの第二引数が実行されていない
-		get_scaled_gradient_density(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3 &info ) {
-			console::dump( "iterating...");
+		get_scaled_gradient_density(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_scalar &info ) {
+			//console::dump( "iterating...");
 			if( ! rho_added ) {
-				volume_threads[tid] += info.area * (info.t_junction ? 0.75 : 1.0) * info.rho * (info.dx * info.dx * info.dx);
-				console::dump( "area: %e, rho: %e, dx: %e\n", info.area, info.rho, info.dx );
+				volume_threads[tid] += info.area * (info.t_junction ? 0.75 : 1.0) * (info.dx * info.dx * info.dx);
+				//console::dump( "area: %e, rho: %e, dx: %e\n", info.area, info.rho, info.dx );
 				rho_added = true;
 				//ここでarea, rho, dxに正しい値が渡っていないっぽい
 			}
@@ -2808,8 +2811,8 @@ double grid3::get_volume_density() const {
 	double current_volume (0.0);
 	for( auto &e : volume_threads ) {
 		current_volume += e / DIM3;
-		console::dump( "current_volume: %e\n", current_volume );
-		console::dump( "e: %e\n", e );
+		// console::dump( "current_volume: %e\n", current_volume );
+		// console::dump( "e: %e\n", e );
 	}
 	return current_volume;
 }

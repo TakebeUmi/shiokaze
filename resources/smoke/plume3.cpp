@@ -67,8 +67,9 @@ extern "C" double fluid( const vec3d &p) {
 			// double s (10.0);
 			// double v = std::min(10.0,std::max(0.0,s*(r-dist)/r));
 			// u = 2.0 * vec3d(dt*v,0.0,0.0);
-			d = 4.0; //* dt;
+			d = 0.04; //* dt;
 		}
+		//d = 4.0;
 	return d;
 }
 //

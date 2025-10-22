@@ -131,6 +131,7 @@ void macsmoke3_oc_2::configure( configuration &config ) {
 	//
 	m_shape *= resolution_scale;
 	m_dx = view_scale * m_shape.dx();
+	//console::dump("Computed dx: %e\n",m_dx);
 	//added
 	unsigned solid_max_resolution (512);
 	config.get_unsigned("SolidMaxResolution",solid_max_resolution,"Max resolution for solid level set for visualization");
@@ -421,14 +422,21 @@ void macsmoke3_oc_2::add_source_oc (double time, double dt ) {
 		});
 		//
 		// Density
+		double min_x, min_y, min_z = 100.0;
+		double max_x, max_y, max_z = -100.0;
 		auto add_density = [&]() {
 			m_grid->iterate_active_cells([&](const cell_id3 &cell_id, int tid) {
 				const vec3d p = m_grid->get_cell_position(cell_id);
+				min_x = std::min(min_x,p[0]); min_y = std::min(min_y,p[1]); min_z = std::min(min_z,p[2]);
+				max_x = std::max(max_x,p[0]); max_y = std::max(max_y,p[1]); max_z = std::max(max_z,p[2]);
+				//console::dump( "Adding source at cell () pos (%f,%f,%f)\n", p[0], p[1], p[2] );
 				//こっから
 				double d(0.0); vec3d dummy;
 				add_func (p,dummy,d,time,dt);
 				// density.increment(i,j,k,d);
 				m_grid->density[cell_id.index] = d;
+				//console::dump("add_source");
+				if (d != 0.0) console::dump( "add_source density[%d] = %f\n", cell_id.index, d );
 			});
 		};
 		//
@@ -461,6 +469,7 @@ void macsmoke3_oc_2::add_source_oc (double time, double dt ) {
 			//
 		//} else {
 			add_density();
+			console::dump( "Source added in region x:(%f,%f) y:(%f,%f) z:(%f,%f)\n", min_x, max_x, min_y, max_y, min_z, max_z );
 		//}
 		//
 		if( m_param.use_dust ) console::dump( "Done. Seeded=%d. Took %s.\n", seeded, timer.stock("add_func").c_str());

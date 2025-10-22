@@ -217,7 +217,7 @@ void macoctreeproject3::assemble_matrix_density( grid3 &grid ) {
 		grid.iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
 			if( grid.face_map[face_id.index] ) {
 				uint_type row = grid.face_map[face_id.index]-1;
-				grid.get_scaled_gradient_density(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3 &info ) {
+				grid.get_scaled_gradient_density(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_scalar &info ) {
 					if( value ) {
 						assert( grid.cell_map[cell_id.index] );
 						uint_type column = grid.cell_map[cell_id.index]-1;
@@ -839,7 +839,7 @@ void macoctreeproject3::project_density( grid3 &grid, double dt,
 		if( ! grid.face_map[n] ) grid.velocity[n] = 0.0;
 	}
 	grid.iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
-		grid.get_scaled_gradient_density(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3 &info ) {
+		grid.get_scaled_gradient_density(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_scalar &info ) {
 			if( grid.face_map[face_id.index] && grid.cell_map[cell_id.index] && value ) {
 				grid.velocity[face_id.index] -= value * result->at(grid.cell_map[cell_id.index]-1);
 			}
