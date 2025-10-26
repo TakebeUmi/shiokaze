@@ -33,6 +33,12 @@
 #include <shiokaze/utility/utility.h>
 #include <cmath>
 #include <random>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <ctime>
+#include <iomanip>
+
 //
 SHKZ_USING_NAMESPACE
 //
@@ -59,6 +65,33 @@ void macsmoke3_oc_2::load( configuration &config ) {
 }
 
 //added
+
+void macsmoke3_oc_2::write_to_txt(std::string type) const {
+	std::time_t t  = std::time(nullptr);
+	std::tm* now = std::localtime(&t);
+
+	std::ostringstream oss;
+    oss << "density_output_"
+        << type << "_"
+        << std::put_time(now, "%Y-%m-%d_%H-%M-%S") // ← 日時フォーマット
+        << ".txt";
+
+	std::string filename = oss.str();
+	std::ofstream outfile(filename);
+	if (outfile.is_open()) {
+		for (size_t i = 0; i < m_grid->density.size(); ++i) {
+			
+		char buffer[64];
+		std::snprintf(buffer, sizeof(buffer), "%04zu:%.6f ", i, m_grid->density[i]);
+		outfile << buffer << " ";
+			if ((i+1) % m_shape[0] == 0) outfile << "\n"; // New line for each z-slice (assuming 64x64x64 grid)
+		}
+		outfile.close();
+		console::dump("Density data written to %s\n", filename.c_str());
+	} else {
+		console::dump("Failed to open file %s for writing.\n", filename.c_str());
+	}
+}
 
 //
 bool macsmoke3_oc_2::should_quit() const {
@@ -235,6 +268,7 @@ void macsmoke3_oc_2::post_initialize ( bool initialized_from_file ) {
 			//m_grid->assign_levelset(fluid_func,m_combined_solid_func);
 			m_grid->assign_density(fluid_func);
 			//
+			//write_to_txt("assigned_density"); //added
 			if( m_param.use_sizing_func ) {
 				m_macoctreesizingfunc.compute_sizing_function(*m_grid_prev,*m_grid,0.0,m_combined_solid_func,[&]( const vec3d &p ) {
 					return m_moving_solid_func ? m_moving_solid_func(m_timestepper->get_current_time(),p).second : vec3d();
@@ -436,7 +470,7 @@ void macsmoke3_oc_2::add_source_oc (double time, double dt ) {
 				// density.increment(i,j,k,d);
 				m_grid->density[cell_id.index] = d;
 				//console::dump("add_source");
-				if (d != 0.0) console::dump( "add_source density[%d] = %f\n", cell_id.index, d );
+				//if (d != 0.0) console::dump( "add_source density[%d] = %f\n", cell_id.index, m_grid->density[cell_id.index] );
 			});
 		};
 		//
@@ -469,7 +503,7 @@ void macsmoke3_oc_2::add_source_oc (double time, double dt ) {
 			//
 		//} else {
 			add_density();
-			console::dump( "Source added in region x:(%f,%f) y:(%f,%f) z:(%f,%f)\n", min_x, max_x, min_y, max_y, min_z, max_z );
+			//console::dump( "Source added in region x:(%f,%f) y:(%f,%f) z:(%f,%f)\n", min_x, max_x, min_y, max_y, min_z, max_z );
 		//}
 		//
 		if( m_param.use_dust ) console::dump( "Done. Seeded=%d. Took %s.\n", seeded, timer.stock("add_func").c_str());
@@ -500,6 +534,7 @@ void macsmoke3_oc_2::add_source_oc (double time, double dt ) {
 //
 void macsmoke3_oc_2::idle() {
 	//
+	//write_to_txt("before_timestep"); //added
 	scoped_timer timer(this);
 	//
 	// Add to graph
@@ -517,35 +552,38 @@ void macsmoke3_oc_2::idle() {
 	//timer.tick(); console::dump( ">>> %s step started (dt=%.2e,CFL=%.2f)...\n", CFL, console::nth(step).c_str());
 	//
     //m_accumulated_CFL += CFL;
-    // std::swap(m_grid,m_grid_prev);
-    // if( m_accumulated_CFL >= m_param.maximal_CFL_accumulation ) {
-    //     m_accumulated_CFL = 0.0;
+    
+	std::swap(m_grid,m_grid_prev);
+    if( m_accumulated_CFL >= m_param.maximal_CFL_accumulation ) {
+        m_accumulated_CFL = 0.0;
 
-    //     if( m_param.use_sizing_func ) {
-	// 		//ここでactivatecellsの引数がて不適切らしい。->よく考えたらactivate cellsを行う基準を考えてなかったのでそれはそうかも→あくまで練習だし適当に決めてもいいんじゃないかな～～～
-	// 		//解決！
-    //        m_grid->activate_cells([&](char depth, const vec3d &p) {
-    //         double density = array_interpolator3::interpolate<Real>(m_density,p/m_dx);
-    //         return density > m_param.minimal_density;
-    //     	});
-    //     } else {
-    //         m_grid->activate_cells([&](const vec3d &p) {
-    //             return array_interpolator3::interpolate<Real>(m_density,p/m_dx) > m_param.minimal_density;
-    //         }, m_combined_solid_func);
-    //     }
+        // if( m_param.use_sizing_func ) {
+		// 	//ここでactivatecellsの引数がて不適切らしい。->よく考えたらactivate cellsを行う基準を考えてなかったのでそれはそうかも→あくまで練習だし適当に決めてもいいんじゃないかな～～～
+		// 	//解決！
+        //    m_grid->activate_cells([&](char depth, const vec3d &p) {
+        //     double density = array_interpolator3::interpolate<Real>(m_density,p/m_dx);
+        //     return density > m_param.minimal_density;
+        // 	});
+        // } else {
+        //     m_grid->activate_cells([&](const vec3d &p) {
+        //         return array_interpolator3::interpolate<Real>(m_density,p/m_dx) > m_param.minimal_density;
+        //     }, m_combined_solid_func);
+        // }
 
-    //     m_grid->balance_layers();
-    //     m_grid->assign_indices();
-    // } else {
-    //     m_grid->copy(*m_grid_prev);
-    // }
+        m_grid->balance_layers();
+        m_grid->assign_indices();
 
+    } else {
+        m_grid->copy(*m_grid_prev);
+    }
+	
 	//added
 	// Advect density
 	m_grid->assign_density([&]( const vec3d &p ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
 		return m_grid_prev->sample_density(p-dt*u);
 	});
+	//write_to_txt("after_density_advection"); //added
 	// Update solid
 	// m_macutility->update_solid_variables(m_dylib,time,&m_solid,&m_solid_velocity);
 
@@ -733,23 +771,26 @@ void macsmoke3_oc_2::draw( graphics_engine &g ) const {
 	//m_macvisualizer->draw_velocity(g,m_velocity);
 	//
 	// Draw projection component
-	m_macproject->draw(g);
+	//m_macproject->draw(g);
 	//
 	// Draw concentration
 	// if( m_param.use_dust ) draw_dust_particles(g);
 	// else m_gridvisualizer->draw_density(g,m_density);
 	//
-	m_grid->draw_density_oc(g);
-            // g.point_size(3.0);
-            // g.begin(graphics_engine::MODE::POINTS);
+	//write_to_txt("before_draw"); //added
+	//m_gridvisualizer->draw_density_oc(g, *m_grid);
+	// //densityを点で描画
+	// m_grid->draw_density_oc(g);
+    //         g.point_size(3.0);
+    //         g.begin(graphics_engine::MODE::POINTS);
             
-            //grid.densityを使用して密度を描画
-            // m_grid->iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
-            //     double density_value = m_grid->density[cell_id.index];
-            //     vec3d pos = get_cell_position(cell_id);
-            //     g.color4(1.0,1.0,1.0,density_value);
-            //     g.vertex3v(pos.v);
-            // });
+    //         //grid.densityを使用して密度を描画
+    //         m_grid->iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+    //             double density_value = m_grid->density[cell_id.index];
+    //             vec3d pos = m_grid->get_cell_position(cell_id);
+    //             g.color4(1.0,1.0,1.0,density_value);
+    //             g.vertex3v(pos.v);
+    //         });
 	// Draw graph
 	m_graphplotter->draw(g);
 }

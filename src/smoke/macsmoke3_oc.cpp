@@ -264,7 +264,7 @@ void macsmoke3_oc::post_initialize ( bool initialized_from_file ) {
 			m_grid->balance_layers();
 			m_grid->assign_indices();
 			m_grid->assign_levelset(fluid_func,m_combined_solid_func);
-			m_grid->assign_density(fluid_func,m_combined_solid_func);
+			//m_grid->assign_density(fluid_func,m_combined_solid_func);
 			//
 			if( m_param.use_sizing_func ) {
 				m_macoctreesizingfunc.compute_sizing_function(*m_grid_prev,*m_grid,0.0,m_combined_solid_func,[&]( const vec3d &p ) {
@@ -533,7 +533,7 @@ void macsmoke3_oc::idle() {
 	m_grid->assign_density([&]( const vec3d &p ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
 		return m_grid_prev->sample_density(p-dt*u);
-	},m_combined_solid_func);
+	});
 	// Update solid
 	m_macutility->update_solid_variables(m_dylib,time,&m_solid,&m_solid_velocity);
 
@@ -725,7 +725,7 @@ void macsmoke3_oc::draw( graphics_engine &g ) const {
 	if( m_param.use_dust ) draw_dust_particles(g);
 	//else m_gridvisualizer->draw_density(g,m_density);
 	//
-	m_grid->draw_density_oc(g);
+	//m_grid->draw_density_oc(g);
 	// Draw graph
 	m_graphplotter->draw(g);
 }

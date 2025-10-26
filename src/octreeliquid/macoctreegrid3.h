@@ -358,7 +358,7 @@ namespace macotreeliquid3_namespace {
 		size_t get_compromised_gradient_count() const;
 		size_t get_surface_T_junction_count() const;
 		//added
-		void draw_density_oc( graphics_engine &g ) const;
+		//void draw_density_oc( graphics_engine &g ) const;
 		//added
 		void get_gradient( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3 &info )> func ) const;
 		void get_gradient_scalar( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_scalar &info )> func ) const;

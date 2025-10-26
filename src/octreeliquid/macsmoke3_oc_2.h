@@ -64,6 +64,7 @@ public:
 	//
 protected:
 	//
+	void write_to_txt(std::string type) const;
 	virtual void setup_window( std::string &name, int &width, int &height ) const override;
 	//virtual void drag( double x, double y, double z, double u, double v, double w ) override;
 	virtual void idle() override;

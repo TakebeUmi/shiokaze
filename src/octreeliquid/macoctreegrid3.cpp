@@ -1082,23 +1082,24 @@ void grid3::iterate_face_neighbors( const cell_id3 &cell_id, char dim, std::func
 		}
 	}
 }
-void grid3::draw_density_oc( graphics_engine &g ) const {
-            g.point_size(3.0);
-            g.begin(graphics_engine::MODE::POINTS);
+// void grid3::draw_density_oc( graphics_engine &g ) const {
+//             g.point_size(3.0);
+//             g.begin(graphics_engine::MODE::POINTS);
             
-            //grid.densityを使用して密度を描画
-            iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
-                double density_value = density[cell_id.index];
-                vec3d pos = get_cell_position(cell_id);
-                g.color4(1.0,1.0,1.0,density_value);
-                g.vertex3v(pos.v);
-            });
+//             //grid.densityを使用して密度を描画
+//             iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+//                 double density_value = density[cell_id.index];
+// 				//console::dump( "density_value = %f\n", density_value );
+//                 vec3d pos = get_cell_position(cell_id);
+//                 g.color4(1.0,1.0,1.0,density_value);
+//                 g.vertex3v(pos.v);
+//             });
 
             
-            g.end();
-            g.point_size(1.0);
-			//console::dump( "drawing density!");
-        }
+//             g.end();
+//             g.point_size(1.0);
+// 			//console::dump( "drawing density!");
+//         }
 //以下4つの関数は連続的か並列的かで処理を分けるためにあるらしい...？
 void grid3::iterate_active_cells( const std::function<void( const cell_id3 &cell_id, int thread_index )> func ) const {
 	//

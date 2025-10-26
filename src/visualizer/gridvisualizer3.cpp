@@ -22,15 +22,18 @@
 **	OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 //
+
 #include <shiokaze/utility/gridutility3_interface.h>
 #include <shiokaze/visualizer/gridvisualizer3_interface.h>
 #include <shiokaze/cellmesher/cellmesher3_interface.h>
 #include <shiokaze/array/shared_array3.h>
 #include <algorithm>
+#include "../octreeliquid/macoctreegrid3.h"
 //#include <shiokaze/octreeliquid/macoctreegrid3.h>
 //
 SHKZ_USING_NAMESPACE
 //
+using namespace macotreeliquid3_namespace;
 class gridvisualizer3 : public gridvisualizer3_interface {
 protected:
 	//
@@ -73,6 +76,25 @@ protected:
 			g.point_size(1.0);
 		}
 	}
+
+	// virtual void draw_density_oc( graphics_engine &g, macotreeliquid3_namespace::grid3 &grid ) const override {
+	//     //if( m_param.draw_density ) {
+	//         g.point_size(3.0);
+	//         g.begin(graphics_engine::MODE::POINTS);
+	        
+	//         //grid.densityを使用して密度を描画
+	//         grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+	//             double density_value = grid.density[cell_id.index];
+	//             vec3d pos = grid.get_cell_position(cell_id);
+	//             g.color4(1.0,1.0,1.0,density_value);
+	//             g.vertex3v(pos.v);
+	//         });
+
+	        
+	//         g.end();
+	//         g.point_size(1.0);
+	//     //}
+	// }
 	//added
 	// virtual void draw_density_oc( graphics_engine &g, const vector<Real> &density ) const override {
 	// 	if( m_param.draw_density ) {

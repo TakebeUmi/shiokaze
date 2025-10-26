@@ -28,7 +28,11 @@
 #include <shiokaze/graphics/graphics_engine.h>
 #include <shiokaze/core/recursive_configurable_module.h>
 #include <shiokaze/array/array3.h>
+#include "../../src/octreeliquid/macoctreegrid3.h" //added
 //
+namespace macoctreeliquid3_namespace {
+    class grid3;
+}
 SHKZ_BEGIN_NAMESPACE
 //
 /** @file */
@@ -73,13 +77,22 @@ public:
 	 */
 	virtual void draw_density( graphics_engine &g, const array3<Real> &density ) const = 0;
 	/**
-	 \~english @brief Draw velocity.
+	 \~english @brief Draw a density field for octree grid.
 	 @param[in] g Graphics engine.
-	 @param[in] velocity Velocity field.
-	 \~japanese @brief 速度場を描画する。
+	 @param[in] grid Octree grid.
+	 \~japanese @brief オクツリーグリッドの密度場を描画する。
 	 @param[in] g グラフィックスエンジン。
-	 @param[in] velocity 速度場。
+	 @param[in] grid オクツリーグリッド。
 	 */
+	// virtual void draw_density_oc( graphics_engine &g, macotreeliquid3_namespace::grid3 &grid ) const = 0;
+	// /**
+	//  \~english @brief Draw velocity.
+	//  @param[in] g Graphics engine.
+	//  @param[in] velocity Velocity field.
+	//  \~japanese @brief 速度場を描画する。
+	//  @param[in] g グラフィックスエンジン。
+	//  @param[in] velocity 速度場。
+	//  */
 	virtual void draw_velocity( graphics_engine &g, const array3<vec3r> &velocity ) const = 0;
 	/**
 	 \~english @brief Draw level set grid.
