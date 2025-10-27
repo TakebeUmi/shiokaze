@@ -76,15 +76,6 @@ public:
 	 @param[in] density 密度場。
 	 */
 	virtual void draw_density( graphics_engine &g, const array3<Real> &density ) const = 0;
-	/**
-	 \~english @brief Draw a density field for octree grid.
-	 @param[in] g Graphics engine.
-	 @param[in] grid Octree grid.
-	 \~japanese @brief オクツリーグリッドの密度場を描画する。
-	 @param[in] g グラフィックスエンジン。
-	 @param[in] grid オクツリーグリッド。
-	 */
-	// virtual void draw_density_oc( graphics_engine &g, macotreeliquid3_namespace::grid3 &grid ) const = 0;
 	// /**
 	//  \~english @brief Draw velocity.
 	//  @param[in] g Graphics engine.

@@ -41,5 +41,5 @@ def build(bld):
 			use = bld.get_target_name(bld,'core'))
 	#
 	bld.shlib(source = 'gridvisualizer3_octree.cpp',
-			target = bld.get_target_name(bld,'gridvisualizer3_octree'),
-			use = bld.get_target_name(bld,'core'))
+				target = bld.get_target_name(bld,'gridvisualizer3_octree'),
+				use = bld.get_target_name(bld,['core','macoctreegrid3']))

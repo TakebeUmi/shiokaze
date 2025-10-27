@@ -463,7 +463,7 @@ void macsmoke3_oc_2::add_source_oc (double time, double dt ) {
 				const vec3d p = m_grid->get_cell_position(cell_id);
 				min_x = std::min(min_x,p[0]); min_y = std::min(min_y,p[1]); min_z = std::min(min_z,p[2]);
 				max_x = std::max(max_x,p[0]); max_y = std::max(max_y,p[1]); max_z = std::max(max_z,p[2]);
-				//console::dump( "Adding source at cell () pos (%f,%f,%f)\n", p[0], p[1], p[2] );
+				//console::dump( "Adding source at (%f,%f,%f)\n", p[0], p[1], p[2] );
 				//こっから
 				double d(0.0); vec3d dummy;
 				add_func (p,dummy,d,time,dt);
@@ -776,7 +776,7 @@ void macsmoke3_oc_2::draw( graphics_engine &g ) const {
 	// Draw concentration
 	// if( m_param.use_dust ) draw_dust_particles(g);
 	// else m_gridvisualizer->draw_density(g,m_density);
-	//
+	m_gridvisualizer_oc->draw_density_oc(g,*m_grid);
 	//write_to_txt("before_draw"); //added
 	//m_gridvisualizer->draw_density_oc(g, *m_grid);
 	// //densityを点で描画

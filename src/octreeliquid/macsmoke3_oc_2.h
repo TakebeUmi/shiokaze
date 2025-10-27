@@ -40,6 +40,8 @@
 #include <shiokaze/utility/graphplotter_interface.h>
 #include <shiokaze/core/dylibloader.h>
 //
+#include <shiokaze/visualizer/gridvisualizer3_octree_interface.h>
+//
 
 #include "macoctreegrid3.h"
 #include "macoctreeproject3.h"
@@ -97,6 +99,7 @@ protected:
 
 	//gridvisualizer3_driver m_solid_gridvisualizer{this,"gridvisualizer3"};
 	//array3<Real> m_solid_visualize{this};
+
 	//
 	//追加
     grid3 m_grid_0{this};
@@ -119,7 +122,7 @@ protected:
 		unsigned render_sample_count {128};
 		double volume_scale {40.0};
 		//
-        unsigned min_resolution {16};
+        unsigned min_resolution {64};//ここをいじると最小解像度が変化する
         bool use_sizing_func {true};
         unsigned initial_refinement {3};
         double maximal_CFL_accumulation {1.0};
@@ -155,6 +158,7 @@ protected:
 	macproject3_driver m_macproject{this,"macpressuresolver3"};
 	//macadvection3_driver m_macadvection{this,"macadvection3"};
 	gridvisualizer3_driver m_gridvisualizer{this,"gridvisualizer3"};
+	gridvisualizer3_octree_driver m_gridvisualizer_oc{this,"gridvisualizer3_octree"};
 	gridutility3_driver m_gridutility{this,"gridutility3"};
 	graphplotter_driver m_graphplotter{this,"graphplotter"};
 	macstats3_driver m_macstats{this,"macstats3"};

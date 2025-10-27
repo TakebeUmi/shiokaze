@@ -29,8 +29,9 @@
 #include <shiokaze/array/shared_array3.h>
 #include <algorithm>
 #include "../octreeliquid/macoctreegrid3.h"
-//#include <shiokaze/octreeliquid/macoctreegrid3.h>
-//
+
+#include <shiokaze/core/console.h>
+
 SHKZ_USING_NAMESPACE
 //
 using namespace macotreeliquid3_namespace;
@@ -70,6 +71,8 @@ protected:
 			g.begin(graphics_engine::MODE::POINTS);
 			density.const_serial_actives([&](int i, int j, int k, const auto &it) {
 				g.color4(1.0,1.0,1.0,it());
+				vec3d pos = (m_dx*vec3i(i,j,k).cell());
+				console::dump("%f at (%f,%f,%f)\n", it(), pos[0], pos[1], pos[2]);
 				g.vertex3v((m_dx*vec3i(i,j,k).cell()).v);
 			});
 			g.end();
