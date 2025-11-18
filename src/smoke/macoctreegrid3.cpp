@@ -1464,6 +1464,8 @@ void grid3::get_divergence_scalar( const cell_id3 &cell_id, std::function<void( 
 	}
 }
 
+
+
 //発散を計算
 void grid3::get_divergence( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value0, double value1 )> func ) const {
 	//
@@ -1986,6 +1988,7 @@ double grid3::sample_levelset( const vec3d &p, Real *min_max_values ) const {
 	//
 	Real local_min_max_values[2] = { 0.0, 0.0 };
 	double result = sample_cell(p,levelset,local_min_max_values);
+	console::dump("sample_levelset: p=(%.2e,%.2e,%.2e), result=%.2e\n",p[0],p[1],p[2],result);
 	result = clamp_ceil(std::max(std::min(result,(double)local_min_max_values[1]),(double)local_min_max_values[0]));
 	//local_min_max_values
 	if( min_max_values ) {

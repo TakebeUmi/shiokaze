@@ -72,7 +72,7 @@ protected:
 			density.const_serial_actives([&](int i, int j, int k, const auto &it) {
 				g.color4(1.0,1.0,1.0,it());
 				vec3d pos = (m_dx*vec3i(i,j,k).cell());
-				console::dump("%f at (%f,%f,%f)\n", it(), pos[0], pos[1], pos[2]);
+				//console::dump("%f at (%f,%f,%f)\n", it(), pos[0], pos[1], pos[2]);
 				g.vertex3v((m_dx*vec3i(i,j,k).cell()).v);
 			});
 			g.end();

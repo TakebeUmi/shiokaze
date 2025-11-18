@@ -1076,7 +1076,7 @@ void grid3::iterate_active_faces( const std::function<void( const face_id3 &face
 		});
 	}
 }
-//
+//		
 void grid3::serial_iterate_active_cells( const std::function<void( const cell_id3 &cell_id )> func ) const {
 	//
 	for( char depth=0; depth<layers.size(); ++depth ) {
@@ -1311,11 +1311,14 @@ void grid3::get_divergence( const cell_id3 &cell_id, std::function<void( const f
 					const double scale0 = t * area;
 					const double scale1 = t * (1.0-area);
 					func(face_id,scale0*value,scale1*value);
+					
 				}
 			});
 		});
 	}
 }
+
+
 //
 void grid3::get_unmofidied_divergence( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value )> func ) const {
 	//

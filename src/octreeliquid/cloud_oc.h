@@ -1,5 +1,5 @@
 /*
-**	macsmoke3_oc_2.h
+**	cloud_oc.h
 **
 **	This is part of Shiokaze, a research-oriented fluid solver for computer graphics.
 **	Created by Ryoichi Ando <rand@nii.ac.jp> on April 10, 2017.
@@ -22,8 +22,8 @@
 **	OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 //
-#ifndef SHKZ_macsmoke3_oc_2_H
-#define SHKZ_macsmoke3_oc_2_H
+#ifndef SHKZ_cloud_oc_H
+#define SHKZ_cloud_oc_H
 //
 //#include <shiokaze/array/array3.h>
 //#include <shiokaze/array/macarray3.h>
@@ -40,7 +40,7 @@
 #include <shiokaze/utility/graphplotter_interface.h>
 #include <shiokaze/core/dylibloader.h>
 //
-#include <shiokaze/visualizer/gridvisualizer3_octree_interface.h>
+#include <shiokaze/visualizer/gridvisualizer3_cloud_interface.h>
 //
 
 #include "macoctreegrid3.h"
@@ -57,10 +57,10 @@ SHKZ_BEGIN_NAMESPACE
 //
 using namespace macotreeliquid3_namespace;
 
-class macsmoke3_oc_2 : public drawable {
+class cloud_oc : public drawable {
 public:
 	//
-	macsmoke3_oc_2();
+	cloud_oc();
 	LONG_NAME("MAC Smoke 3D")
 	ARGUMENT_NAME("Smoke")
 	//
@@ -158,7 +158,7 @@ protected:
 	macproject3_driver m_macproject{this,"macpressuresolver3"};
 	//macadvection3_driver m_macadvection{this,"macadvection3"};
 	gridvisualizer3_driver m_gridvisualizer{this,"gridvisualizer3"};
-	gridvisualizer3_octree_driver m_gridvisualizer_oc{this,"gridvisualizer3_octree"};
+	gridvisualizer3_cloud_driver m_gridvisualizer_oc{this,"gridvisualizer3_cloud"};
 	gridutility3_driver m_gridutility{this,"gridutility3"};
 	graphplotter_driver m_graphplotter{this,"graphplotter"};
 	macstats3_driver m_macstats{this,"macstats3"};

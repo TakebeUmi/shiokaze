@@ -68,6 +68,11 @@ void grid3::copy( const grid3 &grid ) {
 	//
 	levelset = grid.levelset;
 	density = grid.density;
+	//added
+	qc = grid.qc;
+	qv = grid.qv;
+	qr = grid.qr;
+	//added
 	velocity = grid.velocity;
 	area = grid.area;
 	solid_cell = grid.solid_cell;
@@ -109,6 +114,9 @@ void grid3::clear() {
 	//
 	levelset.clear();
 	density.clear();
+	qc.clear();
+	qv.clear();
+	qr.clear();
 	velocity.clear();
 	area.clear();
 	//
@@ -266,6 +274,24 @@ void grid3::assign_density( std::function<double( const vec3d &p )> smoke) {
 	std::fill(area.begin(),area.end(),1.0);
 
 	console::dump( "Done. Took %s.\n", timer.stock("assign_density").c_str());
+}
+
+void grid3::assign_qc( std::function<double( const vec3d &p )> smoke) {
+	//
+	scoped_timer timer(this);
+	timer.tick(); console::dump( "Assigning qc..." );//levelsetをdensityに変更
+	//
+	// Assigning fluid levelset
+	iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+
+		double d = smoke(get_cell_position(cell_id));
+		qc[cell_id.index] = d; //セルの位置（ここでは面の中心）を取得してfluid関数に入れている
+		//console::dump( "density[%d] = %f\n", cell_id.index, d );
+	});
+	//
+	std::fill(area.begin(),area.end(),1.0);
+
+	console::dump( "Done. Took %s.\n", timer.stock("assign_qc").c_str());
 }
 //added
 
@@ -446,18 +472,27 @@ void grid3::assign_indices() {
 	//
 	levelset.clear();
 	density.clear();
+	qc.clear();
+	qv.clear();
+	qr.clear();
 	velocity.clear();
 	area.clear();
 	solid_cell.clear();
 	//
 	levelset.resize(pressure_index);
 	density.resize(pressure_index);
+	qc.resize(pressure_index);
+	qv.resize(pressure_index);
+	qr.resize(pressure_index);
 	velocity.resize(velocity_index);
 	area.resize(velocity_index);
 	solid_cell.resize(pressure_index);
 	//
 	levelset.shrink_to_fit();
 	density.shrink_to_fit();
+	qc.shrink_to_fit();
+	qv.shrink_to_fit();
+	qr.shrink_to_fit();
 	velocity.shrink_to_fit();
 	area.shrink_to_fit();
 	solid_cell.shrink_to_fit();
@@ -1124,6 +1159,7 @@ void grid3::iterate_active_faces( const std::function<void( const face_id3 &face
 	}
 }
 //
+
 void grid3::serial_iterate_active_cells( const std::function<void( const cell_id3 &cell_id )> func ) const {
 	//
 	for( char depth=0; depth<layers.size(); ++depth ) {
@@ -1143,11 +1179,12 @@ void grid3::serial_iterate_active_faces( const std::function<void( const face_id
 		});
 	}
 }
+
 //
 void grid3::get_gradient_scalar( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_scalar &info )> func ) const {
 	//
 	const auto &layer = *layers[face_id.depth];
-	const vec3i p_forward = face_id.pi; //差分において前方の位置
+	const vec3i p_forward = face_id.pi; //差分において前方の位置(これは麺の位置と同じ)
 	const vec3i p_backward = face_id.pi-vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2); //差分において後方の位置
 	const Real area = this->area[face_id.index];
 	//console::dump( "area = %f\n", area );
@@ -1169,6 +1206,7 @@ void grid3::get_gradient_scalar( const face_id3 &face_id, std::function<void( co
 		const Real rho = utility::fraction(densities[0],densities[1]); 
 		const bool cross_interface = rho > 0.0 && rho < 1.0;
 		//
+		//要素の抜き出しだけを行い、実際に足すのはfunc内で（func内で条件分岐などが発生するおそれがあるため？）
 		func(forward_id,scale,{densities[0],dx,rho,area,false,cross_interface,false});
 		func(backward_id,-scale,{densities[1],dx,rho,area,false,cross_interface,false});
 		//std::function<void( const cell_id3 &cell_id, double value, const gradient_info3 &info )> func
@@ -1248,6 +1286,515 @@ void grid3::get_gradient_scalar( const face_id3 &face_id, std::function<void( co
 			for( unsigned n=1; n<indices.size(); ++n ) {
 				func(indices[n],-0.25*T_scale,{density[indices[n].index],dx,rho,area,true,false});
 			}
+		}
+	}
+}
+
+void grid3::get_gradient_qc( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_cloud &info )> func ) const {
+	//
+	const auto &layer = *layers[face_id.depth];
+	const vec3i p_forward = face_id.pi; //差分において前方の位置
+	const vec3i p_backward = face_id.pi-vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2); //差分において後方の位置
+	const Real area = this->area[face_id.index];
+	//console::dump( "area = %f\n", area );
+	//
+	const Real dx = layer.dx;
+	//console::dump( "dx = %f\n", dx );
+	const double scale = 1.0 / dx;
+	//
+	if( layer.active_cells.active(p_forward) && layer.active_cells.active(p_backward)) {
+		//
+		const uint_type foward_index = layer.active_cells(p_forward);
+		const uint_type backward_index = layer.active_cells(p_backward);
+		//
+		const cell_id3 &forward_id = {face_id.depth,p_forward,foward_index};
+		const cell_id3 &backward_id = {face_id.depth,p_backward,backward_index};
+		//
+		const Real qcs[] = { qc[foward_index], qc[backward_index] };
+		//console::dump( "densities: %f , %f\n", densities[0], densities[1] );
+		const Real rho = utility::fraction(qcs[0],qcs[1]); 
+		const bool cross_interface = rho > 0.0 && rho < 1.0;
+		//
+		func(forward_id,scale,{qcs[0],dx,rho,area,false,cross_interface,false});
+		func(backward_id,-scale,{qcs[1],dx,rho,area,false,cross_interface,false});
+		//std::function<void( const cell_id3 &cell_id, double value, const gradient_info3 &info )> func
+		//scaleは差分を取るときの各項の係数。ここでは1/dx
+		//
+	} else if( face_id.depth > 0 ) {
+		//
+		const auto &high_layer = *layers[face_id.depth-1];
+		const double T_scale = 1.0 / (dx * 0.75);
+		//
+		if( layer.fill_flags(p_forward) && layer.active_cells.active(p_backward)) {
+			//
+			std::vector<cell_id3> indices;
+			vec3i ivec, jvec;
+			if( face_id.dim == 0 ) {
+				ivec = vec3i(0,1,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 1 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 2 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,1,0);
+			}
+			//
+			vec3i forward_bottom = 2*(p_backward+vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2));
+			uint_type backward_index = layer.active_cells(p_backward);
+			indices.push_back({face_id.depth,p_backward,backward_index});
+			for( int ii=0; ii<2; ++ii ) for( int jj=0; jj<2; ++jj ) {
+				vec3i hpi = forward_bottom+ii*ivec+jj*jvec;
+				indices.push_back({(char)(face_id.depth-1),hpi,high_layer.active_cells(hpi)});
+			}
+			double min_qc (0.0), max_qc (0.0);
+			for( unsigned n=0; n<indices.size(); ++n ) {
+				min_qc = std::min(min_qc,(double)qc[indices[n].index]);
+				max_qc = std::max(max_qc,(double)qc[indices[n].index]);
+			}
+			const bool cross_interface = min_qc * max_qc < 0.0;
+			const Real rho = utility::fraction(min_qc,max_qc);
+			
+			func(indices[0],-T_scale,{qc[indices[0].index],dx,rho,area,true,false});
+			for( unsigned n=1; n<indices.size(); ++n ) {
+				func(indices[n],0.25*T_scale,{qc[indices[n].index],dx,rho,area,true,false});
+			}
+			//
+		} else if( layer.active_cells.active(p_forward) && layer.fill_flags(p_backward)) {
+			//
+			std::vector<cell_id3> indices;
+			vec3i ivec, jvec;
+			if( face_id.dim == 0 ) {
+				ivec = vec3i(0,1,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 1 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 2 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,1,0);
+			}
+			vec3i backward_bottom = 2*p_forward-vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2);
+			uint_type forward_index = layer.active_cells(p_forward);
+			indices.push_back({face_id.depth,p_forward,forward_index});
+			for( int ii=0; ii<2; ++ii ) for( int jj=0; jj<2; ++jj ) {
+				vec3i hpi = backward_bottom+ii*ivec+jj*jvec;
+				indices.push_back({(char)(face_id.depth-1),hpi,high_layer.active_cells(hpi)});
+			}
+			//
+			double min_qc (0.0), max_qc (0.0);
+			for( unsigned n=0; n<indices.size(); ++n ) {
+				min_qc = std::min(min_qc,(double)qc[indices[n].index]);
+				max_qc = std::max(max_qc,(double)qc[indices[n].index]);
+			}
+			const bool cross_interface = min_qc * max_qc < 0.0;
+			const Real rho = utility::fraction(min_qc,max_qc);
+			//
+			func(indices[0],T_scale,{qc[indices[0].index],dx,rho,area,true,cross_interface,false});
+			for( unsigned n=1; n<indices.size(); ++n ) {
+				func(indices[n],-0.25*T_scale,{qc[indices[n].index],dx,rho,area,true,false});
+			}
+		}
+	}
+}
+
+void grid3::get_gradient_qv( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_cloud &info )> func ) const {
+	//
+	const auto &layer = *layers[face_id.depth];
+	const vec3i p_forward = face_id.pi; //差分において前方の位置
+	const vec3i p_backward = face_id.pi-vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2); //差分において後方の位置
+	const Real area = this->area[face_id.index];
+	//console::dump( "area = %f\n", area );
+	//
+	const Real dx = layer.dx;
+	//console::dump( "dx = %f\n", dx );
+	const double scale = 1.0 / dx;
+	//
+	if( layer.active_cells.active(p_forward) && layer.active_cells.active(p_backward)) {
+		//
+		const uint_type foward_index = layer.active_cells(p_forward);
+		const uint_type backward_index = layer.active_cells(p_backward);
+		//
+		const cell_id3 &forward_id = {face_id.depth,p_forward,foward_index};
+		const cell_id3 &backward_id = {face_id.depth,p_backward,backward_index};
+		//
+		const Real qvs[] = { qv[foward_index], qv[backward_index] };
+		//console::dump( "densities: %f , %f\n", densities[0], densities[1] );
+		const Real rho = utility::fraction(qvs[0],qvs[1]); 
+		const bool cross_interface = rho > 0.0 && rho < 1.0;
+		//
+		func(forward_id,scale,{qvs[0],dx,rho,area,false,cross_interface,false});
+		func(backward_id,-scale,{qvs[1],dx,rho,area,false,cross_interface,false});
+		//std::function<void( const cell_id3 &cell_id, double value, const gradient_info3 &info )> func
+		//scaleは差分を取るときの各項の係数。ここでは1/dx
+		//
+	} else if( face_id.depth > 0 ) {
+		//
+		const auto &high_layer = *layers[face_id.depth-1];
+		const double T_scale = 1.0 / (dx * 0.75);
+		//
+		if( layer.fill_flags(p_forward) && layer.active_cells.active(p_backward)) {
+			//
+			std::vector<cell_id3> indices;
+			vec3i ivec, jvec;
+			if( face_id.dim == 0 ) {
+				ivec = vec3i(0,1,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 1 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 2 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,1,0);
+			}
+			//
+			vec3i forward_bottom = 2*(p_backward+vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2));
+			uint_type backward_index = layer.active_cells(p_backward);
+			indices.push_back({face_id.depth,p_backward,backward_index});
+			for( int ii=0; ii<2; ++ii ) for( int jj=0; jj<2; ++jj ) {
+				vec3i hpi = forward_bottom+ii*ivec+jj*jvec;
+				indices.push_back({(char)(face_id.depth-1),hpi,high_layer.active_cells(hpi)});
+			}
+			double min_qv (0.0), max_qv (0.0);
+			for( unsigned n=0; n<indices.size(); ++n ) {
+				min_qv = std::min(min_qv,(double)qv[indices[n].index]);
+				max_qv = std::max(max_qv,(double)qv[indices[n].index]);
+			}
+			const bool cross_interface = min_qv * max_qv < 0.0;
+			const Real rho = utility::fraction(min_qv,max_qv);
+			
+			func(indices[0],-T_scale,{qv[indices[0].index],dx,rho,area,true,false});
+			for( unsigned n=1; n<indices.size(); ++n ) {
+				func(indices[n],0.25*T_scale,{qv[indices[n].index],dx,rho,area,true,false});
+			}
+			//
+		} else if( layer.active_cells.active(p_forward) && layer.fill_flags(p_backward)) {
+			//
+			std::vector<cell_id3> indices;
+			vec3i ivec, jvec;
+			if( face_id.dim == 0 ) {
+				ivec = vec3i(0,1,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 1 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 2 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,1,0);
+			}
+			vec3i backward_bottom = 2*p_forward-vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2);
+			uint_type forward_index = layer.active_cells(p_forward);
+			indices.push_back({face_id.depth,p_forward,forward_index});
+			for( int ii=0; ii<2; ++ii ) for( int jj=0; jj<2; ++jj ) {
+				vec3i hpi = backward_bottom+ii*ivec+jj*jvec;
+				indices.push_back({(char)(face_id.depth-1),hpi,high_layer.active_cells(hpi)});
+			}
+			//
+			double min_qv (0.0), max_qv (0.0);
+			for( unsigned n=0; n<indices.size(); ++n ) {
+				min_qv = std::min(min_qv,(double)qv[indices[n].index]);
+				max_qv = std::max(max_qv,(double)qv[indices[n].index]);
+			}
+			const bool cross_interface = min_qv * max_qv < 0.0;
+			const Real rho = utility::fraction(min_qv,max_qv);
+			//
+			func(indices[0],T_scale,{qv[indices[0].index],dx,rho,area,true,cross_interface,false});
+			for( unsigned n=1; n<indices.size(); ++n ) {
+				func(indices[n],-0.25*T_scale,{qv[indices[n].index],dx,rho,area,true,false});
+			}
+		}
+	}
+}
+
+double grid3::Temperature_profile(double z) {
+	double T0 = 288.15;
+if (z >= 0 && z <= param.z1) {
+	return T0 + param.gamma0 * z;
+}
+else {
+	return T0 + param.gamma0 * param.z1 + param.gamma1 * (z - param.z1);
+}
+}
+
+void grid3::get_gradient_qr( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_cloud &info )> func ) const {
+	//
+	const auto &layer = *layers[face_id.depth];
+	const vec3i p_forward = face_id.pi; //差分において前方の位置
+	const vec3i p_backward = face_id.pi-vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2); //差分において後方の位置
+	const Real area = this->area[face_id.index];
+	//console::dump( "area = %f\n", area );
+	//
+	const Real dx = layer.dx;
+	//console::dump( "dx = %f\n", dx );
+	const double scale = 1.0 / dx;
+	//
+	if( layer.active_cells.active(p_forward) && layer.active_cells.active(p_backward)) {
+		//
+		const uint_type foward_index = layer.active_cells(p_forward);
+		const uint_type backward_index = layer.active_cells(p_backward);
+		//
+		const cell_id3 &forward_id = {face_id.depth,p_forward,foward_index};
+		const cell_id3 &backward_id = {face_id.depth,p_backward,backward_index};
+		//
+		const Real qrs[] = { qr[foward_index], qr[backward_index] };
+		//console::dump( "densities: %f , %f\n", densities[0], densities[1] );
+		const Real rho = utility::fraction(qrs[0],qrs[1]); 
+		const bool cross_interface = rho > 0.0 && rho < 1.0;
+		//
+		func(forward_id,scale,{qrs[0],dx,rho,area,false,cross_interface,false});
+		func(backward_id,-scale,{qrs[1],dx,rho,area,false,cross_interface,false});
+		//std::function<void( const cell_id3 &cell_id, double value, const gradient_info3 &info )> func
+		//scaleは差分を取るときの各項の係数。ここでは1/dx
+		//
+	} else if( face_id.depth > 0 ) {
+		//
+		const auto &high_layer = *layers[face_id.depth-1];
+		const double T_scale = 1.0 / (dx * 0.75);
+		//
+		if( layer.fill_flags(p_forward) && layer.active_cells.active(p_backward)) {
+			//
+			std::vector<cell_id3> indices;
+			vec3i ivec, jvec;
+			if( face_id.dim == 0 ) {
+				ivec = vec3i(0,1,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 1 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 2 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,1,0);
+			}
+			//
+			vec3i forward_bottom = 2*(p_backward+vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2));
+			uint_type backward_index = layer.active_cells(p_backward);
+			indices.push_back({face_id.depth,p_backward,backward_index});
+			for( int ii=0; ii<2; ++ii ) for( int jj=0; jj<2; ++jj ) {
+				vec3i hpi = forward_bottom+ii*ivec+jj*jvec;
+				indices.push_back({(char)(face_id.depth-1),hpi,high_layer.active_cells(hpi)});
+			}
+			double min_qr (0.0), max_qr (0.0);
+			for( unsigned n=0; n<indices.size(); ++n ) {
+				min_qr = std::min(min_qr,(double)qr[indices[n].index]);
+				max_qr = std::max(max_qr,(double)qr[indices[n].index]);
+			}
+			const bool cross_interface = min_qr * max_qr < 0.0;
+			const Real rho = utility::fraction(min_qr,max_qr);
+			
+			func(indices[0],-T_scale,{qr[indices[0].index],dx,rho,area,true,false});
+			for( unsigned n=1; n<indices.size(); ++n ) {
+				func(indices[n],0.25*T_scale,{qr[indices[n].index],dx,rho,area,true,false});
+			}
+			//
+		} else if( layer.active_cells.active(p_forward) && layer.fill_flags(p_backward)) {
+			//
+			std::vector<cell_id3> indices;
+			vec3i ivec, jvec;
+			if( face_id.dim == 0 ) {
+				ivec = vec3i(0,1,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 1 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 2 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,1,0);
+			}
+			vec3i backward_bottom = 2*p_forward-vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2);
+			uint_type forward_index = layer.active_cells(p_forward);
+			indices.push_back({face_id.depth,p_forward,forward_index});
+			for( int ii=0; ii<2; ++ii ) for( int jj=0; jj<2; ++jj ) {
+				vec3i hpi = backward_bottom+ii*ivec+jj*jvec;
+				indices.push_back({(char)(face_id.depth-1),hpi,high_layer.active_cells(hpi)});
+			}
+			//
+			double min_qr (0.0), max_qr (0.0);
+			for( unsigned n=0; n<indices.size(); ++n ) {
+				min_qr = std::min(min_qr,(double)qr[indices[n].index]);
+				max_qr = std::max(max_qr,(double)qr[indices[n].index]);
+			}
+			const bool cross_interface = min_qr * max_qr < 0.0;
+			const Real rho = utility::fraction(min_qr,max_qr);
+			//
+			func(indices[0],T_scale,{qr[indices[0].index],dx,rho,area,true,cross_interface,false});
+			for( unsigned n=1; n<indices.size(); ++n ) {
+				func(indices[n],-0.25*T_scale,{qr[indices[n].index],dx,rho,area,true,false});
+			}
+		}
+	}
+}
+
+void grid3::vorticity_confinement(double dt) {
+	std::vector<Real> vorticity(face_count);
+	std::vector<Real> abs_omegas(cell_count);
+
+	iterate_active_cells([&]( const cell_id3 &cell_id, int tid) {
+		double round_x = 0.0;
+		double round_y = 0.0;
+		double round_z = 0.0;
+		//
+		get_vorticity(cell_id,[&]( const face_id3 &face_id, double value ) {
+
+			if (face_id.dim == 0) {
+				round_x += value;
+			} else if (face_id.dim == 1) {
+				round_y += value;
+			} else if (face_id.dim == 2) {
+				round_z += value;
+			}
+		});
+		vec3d omega(round_z - round_y, round_x - round_z, round_y - round_x);
+		double abs_omega = std::sqrt(omega[0] * omega[0] + omega[1] * omega[1] + omega[2] * omega[2]);
+		abs_omegas[cell_id.index] = abs_omega;
+	for (char dim : DIMS3) {
+		iterate_face_neighbors(cell_id, dim, [&](const face_id3 &face_id) {
+			vorticity[face_id.index] = omega[dim];
+		});
+	}
+
+	});
+
+	iterate_active_cells([&]( const cell_id3 &cell_id, int tid) {
+		vec3d grad_absomega(0.0, 0.0, 0.0);
+		vec3d omega(0.0, 0.0, 0.0);
+		//
+		for (char dim : DIMS3) {
+			iterate_face_neighbors(cell_id, dim, [&](const face_id3 &face_id) {
+				const auto &layer = *layers[face_id.depth];
+				const vec3i p_forward = face_id.pi; //差分において前方の位置
+				const vec3i p_backward = face_id.pi - vec3i(face_id.dim == 0, face_id.dim == 1, face_id.dim == 2); //差分において後方の位置
+				//
+				const Real dx = layer.dx;
+				const double scale = 1.0 / dx;
+				//
+				if (layer.active_cells.active(p_forward) && layer.active_cells.active(p_backward)) {
+					//
+					uint_type foward_index = layer.active_cells(p_forward);
+					uint_type backward_index = layer.active_cells(p_backward);
+					//
+					grad_absomega[dim] += scale * (abs_omegas[foward_index] - abs_omegas[backward_index]);
+					//
+					omega[dim] = vorticity[face_id.index];
+				}
+			});
+		}
+		grad_absomega.normalize();
+		vec3d f_vorticity = (grad_absomega[1] * omega[2] - grad_absomega[2] * omega[1],
+							grad_absomega[2] * omega[0] - grad_absomega[0] * omega[2],
+							grad_absomega[0] * omega[1] - grad_absomega[1] * omega[0]);
+		for (char dim : DIMS3) {
+			iterate_face_neighbors(cell_id, dim, [&](const face_id3 &face_id) {
+				const auto &layer = *layers[face_id.depth];
+				const Real dx = layer.dx;
+				const Real force = param.vort_eps * f_vorticity[dim];
+				velocity[face_id.index] += force * dt * dx;
+			});
+		}
+	});
+}
+
+void grid3::get_vorticity(const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value)> func) const {
+	for (char dim : DIMS3) {
+		iterate_face_neighbors(cell_id, dim, [&](const face_id3 &face_id) {
+			const auto &face_layer = *layers[face_id.depth];
+			const Real area = this->area[face_id.index];
+			uint_type column = face_layer.active_faces[dim](face_id.pi);
+			get_velocity(face_id, [&](const cell_id3 &neighbor_cell_id, double value, const double u, const Real dx, bool T_junction) {
+				if( cell_id.index == neighbor_cell_id.index ) { //同じセルに対する寄与のみを考慮
+					const double scale = (T_junction ? 0.75 : 1.0); //dxは差分の逆数に相当。func内でそれを累積して渦度を計算
+					func(face_id, scale*value*u);
+				}
+				//face_id.dimはiterate_face_neighborsで指定された面の向きの次元、よく考えたらdim2もそれと
+			});
+
+		});
+	}
+}
+// cell_idを渡してそのセルの各面に対して差分のもとを取り出して計算できる状態にする関数。
+//実際の渦度の計算は渡した関数func内で行う。これは実行コードの方に書く
+
+void grid3::get_velocity(const face_id3 &face_id, std::function<void( const cell_id3 &cell_id,double value, const double u, const Real dx, bool T_junction )> func) const {
+	//
+	const auto &layer = *layers[face_id.depth];
+	const vec3i p_forward = face_id.pi; //差分において前方の位置
+	const vec3i p_backward = face_id.pi-vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2); //差分において後方の位置
+	//
+	const Real dx = layer.dx;
+	const double scale = 1.0 / dx;
+	//
+	if( layer.active_cells.active(p_forward) && layer.active_cells.active(p_backward)) {
+		//
+		const uint_type foward_index = layer.active_cells(p_forward);
+		const uint_type backward_index = layer.active_cells(p_backward);
+		//
+		const cell_id3 &forward_id = {face_id.depth,p_forward,foward_index};
+		const cell_id3 &backward_id = {face_id.depth,p_backward,backward_index};
+		//
+		const Real velocities[] = { velocity[foward_index], velocity[backward_index] };
+		//
+		func(forward_id, scale, velocities[0], dx, false);
+		func(backward_id, -scale, velocities[1], dx, false);
+		//
+	} else if( face_id.depth > 0 ) {
+		//
+		const auto &high_layer = *layers[face_id.depth-1];
+		const double T_scale = 1.0 / (dx * 0.75);
+		//
+		if( layer.fill_flags(p_forward) && layer.active_cells.active(p_backward)) {
+			//
+			std::vector<cell_id3> indices;
+			vec3i ivec, jvec;
+			if( face_id.dim == 0 ) {
+				ivec = vec3i(0,1,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 1 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 2 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,1,0);
+			}
+			//
+			vec3i forward_bottom = 2*(p_backward+vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2));
+			uint_type backward_index = layer.active_cells(p_backward);
+			indices.push_back({face_id.depth,p_backward,backward_index});
+			for( int ii=0; ii<2; ++ii ) for( int jj=0; jj<2; ++jj ) {
+				vec3i hpi = forward_bottom+ii*ivec+jj*jvec;
+				indices.push_back({(char)(face_id.depth-1),hpi,high_layer.active_cells(hpi)});
+			}
+			//
+			func(indices[0],-T_scale,velocity[indices[0].index], dx, true);
+			for( unsigned n=1; n<indices.size(); ++n ) {
+				func(indices[n],0.25*T_scale,velocity[indices[n].index], dx, true);
+			}
+			//
+		} else if( layer.active_cells.active(p_forward) && layer.fill_flags(p_backward)) {
+			//
+			std::vector<cell_id3> indices;
+			vec3i ivec, jvec;
+			if( face_id.dim == 0 ) {
+				ivec = vec3i(0,1,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 1 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,0,1);
+			} else if( face_id.dim == 2 ) {
+				ivec = vec3i(1,0,0);
+				jvec = vec3i(0,1,0);
+			}
+			vec3i backward_bottom = 2*p_forward-vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2);
+			uint_type forward_index = layer.active_cells(p_forward);
+			indices.push_back({face_id.depth,p_forward,forward_index});
+			for( int ii=0; ii<2; ++ii ) for( int jj=0; jj<2; ++jj ) {
+				vec3i hpi = backward_bottom+ii*ivec+jj*jvec;
+				indices.push_back({(char)(face_id.depth-1),hpi,high_layer.active_cells(hpi)});
+			}
+			//
+			func(indices[0],T_scale,velocity[indices[0].index], dx, true);
+			for( unsigned n=1; n<indices.size(); ++n ) {
+				func(indices[n],-0.25*T_scale,velocity[indices[n].index], dx, true);
+			}
+			//外付けの変数w等に累積するような（w += scale*levelset）関数funcをとることでwに差分法の計算結果が入るようにできる
 		}
 	}
 }
@@ -1476,6 +2023,7 @@ void grid3::get_scaled_gradient_density( const face_id3 &face_id, std::function<
 				//if( info.density < 0.0 ) {
 					W1 += info.density;
 					W2 += value * info.density;
+					//Wは重み。ジャンクションのときにどのセルがどの程度重みつけられるのかを定める
 				//}
 				fluid_average += value * info.density;
 				has_solid = has_solid || solid_cell[cell_id.index];
@@ -1530,7 +2078,230 @@ void grid3::get_scaled_gradient_density( const face_id3 &face_id, std::function<
 	}
 }
 //
+void grid3::get_scaled_gradient_qc( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_cloud &info )> func ) const {
+	//
+	const auto &layer = *layers[face_id.depth];
+	const Real area = this->area[face_id.index];
+	//console::dump( "area = %f\n", area );
+	//areaが0でなければ以下の処理を行うが0になっているので実行されない
+	if( area ) {
+		//
+		using gradient_info_DIM_cloud = gradient_info3_cloud;
+		using cell_id_DIM = cell_id3;
+		//
+		double fluid_average (0.0);
+		double W1 (0.0), W2 (0.0);
+		bool has_solid (false);
+		//
+		auto compute_fluid_average = [&]() {
+			get_gradient_qc(face_id,[&]( const cell_id_DIM &cell_id, double value, const gradient_info_DIM_cloud &info ) {
+				//if( info.density < 0.0 ) {
+					W1 += info.qx;
+					W2 += value * info.qx;
+				//}
+				fluid_average += value * info.qx;
+				has_solid = has_solid || solid_cell[cell_id.index];
+			});
+			if( std::abs(W1) < param.eps ) W1 = std::copysign(param.eps,W1);
+			if( std::abs(W2) < param.eps ) W2 = std::copysign(param.eps,W2);
+		};
+		//
+		bool rescale_computed (false), t_junction_compute (false);
+		double scale (1.0);
+		//
+		get_gradient_qc(face_id,[&]( const cell_id_DIM &cell_id, double value, const gradient_info_DIM_cloud &info ) {
+			//
+			if( info.cross_interface && ! rescale_computed ) {
+				compute_fluid_average();
+				if( info.t_junction ) {
+					if( ! param.first_order ) t_junction_compute = true;
+				} else {
+					scale = 1.0 / std::max(param.eps,(double)info.rho);
+				}
+				rescale_computed = true;
+			}
+			//
+			//console::dump( "t_junction_compute = %d\n", t_junction_compute );
+			//if( info.levelset < 0.0 ) {
+				if( t_junction_compute ) {
+					gradient_info_DIM_cloud new_info (info);
+					double a;
+					if( fluid_average * W2 > 0.0 ) {
+						a = fluid_average / W2 * value;
+					} else {
+						new_info.compromised = true;
+						if( param.clamp_order ) {
+							if( has_solid ) a = param.clamp_solid_eps * value;
+							else a = param.clamp_fluid_eps * value;
+						} else {
+							a = fluid_average / W1;
+							if( has_solid ) {
+								if( std::abs(a) < param.clamp_solid_eps ) a = std::copysign(param.clamp_solid_eps,a);
+							} else {
+								if( std::abs(a) < param.clamp_fluid_eps ) a = std::copysign(param.clamp_fluid_eps,a);
+							}
+						}
+					}
+					func(cell_id,a,new_info);
+				} else {
+					func(cell_id,scale*value,info);
+				}
+			}
+		//});
+		);
+	}
+}
+
+void grid3::get_scaled_gradient_qv( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_cloud &info )> func ) const {
+	//
+	const auto &layer = *layers[face_id.depth];
+	const Real area = this->area[face_id.index];
+	//console::dump( "area = %f\n", area );
+	//areaが0でなければ以下の処理を行うが0になっているので実行されない
+	if( area ) {
+		//
+		using gradient_info_DIM_cloud = gradient_info3_cloud;
+		using cell_id_DIM = cell_id3;
+		//
+		double fluid_average (0.0);
+		double W1 (0.0), W2 (0.0);
+		bool has_solid (false);
+		//
+		auto compute_fluid_average = [&]() {
+			get_gradient_qv(face_id,[&]( const cell_id_DIM &cell_id, double value, const gradient_info_DIM_cloud &info ) {
+				//if( info.density < 0.0 ) {
+					W1 += info.qx;
+					W2 += value * info.qx;
+				//}
+				fluid_average += value * info.qx;
+				has_solid = has_solid || solid_cell[cell_id.index];
+			});
+			if( std::abs(W1) < param.eps ) W1 = std::copysign(param.eps,W1);
+			if( std::abs(W2) < param.eps ) W2 = std::copysign(param.eps,W2);
+		};
+		//
+		bool rescale_computed (false), t_junction_compute (false);
+		double scale (1.0);
+		//
+		get_gradient_qv(face_id,[&]( const cell_id_DIM &cell_id, double value, const gradient_info_DIM_cloud &info ) {
+			//
+			if( info.cross_interface && ! rescale_computed ) {
+				compute_fluid_average();
+				if( info.t_junction ) {
+					if( ! param.first_order ) t_junction_compute = true;
+				} else {
+					scale = 1.0 / std::max(param.eps,(double)info.rho);
+				}
+				rescale_computed = true;
+			}
+			//
+			//console::dump( "t_junction_compute = %d\n", t_junction_compute );
+			//if( info.levelset < 0.0 ) {
+				if( t_junction_compute ) {
+					gradient_info_DIM_cloud new_info (info);
+					double a;
+					if( fluid_average * W2 > 0.0 ) {
+						a = fluid_average / W2 * value;
+					} else {
+						new_info.compromised = true;
+						if( param.clamp_order ) {
+							if( has_solid ) a = param.clamp_solid_eps * value;
+							else a = param.clamp_fluid_eps * value;
+						} else {
+							a = fluid_average / W1;
+							if( has_solid ) {
+								if( std::abs(a) < param.clamp_solid_eps ) a = std::copysign(param.clamp_solid_eps,a);
+							} else {
+								if( std::abs(a) < param.clamp_fluid_eps ) a = std::copysign(param.clamp_fluid_eps,a);
+							}
+						}
+					}
+					func(cell_id,a,new_info);
+				} else {
+					func(cell_id,scale*value,info);
+				}
+			}
+		//});
+		);
+	}
+}
+
+void grid3::get_scaled_gradient_qr( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_cloud &info )> func ) const {
+	//
+	const auto &layer = *layers[face_id.depth];
+	const Real area = this->area[face_id.index];
+	//console::dump( "area = %f\n", area );
+	//areaが0でなければ以下の処理を行うが0になっているので実行されない
+	if( area ) {
+		//
+		using gradient_info_DIM_cloud = gradient_info3_cloud;
+		using cell_id_DIM = cell_id3;
+		//
+		double fluid_average (0.0);
+		double W1 (0.0), W2 (0.0);
+		bool has_solid (false);
+		//
+		auto compute_fluid_average = [&]() {
+			get_gradient_qr(face_id,[&]( const cell_id_DIM &cell_id, double value, const gradient_info_DIM_cloud &info ) {
+				//if( info.density < 0.0 ) {
+					W1 += info.qx;
+					W2 += value * info.qx;
+				//}
+				fluid_average += value * info.qx;
+				has_solid = has_solid || solid_cell[cell_id.index];
+			});
+			if( std::abs(W1) < param.eps ) W1 = std::copysign(param.eps,W1);
+			if( std::abs(W2) < param.eps ) W2 = std::copysign(param.eps,W2);
+		};
+		//
+		bool rescale_computed (false), t_junction_compute (false);
+		double scale (1.0);
+		//
+		get_gradient_qr(face_id,[&]( const cell_id_DIM &cell_id, double value, const gradient_info_DIM_cloud &info ) {
+			//
+			if( info.cross_interface && ! rescale_computed ) {
+				compute_fluid_average();
+				if( info.t_junction ) {
+					if( ! param.first_order ) t_junction_compute = true;
+				} else {
+					scale = 1.0 / std::max(param.eps,(double)info.rho);
+				}
+				rescale_computed = true;
+			}
+			//
+			//console::dump( "t_junction_compute = %d\n", t_junction_compute );
+			//if( info.levelset < 0.0 ) {
+				if( t_junction_compute ) {
+					gradient_info_DIM_cloud new_info (info);
+					double a;
+					if( fluid_average * W2 > 0.0 ) {
+						a = fluid_average / W2 * value;
+					} else {
+						new_info.compromised = true;
+						if( param.clamp_order ) {
+							if( has_solid ) a = param.clamp_solid_eps * value;
+							else a = param.clamp_fluid_eps * value;
+						} else {
+							a = fluid_average / W1;
+							if( has_solid ) {
+								if( std::abs(a) < param.clamp_solid_eps ) a = std::copysign(param.clamp_solid_eps,a);
+							} else {
+								if( std::abs(a) < param.clamp_fluid_eps ) a = std::copysign(param.clamp_fluid_eps,a);
+							}
+						}
+					}
+					func(cell_id,a,new_info);
+				} else {
+					func(cell_id,scale*value,info);
+				}
+			}
+		//});
+		);
+	}
+}
 //
+
+
 void grid3::get_divergence_scalar( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value0, double value1 )> func ) const {
 	//
 	for( char dim : DIMS3 ) {
@@ -1540,6 +2311,67 @@ void grid3::get_divergence_scalar( const cell_id3 &cell_id, std::function<void( 
 			const Real area = this->area[face_id.index];
 			uint_type column = face_layer.active_faces[dim](face_id.pi);
 			get_gradient(face_id,[&]( const cell_id3 &neighbor_cell_id, double value, const gradient_info3 &info ) {
+				//if( info.levelset < 0.0 && cell_id.index == neighbor_cell_id.index ) { レベルセットの条件はとりあえず消しといた
+					const double t = (info.t_junction ? 0.75 : 1.0) * info.dx * info.dx * info.dx;
+					const double scale0 = t * area; //tが1/dxや1/dx**3に相当。func内でそれを累積して足すことで発散を計算
+					const double scale1 = t * (1.0-area);
+					func(face_id,scale0*value,scale1*value);
+					//levelsetは計算が行われるか、その判定のみうに使われているので
+				//}
+			});
+		});
+	}
+}
+
+void grid3::get_divergence_qc( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value0, double value1 )> func ) const {
+	//
+	for( char dim : DIMS3 ) {
+		iterate_face_neighbors(cell_id,dim,[&]( const face_id3 &face_id ){
+			//
+			const auto &face_layer = *layers[face_id.depth];
+			const Real area = this->area[face_id.index];
+			uint_type column = face_layer.active_faces[dim](face_id.pi);
+			get_gradient_qc(face_id,[&]( const cell_id3 &neighbor_cell_id, double value, const gradient_info3_cloud &info ) {
+				//if( info.levelset < 0.0 && cell_id.index == neighbor_cell_id.index ) { レベルセットの条件はとりあえず消しといた
+					const double t = (info.t_junction ? 0.75 : 1.0) * info.dx * info.dx * info.dx;
+					const double scale0 = t * area; //tが1/dxや1/dx**3に相当。func内でそれを累積して足すことで発散を計算
+					const double scale1 = t * (1.0-area);
+					func(face_id,scale0*value,scale1*value);
+				//}
+			});
+		});
+	}
+}
+
+void grid3::get_divergence_qv( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value0, double value1 )> func ) const {
+	//
+	for( char dim : DIMS3 ) {
+		iterate_face_neighbors(cell_id,dim,[&]( const face_id3 &face_id ){
+			//
+			const auto &face_layer = *layers[face_id.depth];
+			const Real area = this->area[face_id.index];
+			uint_type column = face_layer.active_faces[dim](face_id.pi);
+			get_gradient_qv(face_id,[&]( const cell_id3 &neighbor_cell_id, double value, const gradient_info3_cloud &info ) {
+				//if( info.levelset < 0.0 && cell_id.index == neighbor_cell_id.index ) { レベルセットの条件はとりあえず消しといた
+					const double t = (info.t_junction ? 0.75 : 1.0) * info.dx * info.dx * info.dx;
+					const double scale0 = t * area; //tが1/dxや1/dx**3に相当。func内でそれを累積して足すことで発散を計算
+					const double scale1 = t * (1.0-area);
+					func(face_id,scale0*value,scale1*value);
+				//}
+			});
+		});
+	}
+}
+
+void grid3::get_divergence_qr( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value0, double value1 )> func ) const {
+	//
+	for( char dim : DIMS3 ) {
+		iterate_face_neighbors(cell_id,dim,[&]( const face_id3 &face_id ){
+			//
+			const auto &face_layer = *layers[face_id.depth];
+			const Real area = this->area[face_id.index];
+			uint_type column = face_layer.active_faces[dim](face_id.pi);
+			get_gradient_qr(face_id,[&]( const cell_id3 &neighbor_cell_id, double value, const gradient_info3_cloud &info ) {
 				//if( info.levelset < 0.0 && cell_id.index == neighbor_cell_id.index ) { レベルセットの条件はとりあえず消しといた
 					const double t = (info.t_junction ? 0.75 : 1.0) * info.dx * info.dx * info.dx;
 					const double scale0 = t * area; //tが1/dxや1/dx**3に相当。func内でそれを累積して足すことで発散を計算
@@ -1943,6 +2775,7 @@ static double MLS_interpolate( const vec3d &p, const std::vector<grid3::point_in
 			console::dump("max_dx=%.2e, p=(%.2e,%.2e,%.2e),P=(%.2e,%.2e,%.2e), W=%.2e, V=%.2e\n",
 				max_dx,p[0],p[1],p[2],q[0],q[1],q[2],W_vec(row),a(row,0));
 		}
+		
 		exit(0);
 		return 0.0;
 	} else {
@@ -2074,6 +2907,7 @@ double grid3::sample_levelset( const vec3d &p, Real *min_max_values ) const {
 	Real local_min_max_values[2] = { 0.0, 0.0 };
 	double result = sample_cell(p,levelset,local_min_max_values);
 	result = clamp_ceil(std::max(std::min(result,(double)local_min_max_values[1]),(double)local_min_max_values[0]));
+	//console::dump("sample_density: before clamp result=%.6e\n",result);
 	//local_min_max_values
 	if( min_max_values ) {
 		min_max_values[0] = local_min_max_values[0];
@@ -2093,6 +2927,70 @@ double grid3::sample_density( const vec3d &p, Real *min_max_values ) const {
 	//
 	Real local_min_max_values[2] = { 0.0, 0.0 };
 	double result = sample_cell(p,density,local_min_max_values);
+	//if (result > 0.000001) console::dump("sample_density: before clamp result=%.6e\n",result);
+	result = clamp_ceil(std::max(std::min(result,(double)local_min_max_values[1]),(double)local_min_max_values[0]));
+	//local_min_max_values
+	if( min_max_values ) {
+		min_max_values[0] = local_min_max_values[0];
+		min_max_values[1] = local_min_max_values[1];
+	}
+	//
+	return result;
+}
+
+double grid3::sample_qc( const vec3d &p, Real *min_max_values ) const {
+	//
+	const shape3 shape = layers[0]->shape;
+	const double dx = layers[0]->dx;
+	auto clamp_ceil = [&]( double x ) {
+		return std::max(x,p[1]-dx*(shape[1]-0.5));
+	};
+	//
+	Real local_min_max_values[2] = { 0.0, 0.0 };
+	double result = sample_cell(p,qc,local_min_max_values);
+	//if (result > 0.000001) console::dump("sample_density: before clamp result=%.6e\n",result);
+	result = clamp_ceil(std::max(std::min(result,(double)local_min_max_values[1]),(double)local_min_max_values[0]));
+	//local_min_max_values
+	if( min_max_values ) {
+		min_max_values[0] = local_min_max_values[0];
+		min_max_values[1] = local_min_max_values[1];
+	}
+	//
+	return result;
+}
+
+double grid3::sample_qv( const vec3d &p, Real *min_max_values ) const {
+	//
+	const shape3 shape = layers[0]->shape;
+	const double dx = layers[0]->dx;
+	auto clamp_ceil = [&]( double x ) {
+		return std::max(x,p[1]-dx*(shape[1]-0.5));
+	};
+	//
+	Real local_min_max_values[2] = { 0.0, 0.0 };
+	double result = sample_cell(p,qv,local_min_max_values);
+	//if (result > 0.000001) console::dump("sample_density: before clamp result=%.6e\n",result);
+	result = clamp_ceil(std::max(std::min(result,(double)local_min_max_values[1]),(double)local_min_max_values[0]));
+	//local_min_max_values
+	if( min_max_values ) {
+		min_max_values[0] = local_min_max_values[0];
+		min_max_values[1] = local_min_max_values[1];
+	}
+	//
+	return result;
+}
+
+double grid3::sample_qr( const vec3d &p, Real *min_max_values ) const {
+	//
+	const shape3 shape = layers[0]->shape;
+	const double dx = layers[0]->dx;
+	auto clamp_ceil = [&]( double x ) {
+		return std::max(x,p[1]-dx*(shape[1]-0.5));
+	};
+	//
+	Real local_min_max_values[2] = { 0.0, 0.0 };
+	double result = sample_cell(p,qr,local_min_max_values);
+	//if (result > 0.000001) console::dump("sample_density: before clamp result=%.6e\n",result);
 	result = clamp_ceil(std::max(std::min(result,(double)local_min_max_values[1]),(double)local_min_max_values[0]));
 	//local_min_max_values
 	if( min_max_values ) {
@@ -2800,6 +3698,93 @@ double grid3::get_volume_density() const {
 		bool rho_added (false);
 		//get_scaled_gradient_densityの第二引数が実行されていない
 		get_scaled_gradient_density(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_scalar &info ) {
+			//console::dump( "iterating...");
+			if( ! rho_added ) {
+				volume_threads[tid] += info.area * (info.t_junction ? 0.75 : 1.0) * (info.dx * info.dx * info.dx);
+				//console::dump( "area: %e, rho: %e, dx: %e\n", info.area, info.rho, info.dx );
+				rho_added = true;
+				//ここでarea, rho, dxに正しい値が渡っていないっぽい
+			}
+		});
+	});
+	double current_volume (0.0);
+	for( auto &e : volume_threads ) {
+		current_volume += e / DIM3;
+		// console::dump( "current_volume: %e\n", current_volume );
+		// console::dump( "e: %e\n", e );
+	}
+	return current_volume;
+}
+
+double grid3::get_volume_qr() const {
+	//
+	// Compute volume
+	double r = parallel.get_thread_num();
+	std::vector<double> volume_threads(r,0.0);
+	console::dump( "Threads: %d\n", (int)r );
+	//ここが実行されてないっぽい？->
+	iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
+		bool rho_added (false);
+		//get_scaled_gradient_densityの第二引数が実行されていない
+		get_scaled_gradient_qr(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
+			//console::dump( "iterating...");
+			if( ! rho_added ) {
+				volume_threads[tid] += info.area * (info.t_junction ? 0.75 : 1.0) * (info.dx * info.dx * info.dx);
+				//console::dump( "area: %e, rho: %e, dx: %e\n", info.area, info.rho, info.dx );
+				rho_added = true;
+				//ここでarea, rho, dxに正しい値が渡っていないっぽい
+			}
+		});
+	});
+	double current_volume (0.0);
+	for( auto &e : volume_threads ) {
+		current_volume += e / DIM3;
+		// console::dump( "current_volume: %e\n", current_volume );
+		// console::dump( "e: %e\n", e );
+	}
+	return current_volume;
+}
+
+double grid3::get_volume_qv() const {
+	//
+	// Compute volume
+	double r = parallel.get_thread_num();
+	std::vector<double> volume_threads(r,0.0);
+	console::dump( "Threads: %d\n", (int)r );
+	//ここが実行されてないっぽい？->
+	iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
+		bool rho_added (false);
+		//get_scaled_gradient_densityの第二引数が実行されていない
+		get_scaled_gradient_qv(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
+			//console::dump( "iterating...");
+			if( ! rho_added ) {
+				volume_threads[tid] += info.area * (info.t_junction ? 0.75 : 1.0) * (info.dx * info.dx * info.dx);
+				//console::dump( "area: %e, rho: %e, dx: %e\n", info.area, info.rho, info.dx );
+				rho_added = true;
+				//ここでarea, rho, dxに正しい値が渡っていないっぽい
+			}
+		});
+	});
+	double current_volume (0.0);
+	for( auto &e : volume_threads ) {
+		current_volume += e / DIM3;
+		// console::dump( "current_volume: %e\n", current_volume );
+		// console::dump( "e: %e\n", e );
+	}
+	return current_volume;
+}
+
+double grid3::get_volume_qc() const {
+	//
+	// Compute volume
+	double r = parallel.get_thread_num();
+	std::vector<double> volume_threads(r,0.0);
+	console::dump( "Threads: %d\n", (int)r );
+	//ここが実行されてないっぽい？->
+	iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
+		bool rho_added (false);
+		//get_scaled_gradient_densityの第二引数が実行されていない
+		get_scaled_gradient_qc(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
 			//console::dump( "iterating...");
 			if( ! rho_added ) {
 				volume_threads[tid] += info.area * (info.t_junction ? 0.75 : 1.0) * (info.dx * info.dx * info.dx);

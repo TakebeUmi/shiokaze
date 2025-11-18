@@ -462,8 +462,10 @@ void macoctreeliquid3::idle() {
 	}
 	//
 	// Advect level set
+	console::dump("Advecting levelset...\n");
 	m_grid->assign_levelset([&]( const vec3d &p ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
+		console::dump("sample_levelset:%f\n",m_grid_prev->sample_levelset(p-dt*u));
 		return m_grid_prev->sample_levelset(p-dt*u);
 	},m_combined_solid_func);
 	//

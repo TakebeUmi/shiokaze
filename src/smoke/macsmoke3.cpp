@@ -194,6 +194,8 @@ void macsmoke3::add_source ( macarray3<Real> &velocity, array3<Real> &density, d
 		auto add_density = [&]( array3<Real> &density ) {
 			density.parallel_all([&](int i, int j, int k, auto &it) {
 				vec3d p = m_dx*vec3i(i,j,k).cell();
+
+
 				double d(0.0); vec3d dummy;
 				add_func (p,dummy,d,time,dt);
 				density.increment(i,j,k,d);

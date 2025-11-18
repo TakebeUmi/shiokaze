@@ -15,7 +15,7 @@ protected:
 		vec3d pos = grid.get_cell_position(cell_id);
 		g.color4(1.0,1.0,1.0,density_value);
 		g.vertex3v(pos.v); 
-		console::dump("%u:%f at (%f,%f,%f)\n", (unsigned)cell_id.index, density_value,pos[0],pos[1],pos[2]);
+		//if (density_value > 0.000001) console::dump("%u:%f at (%f,%f,%f)\n", (unsigned)cell_id.index, density_value,pos[0],pos[1],pos[2]);
 	};
     //std::vector<vec3d> points;
     // オクツリーグリッドのセルを巡回して密度を描画
@@ -65,7 +65,7 @@ protected:
 	double m_dx;
 	//
 	struct Parameters {
-		bool draw_density_oc {true};		
+		bool draw_density_oc {true};	
 	};
 	//
 	Parameters m_param;

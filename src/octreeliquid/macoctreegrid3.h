@@ -179,6 +179,12 @@ namespace macotreeliquid3_namespace {
 		std::vector<Real> levelset;
 		std::vector<Real> velocity;
 		std::vector<Real> density;
+		//added
+		std::vector<Real> qc;
+		std::vector<Real> qv;
+		std::vector<Real> qr;
+		std::vector<Real> theta;
+		//added
 		
 		std::vector<Real> area;
 		std::vector<bool> solid_cell;
@@ -213,6 +219,9 @@ namespace macotreeliquid3_namespace {
 			file.read(levelset);
 			//added
 			file.read(density);
+			file.read(qc);
+			file.read(qv);
+			file.read(qr);
 			//added
 			file.read(velocity);
 			file.read(area);
@@ -242,6 +251,9 @@ namespace macotreeliquid3_namespace {
 			file.write(levelset);
 			//added
 			file.write(density);
+			file.write(qc);
+			file.write(qv);
+			file.write(qr);
 			//added
 			file.write(velocity);
 			file.write(area);
@@ -282,6 +294,11 @@ namespace macotreeliquid3_namespace {
 			unsigned pde_update_count {0};
 			unsigned erosion_count {0};
 			bool debug {false};
+			double vort_eps {1e-2};
+			double z1 {8000.0};
+			double gamma0{-0.0065};
+			double gamma1{0.0065};
+			//
 		};
 		Parameters param;
 		//
@@ -317,6 +334,11 @@ namespace macotreeliquid3_namespace {
 		void activate_cells( std::function<double(const vec3d &p)> fluid, std::function<double(const vec3d &p)> solid );
 		void assign_levelset( std::function<double( const vec3d &p )> fluid, std::function<double( const vec3d &p )> solid );
 		void assign_density( std::function<double( const vec3d &p )> fluid);
+		//added
+		void assign_qc( std::function<double( const vec3d &p )> fluid);
+		void assign_qv( std::function<double( const vec3d &p )> fluid);
+		void assign_qr( std::function<double( const vec3d &p )> fluid);
+		//added
 		void set_velocity( std::function<double( const vec3d &p, char dim )> func );
 		void set_flux_boundary_condition( const flux_boundary_condition3 &boundary_cond );
 		void balance_layers();
@@ -354,6 +376,19 @@ namespace macotreeliquid3_namespace {
 			bool cross_interface;
 			bool compromised;
 		};
+		struct gradient_info3_cloud {
+			//Real levelset;
+			//added
+			Real qx;
+			//added
+		
+			Real dx;
+			Real rho;
+			Real area = 1.0;
+			bool t_junction;
+			bool cross_interface;
+			bool compromised;
+		};
 		//
 		size_t get_compromised_gradient_count() const;
 		size_t get_surface_T_junction_count() const;
@@ -362,10 +397,30 @@ namespace macotreeliquid3_namespace {
 		//added
 		void get_gradient( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3 &info )> func ) const;
 		void get_gradient_scalar( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_scalar &info )> func ) const;
+		//added
+		void get_gradient_qc( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_cloud &info )> func ) const;
+		void get_gradient_qv( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_cloud &info )> func ) const;
+		void get_gradient_qr( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_cloud &info )> func ) const;
+		//added
 		void get_scaled_gradient( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3 &info )> func ) const;
 		void get_scaled_gradient_density( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_scalar &info )> func ) const;
+		//added
+		void get_scaled_gradient_qc( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_cloud &info )> func ) const;
+		void get_scaled_gradient_qv( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_cloud &info )> func ) const;
+		void get_scaled_gradient_qr( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_cloud &info )> func ) const;
+		//
 		void get_divergence( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value0, double value1 )> func ) const;
 		void get_divergence_scalar( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value0, double value1 )> func ) const;
+		void get_divergence_qc( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value0, double value1 )> func ) const;
+		void get_divergence_qv( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value0, double value1 )> func ) const;
+		void get_divergence_qr( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value0, double value1 )> func ) const;
+		//added
+		void get_vorticity( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value )> func ) const;
+		void get_velocity(const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double scale, double u, Real dx, bool T_junction )> func) const;
+		void vorticity_confinement(double dt);
+		//vorticityはベクトル場なのでface_idで定義？
+		double Temperature_profile(double z);
+		//added
 		void get_unmofidied_divergence( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value )> func ) const;
 		void add_surfacetense_force( double coeff, double dt );
 		void extrapolate( std::function<double(const vec3d &p)> solid_func );
@@ -377,11 +432,16 @@ namespace macotreeliquid3_namespace {
 		double sample_cell( const vec3d &p, const std::vector<Real> &cell_values, Real *min_max_values=nullptr ) const;
 		double sample_levelset( const vec3d &p, Real *min_max_values=nullptr ) const;
 		double sample_density( const vec3d &p, Real *min_max_values=nullptr ) const;
+		//added
+		double sample_qc( const vec3d &p, Real *min_max_values=nullptr ) const;
+		double sample_qv( const vec3d &p, Real *min_max_values=nullptr ) const;
+		double sample_qr( const vec3d &p, Real *min_max_values=nullptr ) const;
+		//added
 		double sample_face( const vec3d &p, char dim, const std::vector<Real> &face_values, Real *min_max_values=nullptr ) const;
 		double sample_velocity( const vec3d &p, char dim, Real *min_max_values=nullptr ) const;
 		vec3d sample_velocity( const vec3d &p ) const;
 		double sample_solid_face_velocity( const face_id3 &face_id, std::function<vec3d( const vec3d &p )> func ) const;
-		//
+		//`
 		bool try_interp_cell( const vec3d &p, const std::vector<Real> &cell_values, double &value, Real *min_max_values=nullptr ) const;
 		bool try_interp_face( const vec3d &p, char dim, const std::vector<Real> &face_values, double &value, Real *min_max_values=nullptr ) const;
 		//
@@ -409,6 +469,11 @@ namespace macotreeliquid3_namespace {
 		bool is_T_junction_cell( const cell_id3 &cell_id ) const;
 		double get_volume() const;
 		double get_volume_density() const;
+		//added
+		double get_volume_qc() const;
+		double get_volume_qv() const;
+		double get_volume_qr() const;
+		//added
 		double get_cell_volume( const cell_id3 &cell_id ) const;
 		vec3d get_upwind_gradient( const cell_id3 &cell_id, const std::vector<Real> &levelset ) const;
 		//vec3d get_upwind_gradient( const cell_id3 &cell_id, const std::vector<Real> &density ) const;

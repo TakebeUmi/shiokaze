@@ -375,7 +375,7 @@ void macoctreeliquid3::idle() {
 	const double dt = m_timestepper->advance(max_u_per_unit,m_grid->get_finest_dx());
 	const double time = m_timestepper->get_current_time();
 	const double CFL = m_timestepper->get_current_CFL();
-	console::dump( "Done. time=%.2e. max_u_perunit=%.2e, dx=%2.e, dt=%.2e,CFL=%.2f. Took %s\n", time, max_u_per_unit, m_grid->get_finest_dx(), dt, CFL, timer.stock("compute_timestep").c_str());
+	//console::dump( "Done. time=%.2e. max_u_perunit=%.2e, dx=%2.e, dt=%.2e,CFL=%.2f. Took %s\n", time, max_u_per_unit, m_grid->get_finest_dx(), dt, CFL, timer.stock("compute_timestep").c_str());
 	//
 	// Begin (check) injecting fluid
 	begin_inject_external_fluid(dt,time,step);
@@ -463,10 +463,13 @@ void macoctreeliquid3::idle() {
 	}
 	//
 	// Advect level set
+	console::dump( "Advecting level set...");
 	//ここを見ると移流はセミラグランジュ法で行っており、欲しい位置をサンプリングする関数を引数にいれることでレベルセットを設定・更新できる
 	m_grid->assign_levelset([&]( const vec3d &p ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
+		//console::dump("levelset: %f\n", m_grid_prev->sample_levelset(p-dt*u));
 		return m_grid_prev->sample_levelset(p-dt*u);
+		
 	},m_combined_solid_func);
 	//
 	// Advect region

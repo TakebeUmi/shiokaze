@@ -1,5 +1,5 @@
 /*
-**	macsmoke3_oc_2.cpp
+**	cloud_oc.cpp
 **
 **	This is part of Shiokaze, a research-oriented fluid solver for computer graphics.
 **	Created by Ryoichi Ando <rand@nii.ac.jp> on April 17, 2017.
@@ -22,7 +22,7 @@
 **	OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 //
-#include "macsmoke3_oc_2.h"
+#include "cloud_oc.h"
 #include <shiokaze/core/console.h>
 #include <shiokaze/core/timer.h>
 #include <shiokaze/core/filesystem.h>
@@ -43,17 +43,17 @@
 SHKZ_USING_NAMESPACE
 //
 
-macsmoke3_oc_2::macsmoke3_oc_2 () {
+cloud_oc::cloud_oc () {
 	//
 	m_shape = shape3(64,64,64);
 	//m_dx = m_shape.dx();
 }
 //
-void macsmoke3_oc_2::setup_window( std::string &name, int &width, int &height ) const {
+void cloud_oc::setup_window( std::string &name, int &width, int &height ) const {
 	height = width;
 }
 //
-void macsmoke3_oc_2::load( configuration &config ) {
+void cloud_oc::load( configuration &config ) {
 	//
 	std::string name("plume3"); config.get_string("Name",name,"Scene file name");
 	m_dylib.open_library(filesystem::resolve_libname(name));
@@ -66,7 +66,7 @@ void macsmoke3_oc_2::load( configuration &config ) {
 
 //added
 
-void macsmoke3_oc_2::write_to_txt(std::string type) const {
+void cloud_oc::write_to_txt(std::string type) const {
 	std::time_t t  = std::time(nullptr);
 	std::tm* now = std::localtime(&t);
 
@@ -94,12 +94,12 @@ void macsmoke3_oc_2::write_to_txt(std::string type) const {
 }
 
 //
-bool macsmoke3_oc_2::should_quit() const {
+bool cloud_oc::should_quit() const {
 	return m_should_quit_on_save || m_timestepper->should_quit();
 }
 //added
 //
-void macsmoke3_oc_2::configure( configuration &config ) {
+void cloud_oc::configure( configuration &config ) {
 	//
 	// Configure the set of tools
 	m_dylib.configure(config);
@@ -182,7 +182,7 @@ void macsmoke3_oc_2::configure( configuration &config ) {
 	//added
 }
 //
-void macsmoke3_oc_2::post_initialize ( bool initialized_from_file ) {
+void cloud_oc::post_initialize ( bool initialized_from_file ) {
 	//
 	scoped_timer timer(this);
 	//
@@ -358,7 +358,7 @@ void macsmoke3_oc_2::post_initialize ( bool initialized_from_file ) {
 	}
 }
 //
-// void macsmoke3_oc_2::drag( double x, double y, double z, double u, double v, double w ) {
+// void cloud_oc::drag( double x, double y, double z, double u, double v, double w ) {
 	
 // 	if( m_param.mouse_interaction ) {
 // 		double scale (1e3);
@@ -367,7 +367,7 @@ void macsmoke3_oc_2::post_initialize ( bool initialized_from_file ) {
 // 	}
 // }
 //
-// void macsmoke3_oc_2::inject_external_force( macarray3<Real> &velocity ) {
+// void cloud_oc::inject_external_force( macarray3<Real> &velocity ) {
 // 	//
 // 	if( m_force_exist ) {
 // 		velocity += m_external_force;
@@ -376,7 +376,7 @@ void macsmoke3_oc_2::post_initialize ( bool initialized_from_file ) {
 // 	}
 // }
 //
-// void macsmoke3_oc_2::add_source ( macarray3<Real> &velocity, array3<Real> &density, double time, double dt ) {
+// void cloud_oc::add_source ( macarray3<Real> &velocity, array3<Real> &density, double time, double dt ) {
 // 	//
 // 	scoped_timer timer(this);
 // 	//
@@ -438,7 +438,7 @@ void macsmoke3_oc_2::post_initialize ( bool initialized_from_file ) {
 // 	}
 // }
 //これを
-void macsmoke3_oc_2::add_source_oc (double time, double dt , grid3 &grid) {
+void cloud_oc::add_source_oc (double time, double dt , grid3 &grid) {
 	//
 	scoped_timer timer(this);
 	//
@@ -515,7 +515,7 @@ void macsmoke3_oc_2::add_source_oc (double time, double dt , grid3 &grid) {
 	}
 }
 //
-// void macsmoke3_oc_2::rasterize_dust_particles( array3<Real> &rasterized_density ) {
+// void cloud_oc::rasterize_dust_particles( array3<Real> &rasterized_density ) {
 // 	//
 // 	rasterized_density.clear();
 // 	double scale = 1.0 / pow(m_param.r_sample,DIM3);
@@ -527,7 +527,7 @@ void macsmoke3_oc_2::add_source_oc (double time, double dt , grid3 &grid) {
 // 	}
 // }
 //
-// void macsmoke3_oc_2::add_buoyancy_force( macarray3<Real> &velocity, const array3<Real> &density, double dt ) {
+// void cloud_oc::add_buoyancy_force( macarray3<Real> &velocity, const array3<Real> &density, double dt ) {
 // 	//
 // 	velocity[1].parallel_all([&]( int i, int j, int k, auto &it, int tn ) {
 // 		vec3d pi = vec3i(i,j,k).face(1);
@@ -536,7 +536,7 @@ void macsmoke3_oc_2::add_source_oc (double time, double dt , grid3 &grid) {
 // 	});
 // }
 //
-void macsmoke3_oc_2::idle() {
+void cloud_oc::idle() {
 	//
 	//write_to_txt("before_timestep"); //added
 	scoped_timer timer(this);
@@ -727,7 +727,7 @@ void macsmoke3_oc_2::idle() {
 	//m_macstats->dump_stats(m_solid,m_fluid,m_velocity,m_timestepper.get());
 }
 //
-// void macsmoke3_oc_2::advect_dust_particles( const macarray3<Real> &velocity, double dt ) {
+// void cloud_oc::advect_dust_particles( const macarray3<Real> &velocity, double dt ) {
 // 	//
 // 	m_parallel.for_each( m_dust_particles.size(), [&]( size_t n, int tn ) {
 // 		vec3d &p = m_dust_particles[n];
@@ -753,7 +753,7 @@ void macsmoke3_oc_2::idle() {
 // 	rasterize_dust_particles(m_density);
 // }
 //
-// void macsmoke3_oc_2::add_to_graph() {
+// void cloud_oc::add_to_graph() {
 // 	//
 // 	if( m_param.show_graph ) {
 // 		//
@@ -766,7 +766,7 @@ void macsmoke3_oc_2::idle() {
 // 	}
 // }
 //
-// void macsmoke3_oc_2::draw_dust_particles( graphics_engine &g ) const {
+// void cloud_oc::draw_dust_particles( graphics_engine &g ) const {
 // 	using ge = graphics_engine;
 // 	g.color4(1.0,1.0,1.0,1.0);
 // 	g.begin(ge::MODE::POINTS);
@@ -776,7 +776,7 @@ void macsmoke3_oc_2::idle() {
 // 	g.end();
 // }
 //
-void macsmoke3_oc_2::draw( graphics_engine &g ) const {
+void cloud_oc::draw( graphics_engine &g ) const {
 	//
 	const double time = m_timestepper->get_current_time();
 	//
@@ -801,7 +801,7 @@ void macsmoke3_oc_2::draw( graphics_engine &g ) const {
 	// Draw concentration
 	// if( m_param.use_dust ) draw_dust_particles(g);
 	// else m_gridvisualizer->draw_density(g,m_density);
-	m_gridvisualizer_oc->draw_density_oc(g,*m_grid);
+	m_gridvisualizer_oc->draw_qc(g,*m_grid);
 	//write_to_txt("before_draw"); //added
 	//m_gridvisualizer->draw_density_oc(g, *m_grid);
 	// //densityを点で描画
@@ -820,7 +820,7 @@ void macsmoke3_oc_2::draw( graphics_engine &g ) const {
 	m_graphplotter->draw(g);
 }
 //
-void macsmoke3_oc_2::export_density () const {
+void cloud_oc::export_density () const {
 	//
 	scoped_timer timer(this);
 	if( console::get_root_path().size()) {
@@ -836,7 +836,7 @@ void macsmoke3_oc_2::export_density () const {
 	}
 }
 //
-void macsmoke3_oc_2::do_export_density( int frame ) const {
+void cloud_oc::do_export_density( int frame ) const {
 	//
 	std::string dir_path = console::get_root_path()+"/density";
 	if( ! filesystem::is_exist(dir_path)) filesystem::create_directory(dir_path);
@@ -881,7 +881,7 @@ void macsmoke3_oc_2::do_export_density( int frame ) const {
 	fclose(fp);
 }
 //
-void macsmoke3_oc_2::render_density( int frame ) const {
+void cloud_oc::render_density( int frame ) const {
 	//
 	scoped_timer timer(this);
 	global_timer::pause();
@@ -908,7 +908,7 @@ void macsmoke3_oc_2::render_density( int frame ) const {
 	global_timer::resume();
 }
 //
-// void macsmoke3_oc_2::do_inject_external_density( double dt, double time, unsigned step ) {
+// void cloud_oc::do_inject_external_density( double dt, double time, unsigned step ) {
 // 	//
 // 	if( m_do_inject ) {
 // 		//
@@ -942,7 +942,7 @@ void macsmoke3_oc_2::render_density( int frame ) const {
 // }
 //
 extern "C" module * create_instance() {
-	return new macsmoke3_oc_2;
+	return new cloud_oc;
 }
 //
 extern "C" const char *license() {
