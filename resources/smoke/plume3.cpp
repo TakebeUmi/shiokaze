@@ -23,54 +23,15 @@
 */
 //
 #include <shiokaze/math/vec.h>
-#include <shiokaze/core/configuration.h>
 #include <map>
 #include <string>
 #include <cmath>
 //
 SHKZ_USING_NAMESPACE
-// static double g_container_thickness (0.03);
-// static double g_container_radius (0.5);
-// static double g_container_height (0.3);
-// static vec3d g_center (0.5,0.37,0.5);
-// static double g_radius (0.075);
-// static double g_level (0.245);
-// static bool g_container (false);
-
-// extern "C" void configure( configuration &config ) {
-// 	configuration::auto_group group(config,"Waterdrop Scene 3D","Waterdrop");
-// 	config.get_bool("Container",g_container,"Whether to place g_container");
-// 	if( g_container ) {
-// 		config.get_double("ContainerRadius",g_container_radius,"Radius of the solid hemisphere container");
-// 		config.get_double("ContainerThickness",g_container_thickness,"Thickness of the solid hemisphere container");
-// 		config.get_double("ContainerHeight",g_container_height,"Height of the solid hemisphere container");
-// 	}
-// 	config.get_double("Radius",g_radius,"Radius of water");
-// 	config.get_vec3d("Center",g_center.v,"g_center of spherical water");
-// 	config.get_double("Level",g_level,"Level of static water pool");
-// }
 //
-static vec3d g_center (0.15,0.15,0.5);
-static double g_radius (0.075);
-static double g_level (0.245);
-
 extern "C" std::map<std::string,std::string> get_default_parameters () {
 	std::map<std::string,std::string> dictionary;
 	return dictionary;
-}
-extern "C" double fluid( const vec3d &p) {
-		vec3d center (0.15,0.15,0.5);
-		double d = 0.0;
-		if( (p-center).len() < 0.1 ) {
-			// double dist = (p-center).len();
-			// double r (0.075);
-			// double s (10.0);
-			// double v = std::min(10.0,std::max(0.0,s*(r-dist)/r));
-			// u = 2.0 * vec3d(dt*v,0.0,0.0);
-			d = 0.04; //* dt;
-		}
-		//d = 0.04;
-	return d;
 }
 //
 extern "C" void add ( const vec3d &p, vec3d &u, double &d, double time, double dt ) {
@@ -82,10 +43,8 @@ extern "C" void add ( const vec3d &p, vec3d &u, double &d, double time, double d
 			double s (10.0);
 			double v = std::min(10.0,std::max(0.0,s*(r-dist)/r));
 			u = 2.0 * vec3d(dt*v,0.0,0.0);
-			d = 0.04;
+			d = 4.0 * dt;
 		}
-		//d = 0.04;
-		u = 2.0 * vec3d(1.0,1.0,1.0);
 	}
 }
 //

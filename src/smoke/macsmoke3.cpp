@@ -23,6 +23,7 @@
 */
 //
 #include "macsmoke3.h"
+
 #include <shiokaze/core/console.h>
 #include <shiokaze/core/timer.h>
 #include <shiokaze/core/filesystem.h>
@@ -33,6 +34,11 @@
 #include <shiokaze/utility/utility.h>
 #include <cmath>
 #include <random>
+#include <openvdb/openvdb.h>
+#include <openvdb/io/File.h>
+#include <string>
+#include <sstream>
+#include <iomanip>
 //
 SHKZ_USING_NAMESPACE
 //
@@ -90,6 +96,7 @@ void macsmoke3::configure( configuration &config ) {
 //
 void macsmoke3::post_initialize ( bool initialized_from_file ) {
 	//
+	openvdb::initialize();
 	scoped_timer timer(this);
 	//
 	timer.tick(); console::dump( ">>> Started initialization (%dx%dx%d)\n", m_shape[0], m_shape[1], m_shape[2] );
@@ -262,6 +269,7 @@ void macsmoke3::add_buoyancy_force( macarray3<Real> &velocity, const array3<Real
 void macsmoke3::idle() {
 	//
 	scoped_timer timer(this);
+
 	//
 	// Add to graph
 	add_to_graph();
@@ -309,6 +317,31 @@ void macsmoke3::idle() {
 	//
 	// Report stats
 	m_macstats->dump_stats(m_solid,m_fluid,m_velocity,m_timestepper.get());
+	
+
+
+	openvdb::DoubleGrid::Ptr density_grid = openvdb::DoubleGrid::create();
+	openvdb::DoubleGrid::Accessor density_accessor = density_grid->getAccessor();
+	m_density.parallel_all([&]( int i, int j, int k, auto &it ) {
+		double value = it();
+		if( value > 0.0 ) {
+			density_accessor.setValue(openvdb::Coord(i,j,k), value);
+		}
+	});
+
+    openvdb::GridPtrVec grids;
+    grids.push_back(density_grid);
+
+    std::string dir = "/home/takebe/shiokaze/src/smoke/vdb/macsmoke3/";
+
+    // フレーム番号を使ったファイル名
+    std::ostringstream filename;
+    filename << dir << "frame_" << std::setw(4) << std::setfill('0') << step << ".vdb";
+
+    // OpenVDB ファイルを作成
+    openvdb::io::File file(filename.str());
+    file.write(grids);
+    file.close();
 }
 //
 void macsmoke3::advect_dust_particles( const macarray3<Real> &velocity, double dt ) {

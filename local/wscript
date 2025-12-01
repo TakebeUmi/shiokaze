@@ -55,10 +55,19 @@ def build_reactphysics3d(bld):
 		]),
 		includes='include/reactphysics3d',
 		target=bld.get_target_name(bld,'reactphysics3d'))
+
+# openvdb
+# def build_openvdb(bld):
+#     bld.stlib(
+#         target='openvdb',
+#         includes='include',
+#         lib=['openvdb', 'tbb', 'z', 'blosc', 'half']
+#     )
 #
-def build(bld):
+def build(bld): 
 	build_ann(bld)
 	build_hacd(bld)
 	build_box2d(bld)
 	build_bullet3(bld)
 	build_reactphysics3d(bld)
+	# build_openvdb(bld)

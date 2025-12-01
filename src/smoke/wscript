@@ -22,6 +22,8 @@
 #	CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 #	OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
+
+import os
 def build(bld):
 	#
 	bld.shlib(source = 'macsmoke2.cpp',
@@ -31,6 +33,10 @@ def build(bld):
 	#
 	bld.shlib(source = ['macsmoke3.cpp'],
 			target = bld.get_target_name(bld,'macsmoke3'),
+			includes = [os.path.expanduser('~/local/include')],
+			libpath = [os.path.expanduser('~/local/lib')],
+			lib = ['openvdb', 'tbb', 'Half', 'Imath', 'z', 'blosc'],
+			# lib = ['openvdb'],
 			cxxflags = ['-DSPATIAL_DIM=3'],
 			use = bld.get_target_name(bld,['core','timestepper','macutility3','images']))
 	#

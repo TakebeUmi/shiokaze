@@ -295,9 +295,14 @@ namespace macotreeliquid3_namespace {
 			unsigned erosion_count {0};
 			bool debug {false};
 			double vort_eps {1e-2};
+			double T0 {288.15};
+			double p0 {101325.0};
+			double gamma { -0.0065 };
+			double g {9.81};
 			double z1 {8000.0};
-			double gamma0{-0.0065};
-			double gamma1{0.0065};
+			double alphaCE {1.0};
+			double alphaA {0.001};
+			double alphaK {2.2};
 			//
 		};
 		Parameters param;
@@ -419,8 +424,6 @@ namespace macotreeliquid3_namespace {
 		void get_velocity(const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double scale, double u, Real dx, bool T_junction )> func) const;
 		void vorticity_confinement(double dt);
 		//vorticityはベクトル場なのでface_idで定義？
-		double Temperature_profile(double z);
-		//added
 		void get_unmofidied_divergence( const cell_id3 &cell_id, std::function<void( const face_id3 &face_id, double value )> func ) const;
 		void add_surfacetense_force( double coeff, double dt );
 		void extrapolate( std::function<double(const vec3d &p)> solid_func );
@@ -480,10 +483,30 @@ namespace macotreeliquid3_namespace {
 
 		//
 		void draw_grid( graphics_engine &g, double slice_z, bool fill_checkboard=false ) const;
-	};
+
+	//added cloud functions
+	double thermal_buoyancy(const double T0, const double p0, const double gamma, const double z1, const double g, const double z, const double qv, const double qc, const double qr, const double theta) const;
+	double atmospheric_temperature(const double T0, const double Gamma, const double z1, const double z) const;
+	double atmospheric_pressure(const double T0, const double p0, const double Gamma, const double g, const double z) const;
+	double thermal_molar_mass(const double qv) const;
+	double thermal_absolute_temperature(const double theta, const double p0, const double p, const double qv) const;
+	double mole_fraction(const double qi) const;
+	void kessler_model(const double timeinc, const double T0, const double p0, const double Gamma, const double g, 
+                   const double alphaCE, const double alphaA, const double alphaK, 
+                   const double z, const double qv, const double qc, const double qr, const double theta, 
+                   double& newqv, double& newqc, double& newqr, double& newtheta);
+	double heat_of_condensation(const double qv, const double Cc);
+	double saturation_mixing_ratio(const double T, const double p);
+	double fetch_d(const double T, const double p, const double M);
+	double thermal_potential_temperature(const double Tth, const double phat, const double p, const double qv);
+	double thermal_heat_capacity(const double qv);
+	double thermal_isentropic_exponent(const double qv);
+	double thermal_mass_fraction(const double qv);
+
+};	
 };
 //
 SHKZ_END_NAMESPACE
 //
 #endif
-//
+//F

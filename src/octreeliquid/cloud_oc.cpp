@@ -23,6 +23,7 @@
 */
 //
 #include "cloud_oc.h"
+#include <openvdb/openvdb.h>
 #include <shiokaze/core/console.h>
 #include <shiokaze/core/timer.h>
 #include <shiokaze/core/filesystem.h>
@@ -438,6 +439,37 @@ void cloud_oc::post_initialize ( bool initialized_from_file ) {
 // 	}
 // }
 //これを
+void cloud_oc::add_buoyancy(grid3 &grid, double dt) {
+	//
+	grid.iterate_active_cells([&](const cell_id3 &cell_id, int tid) {
+		for (int dim : DIMS3 ) {
+			grid.iterate_face_neighbors(cell_id, dim, [&](const face_id3 &face_id) {
+				if (face_id.dim == 1) { // Y方向の面に対してのみ処理
+					vec3d xyz = grid.get_cell_position(cell_id);
+					double buoyancy_force = grid.thermal_buoyancy(grid.param.T0,grid.param.p0,grid.param.gamma,grid.param.z1,grid.param.g,xyz[1],grid.qv[cell_id.index],grid.qc[cell_id.index], grid.qr[cell_id.index], grid.theta[cell_id.index]);
+					grid.velocity[face_id.index] += buoyancy_force * dt;
+				}
+			});
+		}
+	});
+}
+
+void cloud_oc::microphysics_cloud(grid3 &grid, double dt) {
+	grid.iterate_active_cells([&](const cell_id3 &cell_id, int tid) {
+		double qv = grid.qv[cell_id.index];
+		double qc = grid.qc[cell_id.index];
+		double qr = grid.qr[cell_id.index];
+		double theta = grid.theta[cell_id.index];
+		double newtheta, newqv, newqc, newqr;
+		vec3d z = grid.get_cell_position(cell_id);
+		grid.kessler_model(dt, grid.param.T0, grid.param.p0, grid.param.gamma, grid.param.g, grid.param.alphaCE, grid.param.alphaA, grid.param.alphaK, z[1], qv, qc, qr, theta, newqv, newqc, newqr, newtheta);
+		grid.qv[cell_id.index] = newqv;
+		grid.qc[cell_id.index] = newqc;
+		grid.qr[cell_id.index] = newqr;
+		grid.theta[cell_id.index] = newtheta;
+	});
+}
+
 void cloud_oc::add_source_oc (double time, double dt , grid3 &grid) {
 	//
 	scoped_timer timer(this);
@@ -471,6 +503,7 @@ void cloud_oc::add_source_oc (double time, double dt , grid3 &grid) {
 				add_func (p,dummy,d,time,dt);
 				// density.increment(i,j,k,d);
 				grid.density[cell_id.index] += d;
+				grid.qc[cell_id.index] += d; // Example: 90% of added density goes to water vapor
 				//console::dump("add_source");
 				//if (d != 0.0) console::dump( "add_source density[%d] = %f\n", cell_id.index, m_grid->density[cell_id.index] );
 				}
@@ -710,7 +743,9 @@ void cloud_oc::idle() {
 	
 	add_source_oc(m_timestepper->get_current_time(),dt, *m_grid);
 	//
-
+	m_grid->vorticity_confinement(dt);
+	//add_buoyancy(*m_grid, dt);
+	microphysics_cloud(*m_grid, dt);
 	// Add external force
 	//inject_external_force(m_velocity);
 	//

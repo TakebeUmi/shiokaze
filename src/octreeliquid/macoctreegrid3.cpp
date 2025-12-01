@@ -28,6 +28,7 @@
 #include <shiokaze/array/array_interpolator3.h>
 #include <shiokaze/core/console.h>
 #include <shiokaze/core/timer.h>
+#include <functional>
 #include "unstructured_extrapolator3.h"
 #include "../../src/redistancer/unstructured_fastmarch3.h"
 //
@@ -1504,16 +1505,6 @@ void grid3::get_gradient_qv( const face_id3 &face_id, std::function<void( const 
 			}
 		}
 	}
-}
-
-double grid3::Temperature_profile(double z) {
-	double T0 = 288.15;
-if (z >= 0 && z <= param.z1) {
-	return T0 + param.gamma0 * z;
-}
-else {
-	return T0 + param.gamma0 * param.z1 + param.gamma1 * (z - param.z1);
-}
 }
 
 void grid3::get_gradient_qr( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_cloud &info )> func ) const {
@@ -3947,5 +3938,216 @@ void grid3::draw_grid( graphics_engine &g, double slice_z, bool fill_checkboard 
 			g.end();
 		}
 	});
+}
+void grid3::kessler_model(const double dt, const double T0, const double p0, const double Gamma, const double g, 
+                   const double alphaCE, const double alphaA, const double alphaK, 
+                   const double z, const double qv, const double qc, const double qr, const double theta, 
+                   double& newqv, double& newqc, double& newqr, double& newtheta) {
+    /**
+     * Stormscapes: Simulating Cloud Dynamics in the Now
+     * Eq (21) (22) (23) (24)
+     *       --- Condensation: Cc -->      -- Autoconversion: Ac -->
+     *   qv                            qc                             qr
+     *       <--- Evaporation: Ec ---      ----- Accretion: Kc ---->
+     *   ^                                                             |
+     *   |---------------------- Evaporation: Er ----------------------|
+     * 
+     * Fast Weather Simulation for Inverse Procedural Design of 3D Urban Models
+     * Eq (11) (12) (13) (14)
+     */
+    double aT = 0.001f;  // aT: 0.001 kg/kg
+    
+    double p = atmospheric_pressure(T0, p0, Gamma, g, z);
+    double Mth = thermal_molar_mass(qv);
+    double Tth = thermal_absolute_temperature(theta, p0, p, qv);
+    double rho = fetch_d(Tth, p, Mth);
+    double qvs = saturation_mixing_ratio(Tth, p);
+    
+    // Stormscapes: Simulating Cloud Dynamics in the Now
+    // Condensation and Evaporation: ALGORITHM 1
+    double CcEc = alphaCE * std::min(qvs - qv, qc);
+    
+    // Fast Weather Simulation for Inverse Procedural Design of 3D Urban Models
+    // Autoconversion: Eq (13)
+    double Ac = std::max(0.0, alphaA * (qc - aT));
+    // Fast Weather Simulation for Inverse Procedural Design of 3D Urban Models
+    // Accretion: Eq (14)
+    double Kc = std::max(0.0, alphaK * qc * pow(qr, 0.875));
+    
+    // Fast Weather Simulation for Inverse Procedural Design of 3D Urban Models
+    // Evaporation: Eq (11) (12)
+    double Vc = 1.6f + 124.9f * pow(rho * qc, 0.2046f);
+    double Er = std::min(std::max(qvs - (qv+CcEc), 0.0),
+                   std::min(qr, dt                                                                                                                                                                                                                                                                                                           * Vc * (std::max(qvs-qv, 0.0) / (rho*qvs)) * (pow(rho*qr, 0.525) / (5.4e5 + 2.55e8/(p*qvs)))));
+
+    // Stormscapes: Simulating Cloud Dynamics in the Now
+    // Kessler model: Eq (22) (23) (24)
+    newqv = qv + CcEc + Er;
+    newqc = qc - CcEc - Ac - Kc;
+    newqr = qr + Ac + Kc - Er;
+
+    // Stormscapes: Simulating Cloud Dynamics in the Now
+    // Kessler model: Eq (21)
+    double dT = heat_of_condensation(qv, -CcEc - Er);
+    double dtheta = thermal_potential_temperature(dT, p0, p, qv);
+    newtheta = theta + dtheta;
+}
+double grid3::thermal_buoyancy( const double T0, const double p0, const double gamma, const double z1, const double g, const double z, const double qv, const double qc, const double qr, const double theta) const {
+	double p = atmospheric_pressure(T0, p0, gamma, g, z);
+	double Mair = 28.96e-3f;
+	double Tair = atmospheric_temperature(T0, gamma, z1, z);
+	double Mth = thermal_molar_mass(qv);
+	double Tth = thermal_absolute_temperature(theta, p0, p, qv);    // thermal temperature
+    float B = g * ((Mair / Mth) * (Tth / Tair) - 1.0f);  // Eq (15)
+    return B;
+}
+
+double grid3::atmospheric_temperature(const double T0, const double Gamma, const double z1, const double z) const
+{
+    /**
+     * Stormscapes: Simulating Cloud Dynamics in the Now
+     * Eq (4)
+     */
+	double T;
+	if (z < z1) T = T0 + Gamma * z;
+	else T = T0 + Gamma * z1 - Gamma * (z - z1);
+    return T;
+}
+
+double grid3::atmospheric_pressure(const double T0, const double p0, const double Gamma, const double g, const double z) const
+{
+    /**
+     * Stormscapes: Simulating Cloud Dynamics in the Now
+     * Eq (3)
+     */
+    double R = 8314.0e-3f;                                                  // universal gas constant: 8314 J/(g K)
+    double Mair = 28.96e-3f;                                                // molar mass of dry air: 28.96 g/mol
+    double p = p0 * pow(1.0f + (Gamma * z / T0), g / (R / Mair * -Gamma));  // Eq (3)
+    return p;
+}
+
+double grid3::thermal_molar_mass(const double qv) const
+{
+    /**
+     * Stormscapes: Simulating Cloud Dynamics in the Now
+     * Eq (7)
+     */
+    double Mair = 28.96e-3f;                    // molar mass of dry air: 28.96 g/mol
+    double Mw = 18.02e-3f;                      // molar mass of water: 18.02 g/mol
+    double Xv = mole_fraction(qv);              // mole fraction of water vapor
+    double Mth = Xv * Mw + (1.0f - Xv) * Mair;  // Eq (7)
+    return Mth;
+}
+
+double grid3::mole_fraction(const double qi) const
+{
+    /**
+     * Stormscapes: Simulating Cloud Dynamics in the Now
+     * Eq (9)
+     */
+    double Xi = qi / (qi + 1.0f);  // Eq (9)
+    return Xi;
+}
+
+double grid3::thermal_absolute_temperature(const double theta, const double p0, const double p, const double qv) const
+{
+    /**
+     * Stormscapes: Simulating Cloud Dynamics in the Now
+     * Calculate absolute temperature from potential temperature
+     * T = theta * (p/p0)^(R/cp)
+     */
+    double R = 8314.0e-3f;      // universal gas constant: 8314 J/(g K)
+    double Mair = 28.96e-3f;    // molar mass of dry air: 28.96 g/mol
+    double cp = 1004.0f;        // specific heat at constant pressure for air: 1004 J/(kg K)
+    double kappa = (R / Mair) / cp;  // R/cp ratio
+    double T = theta * pow(p / p0, kappa);
+    return T;
+}
+
+double grid3::heat_of_condensation(const double qv, const double Cc)
+{
+    /**
+     * Stormscapes: Simulating Cloud Dynamics in the Now
+     * Eq (17)
+     */
+    double L = 2.5;                          // latent heat: Adopt the value from the paper and set 2.5 J/kg
+                                             //              (NOTE: Maybe the correct value is 2.5e6 J/kg ?)
+    double cpth = thermal_heat_capacity(qv);  // heat capacity for the air in the thermal: J/(kg K)
+    double Xc = mole_fraction(Cc);            // mass fraction
+    double dTv = L / cpth * Xc;               // Eq (17)
+    return dTv;
+}
+
+double grid3::saturation_mixing_ratio(const double T, const double p)
+{
+    /**
+     * Stormscapes: Simulating Cloud Dynamics in the Now
+     * Eq (16)
+     */
+    double Tc = T - 273.15;                                           // Convert to Celsius
+    double qvs = (380.16 / p) * exp((17.67 * Tc) / (Tc + 243.50));  // Eq (16)
+    return qvs;
+}
+
+double grid3::fetch_d(const double T, const double p, const double M)
+{
+    /**
+     * Stormscapes: Simulating Cloud Dynamics in the Now
+     * Eq (14)
+     */
+    double R = 8314.0e-3;           // universal gas constant: 8314 J/(g K)
+    double rho = p / ((R / M) * T);  // Eq (14)
+    return rho;
+}
+
+double grid3::thermal_potential_temperature(const double Tth, const double phat, const double p,
+                                    const double qv)
+{
+    /**
+     * Stormscapes: Simulating Cloud Dynamics in the Now
+     * Eq (10)
+     */
+    double gammath = thermal_isentropic_exponent(qv);               // isentropic exponent of the humid thermal
+    double That = Tth / pow(p / phat, (gammath - 1.0f) / gammath);  // Eq (10)
+    return That;
+}
+
+double grid3::thermal_heat_capacity(const double qv)
+{
+    /**
+     * Stormscapes: Simulating Cloud Dynamics in the Now
+     * Eq (18)
+     */
+    double R = 8314.0e-3;                                   // universal gas constant: 8314 J/(g K)
+    double Mth = thermal_molar_mass(qv);                     // average molar mass for the humid air in the thermal
+    double gammath = thermal_isentropic_exponent(qv);        // isentropic exponent of the humid thermal
+    double cpth = (gammath * R) / (Mth * (gammath - 1.0));  // Eq (18)
+    return cpth;
+}
+
+double grid3::thermal_isentropic_exponent(const double qv)
+{
+    /**
+     * Stormscapes: Simulating Cloud Dynamics in the Now
+     * Eq (11)
+     */
+    double gammaair = 1.4;                                 // isentropic exponent of air: 1.4
+    double gammav = 1.33;                                  // isentropic exponent of water vapor: 1.33
+    double Yv = thermal_mass_fraction(qv);                  // mass fraction of water in the thermal
+    double gammath = Yv * gammav + (1.0 - Yv) * gammaair;  // Eq (11)
+    return gammath;
+}
+
+double grid3::thermal_mass_fraction(const double qv)
+{
+    /**
+     * Stormscapes: Simulating Cloud Dynamics in the Now
+     * Eq (8)
+     */
+    double Mw = 18.02e-3;                // molar mass of water: 18.02 g/mol
+    double Mth = thermal_molar_mass(qv);  // average molar mass for the humid air in the thermal
+    double Xv = mole_fraction(qv);        // mole fraction of water vapor
+    double Yv = Xv * (Mw / Mth);          // Eq (8)
+    return Yv;
 }
 //

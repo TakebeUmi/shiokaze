@@ -121,5 +121,8 @@ def build(bld):
 
 	bld.shlib(source = 'cloud_oc.cpp',
 			target = bld.get_target_name(bld,'cloud_oc'),
+			includes = ['/usr/local/include'],
+			libpath = ['/usr/local/lib'],
+			lib = ['openvdb', 'tbb', 'Half', 'Imath', 'z', 'blosc'],
 			cxxflags = ['-DSPATIAL_DIM=3', '-I../'],
 			use = bld.get_target_name(bld,['core','timestepper','macutility3','images','octreeliquid','macoctreegrid3','macoctreeproject3','macoctreehelper3','macoctreesegregator3','macoctreesizingfunc3','macoctreemesher3']))
