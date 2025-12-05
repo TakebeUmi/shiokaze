@@ -467,6 +467,7 @@ void grid3::assign_indices() {
 			it.set(velocity_index++);
 		});
 	}
+	//console::dump( "depth\n" );
 	//
 	assert( pressure_index <= std::numeric_limits<uint_type>::max() );
 	assert( velocity_index <= std::numeric_limits<uint_type>::max() );
@@ -3992,6 +3993,23 @@ void grid3::kessler_model(const double dt, const double T0, const double p0, con
     double dtheta = thermal_potential_temperature(dT, p0, p, qv);
     newtheta = theta + dtheta;
 }
+
+void grid3::add_buoyancy( double dt) {
+	//
+	iterate_active_cells([&](const cell_id3 &cell_id, int tid) {
+		for (int dim : DIMS3 ) {
+			iterate_face_neighbors(cell_id, dim, [&](const face_id3 &face_id) {
+				if (dim == 1) { // Y方向の面に対してのみ処理
+					vec3d xyz = get_cell_position(cell_id);
+					double buoyancy_force = thermal_buoyancy(param.T0,param.p0,param.gamma,param.z1,param.g,xyz[1],qv[cell_id.index],qc[cell_id.index], qr[cell_id.index], theta[cell_id.index]);
+					//velocity[face_id.index] += buoyancy_force * dt;
+				}
+			});
+		}
+	});
+}
+
+
 double grid3::thermal_buoyancy( const double T0, const double p0, const double gamma, const double z1, const double g, const double z, const double qv, const double qc, const double qr, const double theta) const {
 	double p = atmospheric_pressure(T0, p0, gamma, g, z);
 	double Mair = 28.96e-3f;

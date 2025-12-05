@@ -218,7 +218,6 @@ protected:
 		void save_state();
 
 		//virtual void do_inject_external_density( double dt, double time, unsigned step );
-	void add_buoyancy( grid3 &grid, double dt );
 	void microphysics_cloud(grid3 &grid, double dt);
 	//added
 };

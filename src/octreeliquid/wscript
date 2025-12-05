@@ -6,6 +6,8 @@
 #	Created by Ryoichi Ando <rand@nii.ac.jp> on Oct 31, 2017. All rights reserved.
 #	Unauthorized use, redistributing and copying of this file, via any medium are strictly prohibited.
 #
+
+import os
 def build(bld):
 	#
 	bld.shlib(source = ['asyncscheduler.cpp'],
@@ -121,8 +123,8 @@ def build(bld):
 
 	bld.shlib(source = 'cloud_oc.cpp',
 			target = bld.get_target_name(bld,'cloud_oc'),
-			includes = ['/usr/local/include'],
-			libpath = ['/usr/local/lib'],
+			includes = [os.path.expanduser('~/local/include')],
+			libpath = [os.path.expanduser('~/local/lib')],
 			lib = ['openvdb', 'tbb', 'Half', 'Imath', 'z', 'blosc'],
 			cxxflags = ['-DSPATIAL_DIM=3', '-I../'],
 			use = bld.get_target_name(bld,['core','timestepper','macutility3','images','octreeliquid','macoctreegrid3','macoctreeproject3','macoctreehelper3','macoctreesegregator3','macoctreesizingfunc3','macoctreemesher3']))

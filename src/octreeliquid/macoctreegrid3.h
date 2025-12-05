@@ -485,6 +485,7 @@ namespace macotreeliquid3_namespace {
 		void draw_grid( graphics_engine &g, double slice_z, bool fill_checkboard=false ) const;
 
 	//added cloud functions
+	void add_buoyancy( double dt );
 	double thermal_buoyancy(const double T0, const double p0, const double gamma, const double z1, const double g, const double z, const double qv, const double qc, const double qr, const double theta) const;
 	double atmospheric_temperature(const double T0, const double Gamma, const double z1, const double z) const;
 	double atmospheric_pressure(const double T0, const double p0, const double Gamma, const double g, const double z) const;

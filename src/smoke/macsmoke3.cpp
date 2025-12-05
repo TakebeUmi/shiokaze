@@ -320,11 +320,14 @@ void macsmoke3::idle() {
 	
 
 
-	openvdb::DoubleGrid::Ptr density_grid = openvdb::DoubleGrid::create();
-	openvdb::DoubleGrid::Accessor density_accessor = density_grid->getAccessor();
-	m_density.parallel_all([&]( int i, int j, int k, auto &it ) {
+	openvdb::DoubleGrid::Ptr density_grid = openvdb::DoubleGrid::create(0.0);
+
+	
+	m_density.const_serial_all([&]( int i, int j, int k, auto &it ) {
 		double value = it();
+		
 		if( value > 0.0 ) {
+			openvdb::DoubleGrid::Accessor density_accessor = density_grid->getAccessor();
 			density_accessor.setValue(openvdb::Coord(i,j,k), value);
 		}
 	});
@@ -332,7 +335,7 @@ void macsmoke3::idle() {
     openvdb::GridPtrVec grids;
     grids.push_back(density_grid);
 
-    std::string dir = "/home/takebe/shiokaze/src/smoke/vdb/macsmoke3/";
+    std::string dir = "/home/takebe/vdb/macsmoke3/";
 
     // フレーム番号を使ったファイル名
     std::ostringstream filename;
