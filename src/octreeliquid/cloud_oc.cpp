@@ -40,13 +40,16 @@
 #include <ctime>
 #include <iomanip>
 
+#include "../../../PerlinNoise/PerlinNoise.hpp"
+
 //
 SHKZ_USING_NAMESPACE
 //
 
 cloud_oc::cloud_oc () {
 	//
-	m_shape = shape3(64,64,64);
+	int coeff = 1;
+	m_shape = shape3(64*coeff,64*coeff,64*coeff);
 	//m_dx = m_shape.dx();
 }
 //
@@ -66,6 +69,26 @@ void cloud_oc::load( configuration &config ) {
 }
 
 //added
+double cloud_oc::circle_source(const vec3d &p) const {
+	vec2d center (0.5,0.5);
+	double radius(0.2);
+	double ratio(0.8);
+	vec2d p_2d (p[0], p[2]);
+	if ((p_2d - center*m_param.scale).len() < radius*ratio*m_param.scale ) {
+		return 3.0;
+	} else if ((p_2d - center*m_param.scale).len() < radius*m_param.scale ) {
+		return -12.5*p_2d.len()/m_param.scale + 13.0;
+	}
+	else return 0.5;
+}
+
+double cloud_oc::perlin_noise_source(const vec3d &p) const {
+	const siv::PerlinNoise::seed_type seed = 123456u;
+	static siv::PerlinNoise perlin{seed}; // Seed for reproducibility
+	vec2d p_2d(p[0], p[2]);
+	const double noise = perlin.octave2D_01(p_2d[0], p_2d[1], 3, 0.3);
+	return noise;
+}
 
 void cloud_oc::write_to_txt(std::string type) const {
 	std::time_t t  = std::time(nullptr);
@@ -94,6 +117,14 @@ void cloud_oc::write_to_txt(std::string type) const {
 	}
 }
 
+void cloud_oc::print_position(grid3 &grid) const {
+	grid.iterate_active_cells([&]( const cell_id3 &cell_id, int thread_index ) {
+		vec3d pos = grid.get_cell_position(cell_id);
+		console::dump("Cell Index: (%d, %d, %d) Position: (%.6f, %.6f, %.6f)\n",
+			cell_id.pi[0], cell_id.pi[1], cell_id.pi[2],
+			pos[0], pos[1], pos[2]);
+	});
+}
 //
 bool cloud_oc::should_quit() const {
 	return m_should_quit_on_save || m_timestepper->should_quit();
@@ -159,13 +190,15 @@ void cloud_oc::configure( configuration &config ) {
 	//added
 	double view_scale (1.0);
 	config.get_double("ViewScale",view_scale,"View scale");
+	view_scale *= m_param.scale;
 	//
 	double resolution_scale (1.0);
 	config.get_double("ResolutionScale",resolution_scale,"Resolution doubling scale");
 	//
+	//resolution_scale = 10.0;
 	m_shape *= resolution_scale;
 	m_dx = view_scale * m_shape.dx();
-	//console::dump("Computed dx: %e\n",m_dx);
+	console::dump("Computed dx: %e\n",m_dx);
 	//added
 	unsigned solid_max_resolution (512);
 	config.get_unsigned("SolidMaxResolution",solid_max_resolution,"Max resolution for solid level set for visualization");
@@ -182,6 +215,8 @@ void cloud_oc::configure( configuration &config ) {
 	m_solid_mesher->set_environment("dx",&m_solid_dx);
 	//added
 }
+
+
 //
 void cloud_oc::post_initialize ( bool initialized_from_file ) {
 	//
@@ -268,6 +303,19 @@ void cloud_oc::post_initialize ( bool initialized_from_file ) {
 			m_grid->assign_indices();
 			//m_grid->assign_levelset(fluid_func,m_combined_solid_func);
 			//m_grid->assign_density(fluid_func); 
+			m_grid->assign_qc([&](const vec3d &p) {
+				return 0.0;
+			});
+			m_grid->assign_qv([&](const vec3d &p) {
+				return 0.0;
+			});
+			m_grid->assign_qr([&](const vec3d &p) {
+				return 0.0;
+			});
+			m_grid->atmospheric_temperature();
+			// m_grid->assign_theta([&](const vec3d &p) {
+			// 	return 300.0;
+			// });
 			//
 			//write_to_txt("assigned_density"); //added
 			if( m_param.use_sizing_func ) {
@@ -280,42 +328,6 @@ void cloud_oc::post_initialize ( bool initialized_from_file ) {
 		}
 		
 
-	// if( m_set_boundary_flux ) {
-	// 	flux_boundary_condition3 boundary_cond;
-	// 	m_set_boundary_flux(0.0,boundary_cond.velocity);
-	// 	m_grid_0.set_flux_boundary_condition(boundary_cond);
-	// 	m_grid_1.set_flux_boundary_condition(boundary_cond);
-	// }
-		// int refinement_count = m_param.use_sizing_func ? m_param.initial_refinement : 1;
-		// int count (0);
-		// while( refinement_count-- ) {
-		// 	timer.tick(); console::dump( ">>> Refinement #%d...\n", count+1 );
-		// 	//
-		// 	std::swap(m_grid,m_grid_prev);
-		// 	if( m_param.use_sizing_func ) {
-		// 		if( count ) {
-		// 			m_macoctreesizingfunc.activate_cells(*m_grid_prev,*m_grid,m_combined_solid_func,nullptr);
-		// 		} else {
-		// 			m_grid->activate_cells([&](char depth, const vec3d &p) {
-		// 				return depth > 3;
-		// 			});
-		// 		}
-		// 	} else {
-		// 		m_grid->activate_cells(fluid_func,m_combined_solid_func);
-		// 	}
-		// 	m_grid->balance_layers();
-		// 	m_grid->assign_indices();
-		// 	m_grid->assign_levelset(fluid_func,m_combined_solid_func);
-		// 	m_grid->assign_density(fluid_func,m_combined_solid_func);
-		// 	//
-		// 	if( m_param.use_sizing_func ) {
-		// 		m_macoctreesizingfunc.compute_sizing_function(*m_grid_prev,*m_grid,0.0,m_combined_solid_func,[&]( const vec3d &p ) {
-		// 			return m_moving_solid_func ? m_moving_solid_func(m_timestepper->get_current_time(),p).second : vec3d();
-		// 		});
-		// 	}
-		// 	console::dump( "<<< Done. Took %s.\n", timer.stock("refinement"+std::to_string(count)).c_str());
-		// 	count ++;
-		// }
 
 	// velocity関数があれば速度場を初期化
 	if( velocity_func ) {
@@ -351,93 +363,19 @@ void cloud_oc::post_initialize ( bool initialized_from_file ) {
 	// }
 	//
 	m_camera->set_bounding_box(vec3d().v,m_shape.box(m_dx).v);
+	m_camera->look_at(m_param.target.v,m_param.origin.v,vec3d(0.0,-1.0,0.0).v,10000.0);
+	//look_at関数でup, ターゲット位置、カメラ原点位置、視野（Field of View:FOV）を設定
+	//https://ryichando.graphics/shiokaze/classcamera3__interface.html#a4bdebf6662eef4ab7295686768ebe381
 	console::dump( "<<< Initialization finished. Took %s\n", timer.stock("initialization").c_str());
 	//
 	if( m_param.show_graph ) {
 		m_graphplotter->clear();
 		m_graph_id = m_graphplotter->create_entry("Kinetic Energy");
 	}
+	//print_position(*m_grid);
+	m_grid->check_buoyancy();
 }
-//
-// void cloud_oc::drag( double x, double y, double z, double u, double v, double w ) {
-	
-// 	if( m_param.mouse_interaction ) {
-// 		double scale (1e3);
-// 		m_macutility->add_force(vec3d(x,y,z),scale*vec3d(u,v,w),m_external_force);
-// 		m_force_exist = true;
-// 	}
-// }
-//
-// void cloud_oc::inject_external_force( macarray3<Real> &velocity ) {
-// 	//
-// 	if( m_force_exist ) {
-// 		velocity += m_external_force;
-// 		m_external_force.clear();
-// 		m_force_exist = false;
-// 	}
-// }
-//
-// void cloud_oc::add_source ( macarray3<Real> &velocity, array3<Real> &density, double time, double dt ) {
-// 	//
-// 	scoped_timer timer(this);
-// 	//
-// 	auto add_func = reinterpret_cast<void(*)(const vec3d &, vec3d &, double &, double, double)>(m_dylib.load_symbol("add"));
-// 	if( add_func ) {
-// 		timer.tick(); console::dump( "Adding sources..." );
-// 		//
-// 		// Velocity
-// 		velocity.parallel_all([&](int dim, int i, int j, int k, auto &it) {
-// 			vec3d p = m_dx*vec3i(i,j,k).face(dim);
-// 			double dummy; vec3d u;
-// 			add_func (p,u,dummy,time,dt);
-// 			if( u[dim] ) it.increment(u[dim]);
-// 		});
-// 		//
-// 		// Density
-// 		auto add_density = [&]( array3<Real> &density ) {
-// 			density.parallel_all([&](int i, int j, int k, auto &it) {
-// 				vec3d p = m_dx*vec3i(i,j,k).cell();
-// 				double d(0.0); vec3d dummy;
-// 				add_func (p,dummy,d,time,dt);
-// 				density.increment(i,j,k,d);
-// 			});
-// 		};
-// 		//
-// 		// Density
-// 		unsigned seeded (0);
-// 		if( m_param.use_dust ) {
-// 			//
-// 			std::random_device rd;
-// 			std::mt19937 gen(rd());
-// 			std::uniform_real_distribution<> dis(-1.0,1.0);
-// 			//
-// 			add_density(m_accumulation);
-// 			//
-// 			double scale = 1.0 / pow(m_param.r_sample,DIM3);
-// 			bool should_re_rasterize (false);
-// 			m_accumulation.serial_op([&]( int i, int j, int k, auto &it) {
-// 				double d = it();
-// 				while( d > scale ) {
-// 					vec3d p = m_dx*vec3i(i,j,k).cell()+0.5*m_dx*vec3d(dis(gen),dis(gen),dis(gen));
-// 					m_dust_particles.push_back(p); ++ seeded;
-// 					should_re_rasterize = true;
-// 					d -= scale;
-// 				}
-// 				it.set(d);
-// 			});
-// 			//
-// 			if( should_re_rasterize ) {
-// 				rasterize_dust_particles(density);
-// 			}
-// 			//
-// 		} else {
-// 			add_density(density);
-// 		}
-// 		//
-// 		if( m_param.use_dust ) console::dump( "Done. Seeded=%d. Took %s.\n", seeded, timer.stock("add_func").c_str());
-// 		else console::dump( "Done. Took %s.\n", timer.stock("add_func").c_str());
-// 	}
-// }
+
 //これを
 
 void cloud_oc::microphysics_cloud(grid3 &grid, double dt) {
@@ -456,82 +394,60 @@ void cloud_oc::microphysics_cloud(grid3 &grid, double dt) {
 	});
 }
 
-void cloud_oc::add_source_oc (double time, double dt , grid3 &grid) {
+
+void cloud_oc::add_source_cloud (double time, double dt , grid3 &grid) {
 	//
 	scoped_timer timer(this);
 	//
-	auto add_func = reinterpret_cast<void(*)(const vec3d &, vec3d &, double &, double, double)>(m_dylib.load_symbol("add"));
-	if( add_func ) {
+	// auto add_func = reinterpret_cast<void(*)(const vec3d &, vec3d &, double &, double, double)>(m_dylib.load_symbol("add"));
+	int octaves = 3;
+	double amplitude = 1.0;
+	double persistence = 0.3;
+	auto source_func = [&](const vec3d &p, double time, double dt, double &theta, double &vapor) {
+		vec2d p_2d (p[0], p[2]);
+		vec2d center (0.5,0.5);
+		if (/*(p_2d - center*m_param.scale).len() < 0.2*m_param.scale && */p[1] <= m_dx) {
+				vec3d offset(1.0, 1.0, 1.0);
+				double T0 = grid.param.T0;
+				double p0 = grid.param.p0;
+				double Gamma = grid.param.gamma;
+				double z1 = grid.param.z1;
+				double g = grid.param.g;
+				double TISA = grid.atmospheric_temperature(T0, Gamma, z1, p[1]);
+				double pISA = grid.atmospheric_pressure(T0, p0, Gamma, g, p[1]);
+				double theta_val = grid.thermal_potential_temperature(TISA, p0, pISA, 0.0);
+		// console::dump("theta[%f,%f,%f] = %f\n", xyz[0], xyz[1], xyz[2], theta_val);
+
+				theta = theta_val +  perlin_noise_source(p)*circle_source(p)/m_param.source_coeff;
+				vapor =  perlin_noise_source(p+offset)/m_param.source_coeff;
+				// console::dump("Source added at (%.6f, %.6f, %.6f): vapor=%.6f, theta=%.6f\n",
+				// 	p[0], p[1], p[2],
+				// 	vapor, theta);
+		}
+
+	};
+	
 		timer.tick(); console::dump( "Adding sources..." );
 		//
 		// Velocity
-		grid.iterate_active_faces([&](const face_id3 &face_id, int tid) {
-			const vec3d p = grid.get_face_position(face_id);
-			double d(0.0); vec3d u;
-			add_func (p,u,d,time,dt);
-			// density.increment(i,j,k,d);
-			grid.velocity[face_id.index] = u[face_id.dim];
-		});
-		//
-		// Density
-		double min_x, min_y, min_z = 100.0;
-		double max_x, max_y, max_z = -100.0;
-		auto add_density = [&]() {
-			grid.iterate_active_cells([&](const cell_id3 &cell_id, int tid) {
-				const vec3d p = grid.get_cell_position(cell_id);
-				min_x = std::min(min_x,p[0]); min_y = std::min(min_y,p[1]); min_z = std::min(min_z,p[2]);
-				max_x = std::max(max_x,p[0]); max_y = std::max(max_y,p[1]); max_z = std::max(max_z,p[2]);
-				//console::dump( "Adding source at (%f,%f,%f)\n", p[0], p[1], p[2] );
-				//こっから
-				vec3d center (0.15, 0.15, 0.5);
-				if ((p-center).len() < 0.1) {
-				double d(0.0); vec3d dummy;       
-				add_func (p,dummy,d,time,dt);
-				// density.increment(i,j,k,d);
-				grid.density[cell_id.index] += d;
-				grid.qc[cell_id.index] += d; // Example: 90% of added density goes to water vapor
-				//console::dump("add_source");
-				//if (d != 0.0) console::dump( "add_source density[%d] = %f\n", cell_id.index, m_grid->density[cell_id.index] );
-				}
+		// double min_theta(1000.0); double min_vapor(1000.0);
+		grid.iterate_active_cells([&](const cell_id3 &cell_id, int tid) {
+			const vec3d p = grid.get_cell_position(cell_id);
+			double theta(grid.theta[cell_id.index]); double vapor(grid.qv[cell_id.index]);
 
-			});
-		};
-		//
-		// Density
-		unsigned seeded (0);
-		// if( m_param.use_dust ) {
-		// 	//
-		// 	std::random_device rd;
-		// 	std::mt19937 gen(rd());
-		// 	std::uniform_real_distribution<> dis(-1.0,1.0);
-		// 	//
-		// 	add_density(m_accumulation);
-		// 	//
-		// 	double scale = 1.0 / pow(m_param.r_sample,DIM3);
-		// 	bool should_re_rasterize (false);
-		// 	m_accumulation.serial_op([&]( int i, int j, int k, auto &it) {
-		// 		double d = it();
-		// 		while( d > scale ) {
-		// 			vec3d p = m_dx*vec3i(i,j,k).cell()+0.5*m_dx*vec3d(dis(gen),dis(gen),dis(gen));
-		// 			m_dust_particles.push_back(p); ++ seeded;
-		// 			should_re_rasterize = true;
-		// 			d -= scale;
-		// 		}
-		// 		it.set(d);
-		// 	});
-		// 	//
-		// 	if( should_re_rasterize ) {
-		// 		rasterize_dust_particles(density);
-		// 	}
-			//
-		//} else {
-			add_density();
-			//console::dump( "Source added in region x:(%f,%f) y:(%f,%f) z:(%f,%f)\n", min_x, max_x, min_y, max_y, min_z, max_z );
-		//}
-		//
-		if( m_param.use_dust ) console::dump( "Done. Seeded=%d. Took %s.\n", seeded, timer.stock("add_func").c_str());
-		else console::dump( "Done. Took %s.\n", timer.stock("add_func").c_str());
-	}
+			source_func (p,time,dt,theta,vapor);
+			// min_theta = std::min(min_theta,theta);
+			// min_vapor = std::min(min_vapor,vapor);
+			// density.increment(i,j,k,d);
+			// if (vapor > 0.0) {
+			// 	console::dump("Source added at (%d, %d, %d): vapor=%.6f, theta=%.6f\n",
+			// 		cell_id.pi[0], cell_id.pi[1], cell_id.pi[2],
+			// 		vapor, theta);
+			// }
+			grid.qv[cell_id.index] = vapor;
+			grid.theta[cell_id.index] = theta;
+		});
+		// console::dump( "Done. Min theta=%.6f, Min vapor=%.6f.\n", min_theta, min_vapor);
 }
 //
 // void cloud_oc::rasterize_dust_particles( array3<Real> &rasterized_density ) {
@@ -557,6 +473,7 @@ void cloud_oc::add_source_oc (double time, double dt , grid3 &grid) {
 //
 void cloud_oc::idle() {
 	//
+	console::dump( "=================== Step %d ===================\n", m_timestepper->get_step_count() );
 	//write_to_txt("before_timestep"); //added
 	scoped_timer timer(this);
 	//
@@ -568,13 +485,30 @@ void cloud_oc::idle() {
 	double max_u_per_unit (0.0);
 	//get_finest_dxが0しか返していないのでdtがほぼ0になってしまう→たぶんm_gridまわりでlayerを追加する処理をしてないから
 	for( size_t n=0; n<m_grid->velocity.size(); ++n ) max_u_per_unit = std::max(max_u_per_unit,(double)std::abs(m_grid->velocity[n]));
-	const double dt = m_timestepper->advance(max_u_per_unit,m_grid->get_finest_dx());
+	m_param.Time_coeff * m_timestepper->advance(max_u_per_unit,m_grid->get_finest_dx());
+	const double dt = 5.0;
 	const double time = m_timestepper->get_current_time();
 	const double CFL = m_timestepper->get_current_CFL();
-	//console::dump( "Done. time=%.2e. max_u_perunit=%.2e, dx=%2.e, dt=%.2e,CFL=%.2f. Took %s\n", time, max_u_per_unit, m_grid->get_finest_dx(), dt, CFL, timer.stock("compute_timestep").c_str());
+	console::dump( "Done. time=%.2e. max_u_perunit=%.2e, dx=%2.e, dt=%.2e,CFL=%.2f. Took %s\n", time, max_u_per_unit, m_grid->get_finest_dx(), dt, CFL, timer.stock("compute_timestep").c_str());
 	//timer.tick(); console::dump( ">>> %s step started (dt=%.2e,CFL=%.2f)...\n", CFL, console::nth(step).c_str());
 	//
     m_accumulated_CFL += CFL;
+	//advect velocity
+	m_grid->set_velocity([&]( const vec3d &p, char dim ) {
+		vec3d u (m_grid_prev->sample_velocity(p));
+		return m_grid_prev->sample_velocity(p-dt*u,dim);
+	});
+	m_grid->vorticity_confinement(dt);
+	m_grid->source_func(m_dx);
+	m_grid->add_buoyancy(dt);
+	//added
+	m_macoctreeproject.assemble_matrix_qc(*m_grid);
+	auto solid_velocity_func = [&]( const vec3d &p ) {
+		return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
+	};
+	// // Project(added)
+	m_macoctreeproject.project_cloud(*m_grid,dt,solid_velocity_func);
+	m_grid->check_buoyancy();
     
 	std::swap(m_grid,m_grid_prev);
     if( m_accumulated_CFL >= m_param.maximal_CFL_accumulation ) {
@@ -592,19 +526,6 @@ void cloud_oc::idle() {
 			// } else {
 				m_macoctreesizingfunc.activate_cells(*m_grid_prev,*m_grid,m_combined_solid_func,nullptr);
 			//}
-		} else {
-			m_grid->activate_cells([&]( const vec3d &p ){
-				//
-				double inject_levelset (std::numeric_limits<double>::max());
-				// if( m_do_inject ) {
-				// 	vec3d u; double value;
-				// 	if( m_inject_func(p,m_dx,dt,time,step,value,u)) {
-				// 		inject_levelset = value;
-				// 	}
-				// }
-				vec3d u (m_grid_prev->sample_velocity(p));
-				return std::min(inject_levelset,m_grid_prev->sample_levelset(p-dt*u));
-			},m_combined_solid_func);
 		}
 
         m_grid->balance_layers();
@@ -618,184 +539,61 @@ void cloud_oc::idle() {
 		console::dump( "Done. Took %s.\n", timer.stock("copy_grid").c_str());
     }
 	
-	//added
-	// Advect density
-	m_grid->assign_density([&]( const vec3d &p ) {
+
+
+	// Advect scalar quantities
+	double dt_advect = 5.0;
+	m_grid->assign_qv([&]( const vec3d &p ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
-		vec3d center (0.15,0.15,0.5);
-		vec3d one (1.0, 1.0, 1.0);
-		//if (m_grid_prev->sample_density(-p) > 0.000001 && (p-center).len() >= 0.1) console::dump( "density at (%f,%f,%f): (%f) advected by (%f,%f,%f), dt = %f, len = %f\n", p[0], p[1], p[2], m_grid->sample_density(p-dt*u), u[0], u[1], u[2], dt, (p-center).len() );
-		return m_grid_prev->sample_density(p-dt*u);
+		vec3d advected_point = p - dt_advect * u;
+		//console::dump("Advecting at position (%.6f, %.6f, %.6f)\n", u[0], u[1], u[2]);
+		// vec3d u (50.0,50.0,50.0); // test
+		double d =  m_grid_prev->sample_qv(p - dt_advect * u);
+		if (d > 1.0) return 0.0;
+		else return d;
+	});
+	m_grid->assign_qc([&]( const vec3d &p ) {
+		vec3d u (m_grid_prev->sample_velocity(p));
+		double d =  m_grid_prev->sample_qc(p - dt_advect * u);
+		if (d > 1.0) return 0.0;
+		else return d;
+	});
+	m_grid->assign_qr([&]( const vec3d &p ) {
+		vec3d u (m_grid_prev->sample_velocity(p));
+		double d =  m_grid_prev->sample_qr(p - dt_advect * u);
+		if (d > 1.0) return 0.0;
+		else return d;
+	});
+	m_grid->assign_theta([&]( const vec3d &p ) {
+		vec3d u (m_grid_prev->sample_velocity(p));
+		double d =  m_grid_prev->sample_theta(p - dt_advect * u);
+		return d;
 	});
 	//write_to_txt("after_density_advection"); //added
-	// Update solid
-	// m_macutility->update_solid_variables(m_dylib,time,&m_solid,&m_solid_velocity);
 
 	//added
-	if( m_param.maccormack ) {
-		//
-		timer.tick(); console::dump( ">>> MacCormack velocity advection...\n");
-		//
-		using Real2 = struct { Real v[2] = {0.0, 0.0}; };
-		std::vector<Real2> min_max_values(m_grid->face_count);
-		std::vector<Real> u0(m_grid->face_count), u1(m_grid->face_count), _u0(m_grid->face_count);
-		std::vector<Real> u_x(m_grid->face_count), u_y(m_grid->face_count), u_z(m_grid->face_count);
-		std::vector<char> near_surface_flag (m_grid->face_count);
-		//
-		timer.tick(); console::dump( "Mapping initial velocity...");
-		m_grid->iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
-			const vec3d &p = m_grid->get_face_position(face_id);
-			uint_type index = face_id.index;
-			u_x[index] = m_grid_prev->sample_velocity(p,0);
-			u_y[index] = m_grid_prev->sample_velocity(p,1);
-			u_z[index] = m_grid_prev->sample_velocity(p,2);
-			u0[index] = m_grid_prev->sample_velocity(p,face_id.dim);
-		});
-		console::dump( "Done. Took %s.\n", timer.stock("maccormack_initial_mapping").c_str());
-		//
-		timer.tick(); console::dump( "Forward advection...");
-		m_grid->iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
-			const vec3d &p = m_grid->get_face_position(face_id);
-			uint_type index = face_id.index;
-			vec3d u (u_x[index],u_y[index],u_z[index]);
-			u1[index] = m_grid_prev->sample_face(p-dt*u,face_id.dim,m_grid_prev->velocity,min_max_values[index].v);
-			const double dx = m_grid->get_face_dx(face_id);
-			near_surface_flag[index] = m_grid_prev->sample_levelset(p-dt*u) > -dx || m_grid_prev->sample_levelset(p+dt*u) > -dx;
-		});
-		console::dump( "Done. Took %s.\n", timer.stock("maccormack_forward_advection").c_str());
-		//
-		timer.tick(); console::dump( "Backward advection...");
-		m_grid->iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
-			uint_type index = face_id.index;
-			if( ! near_surface_flag[index] ) {
-				const vec3d &p = m_grid->get_face_position(face_id);
-				vec3d u (u_x[index],u_y[index],u_z[index]);
-				_u0[index] = m_grid->sample_face(p+dt*u,face_id.dim,u1);
-			}
-		});
-		console::dump( "Done. Took %s.\n", timer.stock("maccormack_backward_advection").c_str());
-		//
-		timer.tick(); console::dump( "Combining the values...");
-		std::vector<size_t> reverted_count (m_grid->parallel.get_thread_num());
-		std::vector<size_t> filled_count (m_grid->parallel.get_thread_num());
-		m_grid->iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
-			const uint_type index = face_id.index;
-			const Real *v = min_max_values[index].v;
-			bool in_the_air (true);
-			m_grid->get_gradient(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3 &info ) {
-				if( m_grid->levelset[cell_id.index] < 0.0 ) {
-					in_the_air = false;
-				}
-			});
-			if( ! in_the_air ) filled_count[tid] ++;
-			if( near_surface_flag[index] ) {
-				if( ! in_the_air ) reverted_count[tid] ++;
-				m_grid->velocity[index] = u1[index];
-			} else {
-				m_grid->velocity[index] = std::max(v[0],std::min(v[1],u1[index]+0.5f*(u0[index]-_u0[index])));
-			}
-		});
-		size_t num_inside = std::accumulate(filled_count.begin(),filled_count.end(),0);
-		size_t num_reverted = std::accumulate(reverted_count.begin(),reverted_count.end(),0);
-		double reverted_ratio = num_reverted / (double) num_inside;
-		console::dump( "Done. Reverted=%u/%u (%.2f%%). Took %s.\n", num_reverted, num_inside, 100.0*reverted_ratio, timer.stock("maccormack_combine").c_str());
-		console::dump( "<<< Done. Took %s.\n", timer.stock("maccormack_velocity_advection").c_str());
-	} else {
-		m_grid->set_velocity([&]( const vec3d &p, char dim ) {
-			vec3d u (m_grid_prev->sample_velocity(p));
-			return m_grid_prev->sample_velocity(p-dt*u,dim);
-		});
-	}
+	
 
-	m_macoctreeproject.assemble_matrix(*m_grid);
-	auto solid_velocity_func = [&]( const vec3d &p ) {
-		return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
-	};
-	// Project(added)
-	m_macoctreeproject.project_density(*m_grid,dt,solid_velocity_func);
+
+
+
 	// //added
 	// m_grid->extrapolate_toward_solid(m_combined_solid_func);
 	// m_grid->extrapolate(m_combined_solid_func);
 	//added
-	//
-	// shared_macarray3<Real> velocity_save(m_velocity);
-	// m_macadvection->advect_vector(m_velocity,velocity_save(),m_fluid,dt,"velocity");
-	//
-	// Add buoyancy force
-	//add_buoyancy_force(m_velocity,m_density,dt);
-	//
-	// Add source
-	//add_source(m_velocity,m_density,m_timestepper->get_current_time(),dt);
 	
-	add_source_oc(m_timestepper->get_current_time(),dt, *m_grid);
+	//add_source_cloud(m_timestepper->get_current_time(),dt, *m_grid);
+	
 	//
-	m_grid->vorticity_confinement(dt);
-	m_grid->add_buoyancy(dt);
-	//microphysics_cloud(*m_grid, dt);
+	
+	m_grid->check_buoyancy();
+	microphysics_cloud(*m_grid, dt);
 	// Add external force
 	//inject_external_force(m_velocity);
 	//
 	// Projection
-	//m_macproject->project(dt,m_velocity,m_solid,m_solid_velocity,m_fluid,0.0);
-	//m_macutility->extrapolate_and_constrain_velocity(m_solid,m_velocity,m_param.extrapolated_width);
-	//
-	//console::dump( "<<< %s step done. Took %s\n", console::nth(step).c_str(), timer.stock("simstep").c_str());
-	//
-	// Export density
-	//export_density();
-	//
-	// Report stats
-	//m_macstats->dump_stats(m_solid,m_fluid,m_velocity,m_timestepper.get());
+	m_grid->check_buoyancy();
 }
-//
-// void cloud_oc::advect_dust_particles( const macarray3<Real> &velocity, double dt ) {
-// 	//
-// 	m_parallel.for_each( m_dust_particles.size(), [&]( size_t n, int tn ) {
-// 		vec3d &p = m_dust_particles[n];
-// 		vec3d u0 = macarray_interpolator3::interpolate<Real>(velocity,p/m_dx);
-// 		vec3d u1 =  macarray_interpolator3::interpolate<Real>(velocity,(p+dt*u0)/m_dx);
-// 		p += 0.5 * dt * (u0+u1);
-// 	});
-// 	//
-// 	m_parallel.for_each( m_dust_particles.size(), [&]( size_t n, int tn ) {
-// 		vec3d &p = m_dust_particles[n];
-// 		double phi = array_interpolator3::interpolate<Real>(m_solid,p/m_dx);
-// 		if( phi < 0.0 ) {
-// 			Real derivative[DIM3];
-// 			array_derivative3::derivative(m_solid,p/m_dx,derivative);
-// 			p = p - phi*vec3d(derivative).normal();
-// 		}
-// 		for( unsigned dim : DIMS3 ) {
-// 			if( p[dim] < 0.0 ) p[dim] = 0.0;
-// 			if( p[dim] > m_dx*m_shape[dim] ) p[dim] = m_dx*m_shape[dim];
-// 		}
-// 	});
-// 	//
-// 	rasterize_dust_particles(m_density);
-// }
-//
-// void cloud_oc::add_to_graph() {
-// 	//
-// 	if( m_param.show_graph ) {
-// 		//
-// 		// Compute total energy
-// 		const double time = m_timestepper->get_current_time();
-// 		const double total_energy = m_macutility->get_kinetic_energy(m_solid,m_fluid,m_velocity);
-// 		//
-// 		// Add to graph
-// 		m_graphplotter->add_point(m_graph_id,time,total_energy);
-// 	}
-// }
-//
-// void cloud_oc::draw_dust_particles( graphics_engine &g ) const {
-// 	using ge = graphics_engine;
-// 	g.color4(1.0,1.0,1.0,1.0);
-// 	g.begin(ge::MODE::POINTS);
-// 	for( const vec3d &p : m_dust_particles ) {
-// 		g.vertex3v(p.v);
-// 	}
-// 	g.end();
-// }
 //
 void cloud_oc::draw( graphics_engine &g ) const {
 	//
@@ -818,11 +616,11 @@ void cloud_oc::draw( graphics_engine &g ) const {
 	//
 	// Draw projection component
 	//m_macproject->draw(g);
-	//
+	
 	// Draw concentration
-	// if( m_param.use_dust ) draw_dust_particles(g);
-	// else m_gridvisualizer->draw_density(g,m_density);
 	m_gridvisualizer_oc->draw_qc(g,*m_grid);
+	// m_gridvisualizer_oc->draw_qv(g,*m_grid);
+	// m_gridvisualizer_oc->draw_qr(g,*m_grid);
 	//write_to_txt("before_draw"); //added
 	//m_gridvisualizer->draw_density_oc(g, *m_grid);
 	// //densityを点で描画
@@ -928,39 +726,6 @@ void cloud_oc::render_density( int frame ) const {
 	//
 	global_timer::resume();
 }
-//
-// void cloud_oc::do_inject_external_density( double dt, double time, unsigned step ) {
-// 	//
-// 	if( m_do_inject ) {
-// 		//
-// 		std::vector<double> total_injected (m_grid->parallel.get_thread_num());
-// 		m_grid->iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
-// 			//
-// 			const vec3d p = m_grid->get_cell_position(cell_id);
-// 			double value (0.0); vec3d u;
-// 			//
-// 			if( m_inject_func(p,m_dx,dt,time,step,value,u)) {
-// 				const double v = m_grid->density[cell_id.index];
-// 				m_grid->density[cell_id.index] = std::min(value,v);
-// 				if( value < 0.0 && v > 0.0 ) {
-// 					const double dx = m_grid->get_cell_dx(cell_id);
-// 					total_injected[tid] += dx*dx*dx;
-// 				}
-// 			}
-// 		});
-// 		m_grid->iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
-// 			const vec3d p = m_grid->get_face_position(face_id);
-// 			const double dx = m_grid->get_face_dx(face_id);
-// 			double value (0.0); vec3d u;
-// 			if( m_inject_func(p,m_dx,dt,time,step,value,u)) {
-// 				if( value < dx ) {
-// 					m_grid->velocity[face_id.index] = u[face_id.dim];
-// 				}
-// 			}
-// 		});
-// 		m_injected_volume = std::accumulate(total_injected.begin(),total_injected.end(),0.0);
-// 	}
-// }
 //
 extern "C" module * create_instance() {
 	return new cloud_oc;

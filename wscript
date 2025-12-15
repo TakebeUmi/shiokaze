@@ -52,7 +52,7 @@ def common_configure(conf,target):
 	if target == 'debug':
 		conf.setenv('debug')
 	#
-	conf.env.CXXFLAGS = ['-std=c++14']
+	conf.env.CXXFLAGS = ['-std=c++17']
 	#
 	if target == 'debug':
 		suffix = '_debug'

@@ -86,6 +86,7 @@ void macsmoke3::configure( configuration &config ) {
 	//
 	double view_scale (1.0);
 	config.get_double("ViewScale",view_scale,"View scale");
+	//view_scale *= m_param.scale;
 	//
 	double resolution_scale (1.0);
 	config.get_double("ResolutionScale",resolution_scale,"Resolution doubling scale");
@@ -155,6 +156,7 @@ void macsmoke3::post_initialize ( bool initialized_from_file ) {
 	}
 	//
 	m_camera->set_bounding_box(vec3d().v,m_shape.box(m_dx).v);
+	// m_camera->look_at(m_param.target.v,m_param.origin.v,vec3d(0.0,1.0,0.0).v,m_param.scale);
 	console::dump( "<<< Initialization finished. Took %s\n", timer.stock("initialization").c_str());
 	//
 	if( m_param.show_graph ) {
@@ -195,6 +197,7 @@ void macsmoke3::add_source ( macarray3<Real> &velocity, array3<Real> &density, d
 			double dummy; vec3d u;
 			add_func (p,u,dummy,time,dt);
 			if( u[dim] ) it.increment(u[dim]);
+			// if( u[dim] ) it.increment(u[dim]*m_param.scale);
 		});
 		//
 		// Density

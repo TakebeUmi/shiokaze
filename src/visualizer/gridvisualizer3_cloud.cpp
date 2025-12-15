@@ -13,7 +13,7 @@ protected:
 	auto func = [&]( const macotreeliquid3_namespace::cell_id3 &cell_id ) {
 		double qc_value = grid.qc[cell_id.index];
 		vec3d pos = grid.get_cell_position(cell_id);
-		g.color4(1.0,1.0,1.0,qc_value);
+		g.color4(1.0,0.5,0.5,qc_value*10.0);
 		g.vertex3v(pos.v); 
 		//if (qc_value > 0.000001) console::dump("%u:%f at (%f,%f,%f)\n", (unsigned)cell_id.index, qc_value,pos[0],pos[1],pos[2]);
 	};
@@ -52,7 +52,7 @@ protected:
 	auto func = [&]( const macotreeliquid3_namespace::cell_id3 &cell_id ) {
 		double qv_value = grid.qv[cell_id.index];
 		vec3d pos = grid.get_cell_position(cell_id);
-		g.color4(1.0,1.0,1.0,qv_value);
+		g.color4(0.5,1.0,0.5,qv_value*10);
 		g.vertex3v(pos.v); 
 		//if (qc_value > 0.000001) console::dump("%u:%f at (%f,%f,%f)\n", (unsigned)cell_id.index, qc_value,pos[0],pos[1],pos[2]);
 	};
@@ -91,7 +91,7 @@ protected:
 	auto func = [&]( const macotreeliquid3_namespace::cell_id3 &cell_id ) {
 		double qr_value = grid.qr[cell_id.index];
 		vec3d pos = grid.get_cell_position(cell_id);
-		g.color4(1.0,1.0,1.0,qr_value);
+		g.color4(0.5,0.5,1.0,qr_value);
 		g.vertex3v(pos.v); 
 		//if (qc_value > 0.000001) console::dump("%u:%f at (%f,%f,%f)\n", (unsigned)cell_id.index, qc_value,pos[0],pos[1],pos[2]);
 	};
@@ -123,6 +123,8 @@ protected:
     g.end();
     g.point_size(1.0);
 	}
+
+
 	virtual void initialize( const shape3 &shape, double dx ) override {
 		m_shape = shape;
 		m_dx = dx;

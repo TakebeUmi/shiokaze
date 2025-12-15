@@ -297,12 +297,18 @@ namespace macotreeliquid3_namespace {
 			double vort_eps {1e-2};
 			double T0 {288.15};
 			double p0 {101325.0};
-			double gamma { -0.0065 };
+			double gamma { -0.0085 };
 			double g {9.81};
 			double z1 {8000.0};
 			double alphaCE {1.0};
 			double alphaA {0.001};
 			double alphaK {2.2};
+			double scale {12000.0};
+			double E {2.2};
+			double gammaheat {1.5};
+			double phirel{0.54};
+			double gammavapor{0.14};
+			double m{2.0};
 			//
 		};
 		Parameters param;
@@ -343,6 +349,7 @@ namespace macotreeliquid3_namespace {
 		void assign_qc( std::function<double( const vec3d &p )> fluid);
 		void assign_qv( std::function<double( const vec3d &p )> fluid);
 		void assign_qr( std::function<double( const vec3d &p )> fluid);
+		void assign_theta( std::function<double( const vec3d &p )> func);
 		//added
 		void set_velocity( std::function<double( const vec3d &p, char dim )> func );
 		void set_flux_boundary_condition( const flux_boundary_condition3 &boundary_cond );
@@ -439,6 +446,7 @@ namespace macotreeliquid3_namespace {
 		double sample_qc( const vec3d &p, Real *min_max_values=nullptr ) const;
 		double sample_qv( const vec3d &p, Real *min_max_values=nullptr ) const;
 		double sample_qr( const vec3d &p, Real *min_max_values=nullptr ) const;
+		double sample_theta( const vec3d &p, Real *min_max_values=nullptr ) const;
 		//added
 		double sample_face( const vec3d &p, char dim, const std::vector<Real> &face_values, Real *min_max_values=nullptr ) const;
 		double sample_velocity( const vec3d &p, char dim, Real *min_max_values=nullptr ) const;
@@ -465,6 +473,10 @@ namespace macotreeliquid3_namespace {
 		//
 		void compute_cell_map ();
 		void compute_face_map ();
+		//added
+		void compute_cell_map_cloud();
+		void compute_face_map_cloud();
+		//added
 		void clear_map ();
 		//
 		double get_finest_dx() const;
@@ -486,11 +498,11 @@ namespace macotreeliquid3_namespace {
 
 	//added cloud functions
 	void add_buoyancy( double dt );
-	double thermal_buoyancy(const double T0, const double p0, const double gamma, const double z1, const double g, const double z, const double qv, const double qc, const double qr, const double theta) const;
+	double thermal_buoyancy(const double T0, const double p0, const double gamma, const double z1, const double g, const double z, const double qv, const double qc, const double qr, const double theta);
 	double atmospheric_temperature(const double T0, const double Gamma, const double z1, const double z) const;
 	double atmospheric_pressure(const double T0, const double p0, const double Gamma, const double g, const double z) const;
 	double thermal_molar_mass(const double qv) const;
-	double thermal_absolute_temperature(const double theta, const double p0, const double p, const double qv) const;
+	double thermal_absolute_temperature(const double theta, const double p0, const double p, const double qv);
 	double mole_fraction(const double qi) const;
 	void kessler_model(const double timeinc, const double T0, const double p0, const double Gamma, const double g, 
                    const double alphaCE, const double alphaA, const double alphaK, 
@@ -501,13 +513,18 @@ namespace macotreeliquid3_namespace {
 	double fetch_d(const double T, const double p, const double M);
 	double thermal_potential_temperature(const double Tth, const double phat, const double p, const double qv);
 	double thermal_heat_capacity(const double qv);
-	double thermal_isentropic_exponent(const double qv);
+	double thermal_isentropic_exponent(const double qv) ;
 	double thermal_mass_fraction(const double qv);
-
+	void atmospheric_temperature();
+	double convert_source(vec3d &p);
+	double perlin_noise_source(const vec3d &p) const;
+	double circle_source(const vec3d &p) const;
+	void check_buoyancy();
+	void source_func(double m_dx);
 };	
 };
 //
 SHKZ_END_NAMESPACE
 //
 #endif
-//F
+//

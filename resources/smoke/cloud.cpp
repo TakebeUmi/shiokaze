@@ -35,11 +35,24 @@ extern "C" std::map<std::string,std::string> get_default_parameters () {
 }
 //
 extern "C" void add ( const vec3d &p, vec3d &u, double &d, double time, double dt ) {
-	double scale = 1000.0;
 	if( time < 1.0 ) {
 		vec3d center (0.15,0.15,0.5);
-		// if( (p-center*scale).len() < 0.1*scale ) {
 		if( (p-center).len() < 0.1 ) {
+			double dist = (p-center).len();
+			double r (0.075);
+			double s (10.0);
+			double v = std::min(10.0,std::max(0.0,s*(r-dist)/r));
+			u = 2.0 * vec3d(dt*v,0.0,0.0);
+			d = 4.0 * dt;
+		}
+	}
+}
+
+extern "C" void source ( const vec3d &p, vec3d &u, double &theta, double &vapor, double time, double dt ) {
+	if( time < 1.0 ) {
+		vec2d p_2d (p[0], p[2]);
+		vec2d center (0.5,0.5);
+		if( (p-center).len() < 0.2 ) {
 			double dist = (p-center).len();
 			double r (0.075);
 			double s (10.0);

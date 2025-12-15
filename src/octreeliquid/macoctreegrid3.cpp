@@ -31,6 +31,7 @@
 #include <functional>
 #include "unstructured_extrapolator3.h"
 #include "../../src/redistancer/unstructured_fastmarch3.h"
+#include "../../../PerlinNoise/PerlinNoise.hpp"
 //
 SHKZ_USING_NAMESPACE
 using namespace macotreeliquid3_namespace;
@@ -73,6 +74,7 @@ void grid3::copy( const grid3 &grid ) {
 	qc = grid.qc;
 	qv = grid.qv;
 	qr = grid.qr;
+	theta = grid.theta;
 	//added
 	velocity = grid.velocity;
 	area = grid.area;
@@ -115,6 +117,7 @@ void grid3::clear() {
 	//
 	levelset.clear();
 	density.clear();
+	theta.clear();
 	qc.clear();
 	qv.clear();
 	qr.clear();
@@ -123,6 +126,10 @@ void grid3::clear() {
 	//
 	levelset.shrink_to_fit();
 	density.shrink_to_fit();
+	theta.shrink_to_fit();
+	qc.shrink_to_fit();
+	qv.shrink_to_fit();
+	qr.shrink_to_fit();
 	velocity.shrink_to_fit();
 	area.shrink_to_fit();
 	//
@@ -277,6 +284,24 @@ void grid3::assign_density( std::function<double( const vec3d &p )> smoke) {
 	console::dump( "Done. Took %s.\n", timer.stock("assign_density").c_str());
 }
 
+void grid3::assign_theta( std::function<double( const vec3d &p )> smoke) {
+	//
+	scoped_timer timer(this);
+	timer.tick(); console::dump( "Assigning theta..." );
+	//
+	// Assigning fluid levelset
+	iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+
+		double d = smoke(get_cell_position(cell_id));
+		theta[cell_id.index] = d; //セルの位置（ここでは面の中心）を取得してfluid関数に入れている
+		//console::dump( "theta[%d] = %f\n", cell_id.index, d );
+	});
+	//
+	std::fill(area.begin(),area.end(),1.0);
+
+	console::dump( "Done. Took %s.\n", timer.stock("assign_theta").c_str());
+}
+
 void grid3::assign_qc( std::function<double( const vec3d &p )> smoke) {
 	//
 	scoped_timer timer(this);
@@ -294,6 +319,41 @@ void grid3::assign_qc( std::function<double( const vec3d &p )> smoke) {
 
 	console::dump( "Done. Took %s.\n", timer.stock("assign_qc").c_str());
 }
+
+void grid3::assign_qv( std::function<double( const vec3d &p )> smoke) {
+	//
+	scoped_timer timer(this);
+	timer.tick(); console::dump( "Assigning qv..." );//levelsetをdensityに変更
+	//
+	// Assigning fluid levelset
+	iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+
+		double d = smoke(get_cell_position(cell_id));
+		qv[cell_id.index] = d; //セルの位置（ここでは面の中心）を取得してfluid関数に入れている
+		//console::dump( "density[%d] = %f\n", cell_id.index, d );
+	});
+	//
+	std::fill(area.begin(),area.end(),1.0);
+
+	console::dump( "Done. Took %s.\n", timer.stock("assign_qv").c_str());
+}
+
+void grid3::assign_qr( std::function<double( const vec3d &p )> smoke) {
+	//
+	scoped_timer timer(this);
+	timer.tick(); console::dump( "Assigning qc..." );//levelsetをdensityに変更
+	//
+	// Assigning fluid levelset
+	iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+
+		double d = smoke(get_cell_position(cell_id));
+		qr[cell_id.index] = d; //セルの位置（ここでは面の中心）を取得してfluid関数に入れている
+		//console::dump( "density[%d] = %f\n", cell_id.index, d );
+	});
+	//
+	std::fill(area.begin(),area.end(),1.0);
+
+}	
 //added
 
 void grid3::assign_levelset( std::function<double( const vec3d &p )> fluid, std::function<double( const vec3d &p )> solid ) {
@@ -474,6 +534,7 @@ void grid3::assign_indices() {
 	//
 	levelset.clear();
 	density.clear();
+	theta.clear();
 	qc.clear();
 	qv.clear();
 	qr.clear();
@@ -483,6 +544,7 @@ void grid3::assign_indices() {
 	//
 	levelset.resize(pressure_index);
 	density.resize(pressure_index);
+	theta.resize(pressure_index);
 	qc.resize(pressure_index);
 	qv.resize(pressure_index);
 	qr.resize(pressure_index);
@@ -492,6 +554,7 @@ void grid3::assign_indices() {
 	//
 	levelset.shrink_to_fit();
 	density.shrink_to_fit();
+	theta.shrink_to_fit();
 	qc.shrink_to_fit();
 	qv.shrink_to_fit();
 	qr.shrink_to_fit();
@@ -1619,6 +1682,7 @@ void grid3::get_gradient_qr( const face_id3 &face_id, std::function<void( const 
 void grid3::vorticity_confinement(double dt) {
 	std::vector<Real> vorticity(face_count);
 	std::vector<Real> abs_omegas(cell_count);
+	std::vector<Real> velocity_copy = velocity; //元の速度を保存しておく
 
 	iterate_active_cells([&]( const cell_id3 &cell_id, int tid) {
 		double round_x = 0.0;
@@ -2930,6 +2994,27 @@ double grid3::sample_density( const vec3d &p, Real *min_max_values ) const {
 	return result;
 }
 
+double grid3::sample_theta( const vec3d &p, Real *min_max_values ) const {
+	//
+	const shape3 shape = layers[0]->shape;
+	const double dx = layers[0]->dx;
+	auto clamp_ceil = [&]( double x ) {
+		return std::max(x,p[1]-dx*(shape[1]-0.5));
+	};
+	//
+	Real local_min_max_values[2] = { 0.0, 0.0 };
+	double result = sample_cell(p,theta,local_min_max_values);
+	//if (result > 0.000001) console::dump("sample_theta: before clamp result=%.6e\n",result);
+	result = clamp_ceil(std::max(std::min(result,(double)local_min_max_values[1]),(double)local_min_max_values[0]));
+	//local_min_max_values
+	if( min_max_values ) {
+		min_max_values[0] = local_min_max_values[0];
+		min_max_values[1] = local_min_max_values[1];
+	}
+	//
+	return result;
+}
+
 double grid3::sample_qc( const vec3d &p, Real *min_max_values ) const {
 	//
 	const shape3 shape = layers[0]->shape;
@@ -3582,6 +3667,43 @@ void grid3::compute_cell_map () {
 	console::dump( "Done. Found %u cells. Took %s.\n", valid_cell_count, timer.stock("gather_liquid_cells").c_str());
 	console::write("num_gather_liquid_cells",valid_cell_count);
 }
+
+void grid3::compute_cell_map_cloud () {
+	//
+	scoped_timer timer(this);
+	timer.tick(); console::dump( "Gathering active liquid cells..." );
+	//
+	valid_cell_count = 0;
+	cell_map.clear();
+	cell_map.resize(cell_count);
+	//
+	iterate_active_cells([&](const cell_id3 &cell_id, int tid ) {
+		bool valid (false);
+		if( levelset[cell_id.index] < 0.0 ) {
+			bool open (false);
+			for( char dim : DIMS3 ) {
+				this->iterate_face_neighbors(cell_id,dim,[&]( const face_id3 &face_id ){
+					if( area[face_id.index] ) open = true;
+				});
+				if( open ) break;
+			}
+			if( open ) {
+				cell_map[cell_id.index] = 1;
+			}
+		}
+	});
+	//
+	for( uint_type n=0; n<cell_count; ++n ) {
+		if( cell_map[n] ) {
+			cell_map[n] = ++ valid_cell_count;
+		}
+	}
+	//
+	cell_map.shrink_to_fit();
+	//
+	console::dump( "Done. Found %u cells. Took %s.\n", valid_cell_count, timer.stock("gather_cloud_cells").c_str());
+	console::write("num_gather_cloud_cells",valid_cell_count);
+}
 //
 void grid3::compute_face_map () {
 	//
@@ -3612,6 +3734,43 @@ void grid3::compute_face_map () {
 	//
 	console::dump( "Done. Found %u faces. Took %s.\n", valid_face_count, timer.stock("gather_liquid_faces").c_str());
 	console::write("num_gather_liquid_faces",valid_face_count);
+}
+
+void grid3::compute_face_map_cloud () {
+	//
+	scoped_timer timer(this);
+	timer.tick(); console::dump( "Gathering active velocity faces..." );
+	//
+	valid_face_count = 0;
+	face_map.clear();
+	face_map.resize(face_count);
+	//
+	iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
+		bool valid (false);
+		this->get_scaled_gradient_qc(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
+			valid = true;
+		});
+		this->get_scaled_gradient_qv(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
+			valid = true;
+		});
+		this->get_scaled_gradient_qr(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
+			valid = true;
+		});
+		if( valid ) {
+			face_map[face_id.index] = 1;
+		}
+	});
+	//
+	for( uint_type n=0; n<face_count; ++n ) {
+		if( face_map[n] ) {
+			face_map[n] = ++ valid_face_count;
+		}
+	}
+	//
+	face_map.shrink_to_fit();
+	//
+	console::dump( "Done. Found %u faces. Took %s.\n", valid_face_count, timer.stock("gather_cloud_faces").c_str());
+	console::write("num_gather_cloud_faces",valid_face_count);
 }
 //
 void grid3::clear_map () {
@@ -3974,18 +4133,20 @@ void grid3::kessler_model(const double dt, const double T0, const double p0, con
     // Fast Weather Simulation for Inverse Procedural Design of 3D Urban Models
     // Accretion: Eq (14)
     double Kc = std::max(0.0, alphaK * qc * pow(qr, 0.875));
+	//if (Kc > 0.0) console::dump("Kc: %f, qc: %f, qr: %f\n", Kc, qc, qr);
     
     // Fast Weather Simulation for Inverse Procedural Design of 3D Urban Models
     // Evaporation: Eq (11) (12)
     double Vc = 1.6f + 124.9f * pow(rho * qc, 0.2046f);
     double Er = std::min(std::max(qvs - (qv+CcEc), 0.0),
-                   std::min(qr, dt                                                                                                                                                                                                                                                                                                           * Vc * (std::max(qvs-qv, 0.0) / (rho*qvs)) * (pow(rho*qr, 0.525) / (5.4e5 + 2.55e8/(p*qvs)))));
+                   std::min(qr, dt * Vc * (std::max(qvs-qv, 0.0) / (rho*qvs)) * (pow(rho*qr, 0.525) / (5.4e5 + 2.55e8/(p*qvs)))));
 
     // Stormscapes: Simulating Cloud Dynamics in the Now
     // Kessler model: Eq (22) (23) (24)
-    newqv = qv + CcEc + Er;
-    newqc = qc - CcEc - Ac - Kc;
-    newqr = qr + Ac + Kc - Er;
+    newqv = std::max(0.0, qv + CcEc + Er);
+    newqc = std::max(0.0, qc - CcEc - Ac - Kc);
+    newqr = std::max(0.0, qr + Ac + Kc - Er);
+	// if (newqr > 0.0) console::dump("qr: %f, Ac: %f, Kc: %f, Er: %f\n", newqr, Ac, Kc, Er);
 
     // Stormscapes: Simulating Cloud Dynamics in the Now
     // Kessler model: Eq (21)
@@ -3999,24 +4160,51 @@ void grid3::add_buoyancy( double dt) {
 	iterate_active_cells([&](const cell_id3 &cell_id, int tid) {
 		for (int dim : DIMS3 ) {
 			iterate_face_neighbors(cell_id, dim, [&](const face_id3 &face_id) {
+				if (face_id.index >= velocity.size()) return; // 安全チェック
 				if (dim == 1) { // Y方向の面に対してのみ処理
 					vec3d xyz = get_cell_position(cell_id);
 					double buoyancy_force = thermal_buoyancy(param.T0,param.p0,param.gamma,param.z1,param.g,xyz[1],qv[cell_id.index],qc[cell_id.index], qr[cell_id.index], theta[cell_id.index]);
-					//velocity[face_id.index] += buoyancy_force * dt;
+					// if (buoyancy_force > 0.1) console::dump( "Buoyancy force at cell (%f, %f, %f): %e\n", xyz[0], xyz[1], xyz[2], buoyancy_force );
+					//buoyancy_force = 20.0;
+					// if (buoyancy_force > 50.0) console::dump("Buoyancy force exceeded limit: %e\n", buoyancy_force); // 安全のため上限を設定
+					// buoyancy_force = 0.484; // デバッグ用に固定値を使用
+
+					velocity[face_id.index] += dt * buoyancy_force;
 				}
 			});
 		}
 	});
 }
 
+void grid3::check_buoyancy() {
+	//
+	vec3d p_0 = {0.5*param.scale, 0.0*param.scale, 0.5*param.scale};
+	vec3d p_1 = {0.5*param.scale, 0.2*param.scale, 0.5*param.scale};
+	vec3d p_2 = {0.5*param.scale, 0.4*param.scale, 0.5*param.scale};
+	vec3d p_3 = {0.5*param.scale, 0.6*param.scale, 0.5*param.scale};
+	vec3d p_4 = {0.5*param.scale, 0.8*param.scale, 0.5*param.scale};
+	vec3d p_5 = {0.5*param.scale, 1.0*param.scale, 0.5*param.scale};
+	
+	std::vector<vec3d> points = {p_0, p_1, p_2, p_3, p_4, p_5};
+	for (const auto& p : points) {
+			double B = thermal_buoyancy(param.T0,param.p0,param.gamma,param.z1,param.g,p[1],sample_qv(p),sample_qc(p), sample_qr(p), sample_theta(p));
+			console::dump( "Buoyancy at point (%f, %f, %f): %e m/s^2, qv=%f, theta=%f, u2=%f\n", p[0], p[1], p[2], B, sample_qv(p), sample_theta(p), sample_velocity(p)[1] );
+	}
+}
 
-double grid3::thermal_buoyancy( const double T0, const double p0, const double gamma, const double z1, const double g, const double z, const double qv, const double qc, const double qr, const double theta) const {
+
+double grid3::thermal_buoyancy( const double T0, const double p0, const double gamma, const double z1, const double g, const double z, const double qv, const double qc, const double qr, const double theta) {
 	double p = atmospheric_pressure(T0, p0, gamma, g, z);
 	double Mair = 28.96e-3f;
+	//console::dump( "Calculating buoyancy at height z=%f m: p=%e\n", z, p);
 	double Tair = atmospheric_temperature(T0, gamma, z1, z);
+	//console::dump( "Calculating buoyancy at height z=%f m: Tair=%f K\n", z, Tair);
 	double Mth = thermal_molar_mass(qv);
+	//console::dump( "Calculating buoyancy at height z=%f m: Mth=%f\n", z, Mth);
 	double Tth = thermal_absolute_temperature(theta, p0, p, qv);    // thermal temperature
+	//console::dump( "Calculating buoyancy at height z=%f m: Tth=%f K\n", z, Tth);
     float B = g * ((Mair / Mth) * (Tth / Tair) - 1.0f);  // Eq (15)
+	// if (qv >0.0001)console::dump( "Calculating buoyancy at height z=%f m: B=%e m/s^2, qv = %f, Tair = %f, Mair = %f, Mth = %f, Tth = %f\n", z, B, qv, Tair, Mair, Mth, Tth);
     return B;
 }
 
@@ -4067,19 +4255,16 @@ double grid3::mole_fraction(const double qi) const
     return Xi;
 }
 
-double grid3::thermal_absolute_temperature(const double theta, const double p0, const double p, const double qv) const
+double grid3::thermal_absolute_temperature(const double That, const double phat, const double p, const double qv) 
 {
     /**
      * Stormscapes: Simulating Cloud Dynamics in the Now
      * Calculate absolute temperature from potential temperature
      * T = theta * (p/p0)^(R/cp)
      */
-    double R = 8314.0e-3f;      // universal gas constant: 8314 J/(g K)
-    double Mair = 28.96e-3f;    // molar mass of dry air: 28.96 g/mol
-    double cp = 1004.0f;        // specific heat at constant pressure for air: 1004 J/(kg K)
-    double kappa = (R / Mair) / cp;  // R/cp ratio
-    double T = theta * pow(p / p0, kappa);
-    return T;
+	double gammath = thermal_isentropic_exponent(qv);               // isentropic exponent of the humid thermal
+    double Tth = That * pow(p / phat, (gammath - 1.0f) / gammath);  // Eq (10)
+    return Tth;
 }
 
 double grid3::heat_of_condensation(const double qv, const double Cc)
@@ -4118,8 +4303,7 @@ double grid3::fetch_d(const double T, const double p, const double M)
     return rho;
 }
 
-double grid3::thermal_potential_temperature(const double Tth, const double phat, const double p,
-                                    const double qv)
+double grid3::thermal_potential_temperature(const double Tth, const double phat, const double p, const double qv)
 {
     /**
      * Stormscapes: Simulating Cloud Dynamics in the Now
@@ -4167,5 +4351,66 @@ double grid3::thermal_mass_fraction(const double qv)
     double Xv = mole_fraction(qv);        // mole fraction of water vapor
     double Yv = Xv * (Mw / Mth);          // Eq (8)
     return Yv;
+}
+
+void grid3::atmospheric_temperature() {
+	double T0 = param.T0;
+	double p0 = param.p0;
+	double Gamma = param.gamma;
+	double z1 = param.z1;
+	double g = param.g;
+	iterate_active_cells([&](const cell_id3 &cell_id, int tid) {
+		vec3d xyz = get_cell_position(cell_id);
+		double TISA = atmospheric_temperature(T0, Gamma, z1, xyz[1]);
+		double pISA = atmospheric_pressure(T0, p0, Gamma, g, xyz[1]);
+		double theta_val = thermal_potential_temperature(TISA, p0, pISA, 0.0);
+		theta[cell_id.index] = theta_val;
+		// console::dump("theta[%f,%f,%f] = %f\n", xyz[0], xyz[1], xyz[2], theta_val);
+	});
+}
+
+double grid3::perlin_noise_source(const vec3d &p) const {
+	const siv::PerlinNoise::seed_type seed = 123456u;
+	static siv::PerlinNoise perlin{seed}; // Seed for reproducibility
+	vec2d p_2d(p[0], p[2]);
+	const double noise = perlin.octave2D_01(p_2d[0], p_2d[1], 3, 0.3);
+	return noise;
+}
+
+double grid3::circle_source(const vec3d &p) const {
+	vec2d center (0.5,0.5);
+	double radius(0.2);
+	double ratio(0.8);
+	vec2d p_2d (p[0], p[2]);
+	if ((p_2d - center*param.scale).len() < radius*ratio*param.scale ) {
+		return 3.0;
+	} else if ((p_2d - center*param.scale).len() < radius*param.scale ) {
+		return -12.5*p_2d.len()/param.scale + 13.0;
+	}
+	else return 0.5;
+}
+
+void grid3::source_func(double m_dx) {
+	vec3d offset {1.0,1.0,1.0};
+	iterate_active_cells([&](const cell_id3 &cell_id, int tid) {
+		
+		vec3d p = get_cell_position(cell_id);
+		if (p[1] <= m_dx) {
+			double heatmap = perlin_noise_source(p) * circle_source(p);
+			double vapormap = perlin_noise_source(p+offset) ;
+
+			double TISA = atmospheric_temperature(param.T0, param.gamma, param.z1, p[1]);
+			double pISA = atmospheric_pressure(param.T0, param.p0, param.gamma, param.g, p[1]);
+			
+			double T = TISA + param.E * (param.gammaheat * (param.m * heatmap - 1.0f) + 1.0f);
+			double theta_source = thermal_potential_temperature(T, param.p0, pISA, 0.0);
+			double qvs = saturation_mixing_ratio(T, pISA);
+			double qv_source = param.phirel * qvs * (param.gammavapor *(param.m  * vapormap - 1.0f) + 1.0f); 
+
+			qv_source = std::max(0.0, qv_source);
+			theta[cell_id.index] = theta_source;
+			qv[cell_id.index] = qv_source;
+		}	
+});
 }
 //

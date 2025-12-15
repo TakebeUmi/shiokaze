@@ -137,8 +137,9 @@ protected:
 	bool export_svg {true};
 	//unsigned render_sample_count {8};
 	unsigned save_interval {100};
-	vec3d target {0.5,0.15,0.5};
-	vec3d origin {0.5,1.5,3.0};
+	double scale {12000.0};
+	vec3d target {0.5*scale,0.5*scale,0.5*scale};
+	vec3d origin {1.3*scale,0.3*scale,1.7*scale};
 	vec3d gravity {0.0,-9.8,0.0};
 	double PICFLIP {0.98};
 	bool render_transparent {false};
@@ -148,6 +149,11 @@ protected:
 	unsigned render_transparent_sample_count {32};
 	bool transfer_file {true};
 	int debug_mode {0};
+
+	double radius {0.2};
+	vec2d center {0.5,0.5};
+	double source_coeff {1.0};
+	double Time_coeff {30.0};
 	};
 	//
 	Parameters m_param;
@@ -200,7 +206,7 @@ protected:
 	//virtual void add_buoyancy_force( macarray3<Real> &velocity, const array3<Real> &density, double dt );
 	//virtual void advect_dust_particles( const macarray3<Real> &velocity, double dt );
 	//virtual void add_source ( macarray3<Real> &velocity, array3<Real> &density, double time, double dt );
-	virtual void add_source_oc ( double time, double dt, grid3 &grid );
+	void add_source_cloud ( double time, double dt, grid3 &grid );
 	// virtual void rasterize_dust_particles( array3<Real> &rasterized_density );
 	// virtual void draw_dust_particles( graphics_engine &g ) const;
 	virtual void export_density () const;
@@ -219,6 +225,9 @@ protected:
 
 		//virtual void do_inject_external_density( double dt, double time, unsigned step );
 	void microphysics_cloud(grid3 &grid, double dt);
+	void print_position(grid3 &grid) const;
+	double perlin_noise_source(const vec3d &p) const;
+	double circle_source(const vec3d &p) const;
 	//added
 };
 //

@@ -88,6 +88,9 @@ protected:
 		bool render_density {false};
 		unsigned render_sample_count {128};
 		double volume_scale {40.0};
+		double scale{1000.0};
+		vec3d target {0.5*scale,0.5*scale,0.5*scale};
+		vec3d origin {1.3*scale,0.3*scale,1.7*scale};
 	};
 	//
 	Parameters m_param;
