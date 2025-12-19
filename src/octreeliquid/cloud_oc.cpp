@@ -373,7 +373,7 @@ void cloud_oc::post_initialize ( bool initialized_from_file ) {
 		m_graph_id = m_graphplotter->create_entry("Kinetic Energy");
 	}
 	//print_position(*m_grid);
-	m_grid->check_buoyancy();
+	//m_grid->check_buoyancy();
 }
 
 //これを
@@ -387,6 +387,9 @@ void cloud_oc::microphysics_cloud(grid3 &grid, double dt) {
 		double newtheta, newqv, newqc, newqr;
 		vec3d z = grid.get_cell_position(cell_id);
 		grid.kessler_model(dt, grid.param.T0, grid.param.p0, grid.param.gamma, grid.param.g, grid.param.alphaCE, grid.param.alphaA, grid.param.alphaK, z[1], qv, qc, qr, theta, newqv, newqc, newqr, newtheta);
+		if (z[1]>=grid.param.scale - m_dx) newqv = 0.0;
+		if (z[1]>=grid.param.scale - m_dx) newqc = 0.0;
+		if (z[1]>=grid.param.scale - m_dx) newqr = 0.0;
 		grid.qv[cell_id.index] = newqv;
 		grid.qc[cell_id.index] = newqc;
 		grid.qr[cell_id.index] = newqr;
@@ -493,21 +496,23 @@ void cloud_oc::idle() {
 	//timer.tick(); console::dump( ">>> %s step started (dt=%.2e,CFL=%.2f)...\n", CFL, console::nth(step).c_str());
 	//
     m_accumulated_CFL += CFL;
+	m_grid_prev->copy(*m_grid);
 	//advect velocity
 	m_grid->set_velocity([&]( const vec3d &p, char dim ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
+		if (u[1] <= 1.0) u[1] = 1.0; // prevent going down too fast
 		return m_grid_prev->sample_velocity(p-dt*u,dim);
 	});
 	m_grid->vorticity_confinement(dt);
 	m_grid->source_func(m_dx);
 	m_grid->add_buoyancy(dt);
 	//added
-	m_macoctreeproject.assemble_matrix_qc(*m_grid);
-	auto solid_velocity_func = [&]( const vec3d &p ) {
-		return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
-	};
-	// // Project(added)
-	m_macoctreeproject.project_cloud(*m_grid,dt,solid_velocity_func);
+	// m_macoctreeproject.assemble_matrix_qc(*m_grid);
+	// auto solid_velocity_func = [&]( const vec3d &p ) {
+	// 	return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
+	// };
+	// // // Project(added)
+	// m_macoctreeproject.project_cloud(*m_grid,dt,solid_velocity_func);
 	m_grid->check_buoyancy();
     
 	std::swap(m_grid,m_grid_prev);
@@ -516,16 +521,7 @@ void cloud_oc::idle() {
 
 		timer.tick(); console::dump( ">>> Remeshing...\n");
 		if( m_param.use_sizing_func ) {
-			// if( m_do_inject ) {
-			// 	m_macoctreesizingfunc.activate_cells(*m_grid_prev,*m_grid,m_combined_solid_func,
-			// 		[&]( const vec3d &p ) {
-			// 			vec3d u; double value;
-			// 			m_inject_func(p,m_dx,dt,time,step,value,u);
-			// 			return value;
-			// 		});
-			// } else {
 				m_macoctreesizingfunc.activate_cells(*m_grid_prev,*m_grid,m_combined_solid_func,nullptr);
-			//}
 		}
 
         m_grid->balance_layers();
@@ -546,6 +542,7 @@ void cloud_oc::idle() {
 	m_grid->assign_qv([&]( const vec3d &p ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
 		vec3d advected_point = p - dt_advect * u;
+		if (u[1] <= 1.0) u[1] = 1.0; 
 		//console::dump("Advecting at position (%.6f, %.6f, %.6f)\n", u[0], u[1], u[2]);
 		// vec3d u (50.0,50.0,50.0); // test
 		double d =  m_grid_prev->sample_qv(p - dt_advect * u);
@@ -554,12 +551,14 @@ void cloud_oc::idle() {
 	});
 	m_grid->assign_qc([&]( const vec3d &p ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
+		if (u[1] <= 1.0) u[1] = 1.0; // prevent going down too fast
 		double d =  m_grid_prev->sample_qc(p - dt_advect * u);
 		if (d > 1.0) return 0.0;
 		else return d;
 	});
 	m_grid->assign_qr([&]( const vec3d &p ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
+		if (u[1] <= 1.0) u[1] = 1.0; // prevent going down too fast
 		double d =  m_grid_prev->sample_qr(p - dt_advect * u);
 		if (d > 1.0) return 0.0;
 		else return d;

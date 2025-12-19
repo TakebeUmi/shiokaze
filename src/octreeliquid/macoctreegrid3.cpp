@@ -297,7 +297,7 @@ void grid3::assign_theta( std::function<double( const vec3d &p )> smoke) {
 		//console::dump( "theta[%d] = %f\n", cell_id.index, d );
 	});
 	//
-	std::fill(area.begin(),area.end(),1.0);
+	//std::fill(area.begin(),area.end(),1.0);
 
 	console::dump( "Done. Took %s.\n", timer.stock("assign_theta").c_str());
 }
@@ -316,6 +316,7 @@ void grid3::assign_qc( std::function<double( const vec3d &p )> smoke) {
 	});
 	//
 	std::fill(area.begin(),area.end(),1.0);
+	console::dump("area size: %zu\n", area.size());
 
 	console::dump( "Done. Took %s.\n", timer.stock("assign_qc").c_str());
 }
@@ -563,6 +564,7 @@ void grid3::assign_indices() {
 	solid_cell.shrink_to_fit();
 	//
 	cell_count = pressure_index;
+	console::dump( "cell_count: %zu\n", cell_count );
 	face_count = velocity_index;
 	//
 	console::dump( "Done. Num cells = %u, Num face = %u. Took %s.\n", pressure_index, velocity_index, timer.stock("assign_indices").c_str());
@@ -1249,7 +1251,7 @@ void grid3::serial_iterate_active_faces( const std::function<void( const face_id
 void grid3::get_gradient_scalar( const face_id3 &face_id, std::function<void( const cell_id3 &cell_id, double value, const gradient_info3_scalar &info )> func ) const {
 	//
 	const auto &layer = *layers[face_id.depth];
-	const vec3i p_forward = face_id.pi; //差分において前方の位置(これは麺の位置と同じ)
+	const vec3i p_forward = face_id.pi; //差分において前方の位置(これは面の位置と同じ)
 	const vec3i p_backward = face_id.pi-vec3i(face_id.dim==0,face_id.dim==1,face_id.dim==2); //差分において後方の位置
 	const Real area = this->area[face_id.index];
 	//console::dump( "area = %f\n", area );
@@ -1377,8 +1379,8 @@ void grid3::get_gradient_qc( const face_id3 &face_id, std::function<void( const 
 		//
 		const Real qcs[] = { qc[foward_index], qc[backward_index] };
 		//console::dump( "densities: %f , %f\n", densities[0], densities[1] );
-		const Real rho = utility::fraction(qcs[0],qcs[1]); 
-		const bool cross_interface = rho > 0.0 && rho < 1.0;
+		const Real rho = utility::fraction(qcs[0],qcs[1]); //fractionはlevelsetを用いることを前提とした機能。どちらも負なら「液体中」と判断して1を、どちらも正なら「気体中」と判断して0を返す。片方が正で片方が負ならばその比率を返す。
+		const bool cross_interface = false; //rhoを用いてt-junctionを判定するのが本来だが難しそうなのでとりあえず全部falseにしておく
 		//
 		func(forward_id,scale,{qcs[0],dx,rho,area,false,cross_interface,false});
 		func(backward_id,-scale,{qcs[1],dx,rho,area,false,cross_interface,false});
@@ -3671,7 +3673,7 @@ void grid3::compute_cell_map () {
 void grid3::compute_cell_map_cloud () {
 	//
 	scoped_timer timer(this);
-	timer.tick(); console::dump( "Gathering active liquid cells..." );
+	timer.tick(); console::dump( "Gathering active liquid cells...\n" );
 	//
 	valid_cell_count = 0;
 	cell_map.clear();
@@ -3679,11 +3681,14 @@ void grid3::compute_cell_map_cloud () {
 	//
 	iterate_active_cells([&](const cell_id3 &cell_id, int tid ) {
 		bool valid (false);
-		if( levelset[cell_id.index] < 0.0 ) {
+		if ( qc[cell_id.index] >= 0.0 ) {
 			bool open (false);
 			for( char dim : DIMS3 ) {
 				this->iterate_face_neighbors(cell_id,dim,[&]( const face_id3 &face_id ){
-					if( area[face_id.index] ) open = true;
+					if( area[face_id.index] ) {
+						open = true;
+						//console::dump("area exists.\n");
+					}
 				});
 				if( open ) break;
 			}
@@ -3698,6 +3703,7 @@ void grid3::compute_cell_map_cloud () {
 			cell_map[n] = ++ valid_cell_count;
 		}
 	}
+	console::dump( "Valid cell count: %u\n", valid_cell_count );
 	//
 	cell_map.shrink_to_fit();
 	//
@@ -3750,12 +3756,12 @@ void grid3::compute_face_map_cloud () {
 		this->get_scaled_gradient_qc(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
 			valid = true;
 		});
-		this->get_scaled_gradient_qv(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
-			valid = true;
-		});
-		this->get_scaled_gradient_qr(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
-			valid = true;
-		});
+		// this->get_scaled_gradient_qv(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
+		// 	valid = true;
+		// });
+		// this->get_scaled_gradient_qr(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
+		// 	valid = true;
+		// });
 		if( valid ) {
 			face_map[face_id.index] = 1;
 		}

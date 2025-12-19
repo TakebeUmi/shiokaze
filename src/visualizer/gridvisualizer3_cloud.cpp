@@ -13,7 +13,7 @@ protected:
 	auto func = [&]( const macotreeliquid3_namespace::cell_id3 &cell_id ) {
 		double qc_value = grid.qc[cell_id.index];
 		vec3d pos = grid.get_cell_position(cell_id);
-		g.color4(1.0,0.5,0.5,qc_value*10.0);
+		g.color4(1.0,0.5,0.5,qc_value*100.0);
 		g.vertex3v(pos.v); 
 		//if (qc_value > 0.000001) console::dump("%u:%f at (%f,%f,%f)\n", (unsigned)cell_id.index, qc_value,pos[0],pos[1],pos[2]);
 	};

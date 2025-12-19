@@ -82,6 +82,8 @@ public:
 		T min_diag = std::numeric_limits<T>::max();
 		for( N row=0; row<matrix->rows(); ++row ) {
 			min_diag = std::min(min_diag,matrix->get(row,row));
+			if (min_diag < 0.0) console::dump("Warning: min_diag < 0.0\n");
+			//min_diagは対角成分の家最小のもの
 		}
 		return min_diag;
 	}

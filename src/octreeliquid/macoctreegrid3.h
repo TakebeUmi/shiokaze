@@ -306,7 +306,7 @@ namespace macotreeliquid3_namespace {
 			double scale {12000.0};
 			double E {2.2};
 			double gammaheat {1.5};
-			double phirel{0.54};
+			double phirel{0.80};
 			double gammavapor{0.14};
 			double m{2.0};
 			//

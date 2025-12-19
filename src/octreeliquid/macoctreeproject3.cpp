@@ -324,15 +324,16 @@ void macoctreeproject3::assemble_matrix_qc( grid3 &grid ) {
 	grid.compute_face_map_cloud();
 	//
 	uint_type cell_count = grid.valid_cell_count;
+	console::dump("Valid cell count: %u\n", cell_count);
 	uint_type face_count = grid.valid_face_count;
 	//
-	if( m_matrix.allocated ) {
+	if( m_matrix.allocated ) {//行列がもう存在する場合
 		m_matrix.Lhs->initialize(cell_count,cell_count);
 		if( m_param.debug_assemble ) {
 			m_matrix.G->initialize(face_count,cell_count);
 			m_matrix.D->initialize(cell_count,face_count);
 		}
-	} else {
+	} else {//行列がまだない場合
 		m_matrix.Lhs = m_factory->allocate_matrix(cell_count,cell_count);
 		if( m_param.debug_assemble ) {
 			m_matrix.G = m_factory->allocate_matrix(face_count,cell_count);
@@ -344,6 +345,7 @@ void macoctreeproject3::assemble_matrix_qc( grid3 &grid ) {
 	if( m_param.debug_assemble ) {
 		//
 		// Scaled gradient matrix
+		console::dump("Assembling G matrix...\n");
 		grid.iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
 			if( grid.face_map[face_id.index] ) {
 				uint_type row = grid.face_map[face_id.index]-1;
@@ -358,6 +360,7 @@ void macoctreeproject3::assemble_matrix_qc( grid3 &grid ) {
 		});
 		//
 		// Divergence matrix
+		console::dump("Assembling D matrix...\n");
 		grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
 			if( grid.cell_map[cell_id.index] ) {
 				uint_type row = grid.cell_map[cell_id.index]-1;
@@ -376,6 +379,7 @@ void macoctreeproject3::assemble_matrix_qc( grid3 &grid ) {
 	} else {
 		//
 		// Directily assemble Lhs matrix
+		console::dump("Assembling Lhs matrix...\n");
 		grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
 			if( grid.cell_map[cell_id.index] ) {
 				uint_type row0 = grid.cell_map[cell_id.index]-1;
@@ -387,6 +391,8 @@ void macoctreeproject3::assemble_matrix_qc( grid3 &grid ) {
 								if( value ) {
 									uint_type row1 = grid.cell_map[cell_neigh_id.index]-1;
 									const double v = value0*value;
+									//value0はt*area
+									//console::dump("Adding Lhs(%zu,%zu) += %f\n", row0, row1, v);
 									if( row0 == row1 ) diag += v;
 									else m_matrix.Lhs->add_to_element(row0,row1,v);
 								}
@@ -406,6 +412,7 @@ void macoctreeproject3::assemble_matrix_qc( grid3 &grid ) {
 	}
 	if( m_param.check_positive_diag ) {
 		const double min_diag = RCMatrix_utility<size_t,double>::min_diag(m_matrix.Lhs.get());
+		console::dump("Min diag: %f\n", min_diag);
 		assert( min_diag > 0.0 );
 	}
 	m_matrix.assembled = true;
@@ -1631,6 +1638,7 @@ void macoctreeproject3::project_cloud( grid3 &grid, double dt,
 					if( region_count ) {
 						rhs->add(row,(dx*dx*dx)*rhs_corrects[regions[cell_id.index]-1]);
 					} else {
+						console::dump("rhs_correct=%e\n",rhs_correct);
 						rhs->add(row,(dx*dx*dx)*rhs_correct);
 					}
 				}
