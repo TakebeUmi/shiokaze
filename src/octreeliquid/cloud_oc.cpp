@@ -500,19 +500,19 @@ void cloud_oc::idle() {
 	//advect velocity
 	m_grid->set_velocity([&]( const vec3d &p, char dim ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
-		if (u[1] <= 1.0) u[1] = 1.0; // prevent going down too fast
+		// if (u[1] <= 1.0) u[1] = 1.0; // prevent going down too fast
 		return m_grid_prev->sample_velocity(p-dt*u,dim);
 	});
 	m_grid->vorticity_confinement(dt);
 	m_grid->source_func(m_dx);
 	m_grid->add_buoyancy(dt);
 	//added
-	// m_macoctreeproject.assemble_matrix_qc(*m_grid);
-	// auto solid_velocity_func = [&]( const vec3d &p ) {
-	// 	return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
-	// };
+	m_macoctreeproject.assemble_matrix_qc(*m_grid);
+	auto solid_velocity_func = [&]( const vec3d &p ) {
+		return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
+	};
 	// // // Project(added)
-	// m_macoctreeproject.project_cloud(*m_grid,dt,solid_velocity_func);
+	m_macoctreeproject.project_cloud(*m_grid,dt,solid_velocity_func);
 	m_grid->check_buoyancy();
     
 	std::swap(m_grid,m_grid_prev);

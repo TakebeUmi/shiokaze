@@ -1682,8 +1682,8 @@ void grid3::get_gradient_qr( const face_id3 &face_id, std::function<void( const 
 }
 
 void grid3::vorticity_confinement(double dt) {
-	std::vector<Real> vorticity(face_count);
-	std::vector<Real> abs_omegas(cell_count);
+	std::vector<Real> vorticity(this->velocity.size(), 0.0); //渦度を一時的に保存しておく配列
+	std::vector<Real> abs_omegas(this->qc.size(), 0.0); //各セルの渦度の大きさを保存しておく配列
 	std::vector<Real> velocity_copy = velocity; //元の速度を保存しておく
 
 	iterate_active_cells([&]( const cell_id3 &cell_id, int tid) {
@@ -1745,7 +1745,7 @@ void grid3::vorticity_confinement(double dt) {
 				const auto &layer = *layers[face_id.depth];
 				const Real dx = layer.dx;
 				const Real force = param.vort_eps * f_vorticity[dim];
-				velocity[face_id.index] += force * dt * dx;
+				velocity[face_id.index] += force * dt ;
 			});
 		}
 	});
@@ -2390,12 +2390,12 @@ void grid3::get_divergence_qc( const cell_id3 &cell_id, std::function<void( cons
 			const Real area = this->area[face_id.index];
 			uint_type column = face_layer.active_faces[dim](face_id.pi);
 			get_gradient_qc(face_id,[&]( const cell_id3 &neighbor_cell_id, double value, const gradient_info3_cloud &info ) {
-				//if( info.levelset < 0.0 && cell_id.index == neighbor_cell_id.index ) { レベルセットの条件はとりあえず消しといた
+				if(  cell_id.index == neighbor_cell_id.index ) { //レベルセットの条件はとりあえず消しといた
 					const double t = (info.t_junction ? 0.75 : 1.0) * info.dx * info.dx * info.dx;
 					const double scale0 = t * area; //tが1/dxや1/dx**3に相当。func内でそれを累積して足すことで発散を計算
 					const double scale1 = t * (1.0-area);
 					func(face_id,scale0*value,scale1*value);
-				//}
+				}
 			});
 		});
 	}

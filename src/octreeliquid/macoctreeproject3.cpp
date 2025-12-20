@@ -121,6 +121,7 @@ void macoctreeproject3::assemble_matrix( grid3 &grid ) {
 			if( grid.cell_map[cell_id.index] ) {
 				uint_type row0 = grid.cell_map[cell_id.index]-1;
 				double diag (0.0);
+				int count = 0;
 				grid.get_divergence(cell_id,[&]( const face_id3 &face_id, double value0, double value1 ) {
 					if( grid.face_map[face_id.index] ) {
 						if( value0 ) {
@@ -128,14 +129,23 @@ void macoctreeproject3::assemble_matrix( grid3 &grid ) {
 								if( value ) {
 									uint_type row1 = grid.cell_map[cell_neigh_id.index]-1;
 									const double v = value0*value;
-									if( row0 == row1 ) diag += v;
-									else m_matrix.Lhs->add_to_element(row0,row1,v);
+
+									if( row0 == row1 ) {
+										diag += v;
+										count++;
+										console::dump("value0: %f, value: %f v: %f row0: %zu, row1: %zu\n", value0, value, v, row0, row1);
+									}
+									else {
+										m_matrix.Lhs->add_to_element(row0,row1,v);
+									}
 								}
 							});
 						}
 					}
 				});
+				// if (diag != 0.0) console::dump("Adding Lhs(%zu,%zu) += %f\n", row0, row0, diag);
 				m_matrix.Lhs->add_to_element(row0,row0,diag);
+				//console::dump("Row %zu: diag=%f, count=%d\n", row0, diag, count);
 			}
 		});
 		RCMatrix_utility<size_t,double>::report(m_matrix.Lhs.get(),"Lhs");
@@ -383,6 +393,7 @@ void macoctreeproject3::assemble_matrix_qc( grid3 &grid ) {
 		grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
 			if( grid.cell_map[cell_id.index] ) {
 				uint_type row0 = grid.cell_map[cell_id.index]-1;
+				//console::dump("Assembling row %zu...\n", row0);
 				double diag (0.0);
 				grid.get_divergence_qc(cell_id,[&]( const face_id3 &face_id, double value0, double value1 ) {
 					if( grid.face_map[face_id.index] ) {
@@ -391,15 +402,23 @@ void macoctreeproject3::assemble_matrix_qc( grid3 &grid ) {
 								if( value ) {
 									uint_type row1 = grid.cell_map[cell_neigh_id.index]-1;
 									const double v = value0*value;
+									// if ( row0 == row1 && value0 != 0.0 && value != 0.0) {
+									// 	console::dump("Divergence value: %f, Gradient value: %f\n", value0, value);
+									// }
 									//value0はt*area
 									//console::dump("Adding Lhs(%zu,%zu) += %f\n", row0, row1, v);
-									if( row0 == row1 ) diag += v;
-									else m_matrix.Lhs->add_to_element(row0,row1,v);
+									if( row0 == row1 ){diag += v; 
+										// console::dump("value0: %f, value: %f v: %f, row0: %zu, row1: %zu\n", value0, value, v, row0, row1);
+									}
+									else {m_matrix.Lhs->add_to_element(row0,row1,v); 
+										// console::dump("Adding Lhs(%zu,%zu) += %f\n", row0, row1, v);
+									}
 								}
 							});
 						}
 					}
 				});
+				// if (diag != 0.0) console::dump("Adding Lhs(%zu,%zu) += %f\n", row0, row0, diag);
 				m_matrix.Lhs->add_to_element(row0,row0,diag);
 			}
 		});
@@ -1781,7 +1800,7 @@ void macoctreeproject3::project_cloud( grid3 &grid, double dt,
 		grid.get_scaled_gradient_qc(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
 			if( grid.face_map[face_id.index] && grid.cell_map[cell_id.index] && value ) {
 				grid.velocity[face_id.index] -= value * result->at(grid.cell_map[cell_id.index]-1);
-				console::dump("face_id=%u, cell_id=%u, pressure=%e\n",face_id.index,cell_id.index,result->at(grid.cell_map[cell_id.index]-1));
+				// console::dump("face_id=%u, cell_id=%u, pressure=%e\n",face_id.index,cell_id.index,result->at(grid.cell_map[cell_id.index]-1));
 			}
 		});
 	});

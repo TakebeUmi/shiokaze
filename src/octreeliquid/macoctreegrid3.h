@@ -294,7 +294,7 @@ namespace macotreeliquid3_namespace {
 			unsigned pde_update_count {0};
 			unsigned erosion_count {0};
 			bool debug {false};
-			double vort_eps {1e-2};
+			double vort_eps {3e-2};
 			double T0 {288.15};
 			double p0 {101325.0};
 			double gamma { -0.0085 };
