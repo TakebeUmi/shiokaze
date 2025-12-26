@@ -29,6 +29,7 @@
 #include <shiokaze/core/console.h>
 #include <shiokaze/core/timer.h>
 #include <functional>
+#include <algorithm>
 #include "unstructured_extrapolator3.h"
 #include "../../src/redistancer/unstructured_fastmarch3.h"
 #include "../../../PerlinNoise/PerlinNoise.hpp"
@@ -36,6 +37,36 @@
 SHKZ_USING_NAMESPACE
 using namespace macotreeliquid3_namespace;
 //
+int UnionFind::root(int x) {
+		if (par[x] == -1) return x;
+		return par[x] = root(par[x]);
+	}
+
+bool UnionFind::unite(grid3 grid, int x, int y) {
+        int rx = root(x);
+        int ry = root(y);
+        if (rx == ry) return false;
+
+        if (rank[rx] < rank[ry]) std::swap(rx, ry);
+
+        par[ry] = rx;
+        if (rank[rx] == rank[ry]) rank[rx]++;
+
+        siz[rx] += siz[ry];
+
+        // ★ 高さの最大・最小を統合
+        top[rx]    = (grid.get_cell_position(top[rx])[0] > grid.get_cell_position(top[ry])[0]) ? top[rx] : top[ry];
+        bottom[rx] = (grid.get_cell_position(bottom[rx])[0] > grid.get_cell_position(bottom[ry])[0]) ? bottom[ry] : bottom[rx];
+
+        return true;
+}
+
+double UnionFind::get_top(int x) {
+		return top[root(x)];
+	}
+double UnionFind::get_bottom(int x) {
+		return bottom[root(x)];
+	}
 void grid3::configure( configuration &config ) {
 	//
 	configuration::auto_group group(config,*this);
@@ -4388,7 +4419,7 @@ double grid3::circle_source(const vec3d &p) const {
 	double radius(0.2);
 	double ratio(0.8);
 	vec2d p_2d (p[0], p[2]);
-	if ((p_2d - center*param.scale).len() < radius*ratio*param.scale ) {
+	if ((p_2d - center*param.scale).len() < radius*param.scale ) {
 		return 3.0;
 	} else if ((p_2d - center*param.scale).len() < radius*param.scale ) {
 		return -12.5*p_2d.len()/param.scale + 13.0;

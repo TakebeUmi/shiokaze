@@ -39,6 +39,8 @@
 #include <sstream>
 #include <ctime>
 #include <iomanip>
+#include <numeric>
+#include <vector>
 
 #include "../../../PerlinNoise/PerlinNoise.hpp"
 
@@ -374,6 +376,10 @@ void cloud_oc::post_initialize ( bool initialized_from_file ) {
 	}
 	//print_position(*m_grid);
 	//m_grid->check_buoyancy();
+	// std::vector<uint_type> cell_count_vector;
+	// m_grid->iterate_active_cells([&]( const cell_id3 &cell_id, int thread_index ) {
+
+	// });
 }
 
 //これを
@@ -437,6 +443,8 @@ void cloud_oc::add_source_cloud (double time, double dt , grid3 &grid) {
 		grid.iterate_active_cells([&](const cell_id3 &cell_id, int tid) {
 			const vec3d p = grid.get_cell_position(cell_id);
 			double theta(grid.theta[cell_id.index]); double vapor(grid.qv[cell_id.index]);
+			// if (cell_id.index == 163455) console::dump("p:(%.6f, %.6f, %.6f), cell_id.index=%d\n",
+			// 	p[0], p[1], p[2], cell_id.index);
 
 			source_func (p,time,dt,theta,vapor);
 			// min_theta = std::min(min_theta,theta);
@@ -479,6 +487,10 @@ void cloud_oc::idle() {
 	console::dump( "=================== Step %d ===================\n", m_timestepper->get_step_count() );
 	//write_to_txt("before_timestep"); //added
 	scoped_timer timer(this);
+	m_grid->iterate_active_cells([&]( const cell_id3 &cell_id, int thread_index ) {
+		vec3d p = m_grid->get_cell_position(cell_id);
+	if (cell_id.index < 0 ) console::dump("p: (%.6f, %.6f, %.6f)\n", p[0], p[1], p[2]);
+	});
 	//
 	// Add to graph
 	//add_to_graph();
@@ -513,8 +525,7 @@ void cloud_oc::idle() {
 	};
 	// // // Project(added)
 	m_macoctreeproject.project_cloud(*m_grid,dt,solid_velocity_func);
-	m_grid->check_buoyancy();
-    
+	//m_grid->check_buoyancy();
 	std::swap(m_grid,m_grid_prev);
     if( m_accumulated_CFL >= m_param.maximal_CFL_accumulation ) {
         m_accumulated_CFL = 0.0;
@@ -585,13 +596,13 @@ void cloud_oc::idle() {
 	
 	//
 	
-	m_grid->check_buoyancy();
+	//m_grid->check_buoyancy();
 	microphysics_cloud(*m_grid, dt);
 	// Add external force
 	//inject_external_force(m_velocity);
 	//
 	// Projection
-	m_grid->check_buoyancy();
+	//m_grid->check_buoyancy();
 }
 //
 void cloud_oc::draw( graphics_engine &g ) const {

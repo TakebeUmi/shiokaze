@@ -39,6 +39,45 @@ SHKZ_BEGIN_NAMESPACE
 //
 namespace macotreeliquid3_namespace {
 	//
+	
+	struct MergerdCell {
+	int z, y;
+	std::vector<int> x_list;
+	//必要なのは両端のセルの位置とその中の値
+	
+	int x_bottom, x_top;
+	double p_bottom, p_top;
+	};
+#include <iostream>
+#include <vector>
+using namespace std;
+
+// Union-Find
+	struct UnionFind {
+		vector<int> par, rank, siz;//parはルートノードを指す。rankは木の高さ。sizはその集合の要素数
+		vector<double> top, bottom;
+
+		UnionFind(int n, const vector<double>& height)
+			: par(n,-1), rank(n,0), siz(n,1),
+			top(height), bottom(height) {}//最初はサイズ1なのでtopもbottomも同じ値
+		//ここの初期化を要修正。
+		int root(int x);
+
+		bool unite(int x, int y);
+
+		double get_top(int x);
+
+		double get_bottom(int x);
+	};
+// 	vector<double> height(n);
+	// for (int i = 0; i < n; i++) {
+	//     height[i] = get_cell_position(i)[0];
+	// }
+	//get_cell_positionを利用した初期化例（適当なので精査する）
+
+// UnionFind uf(n, height);
+
+	//
 	using uint_type = uint32_t;
 	//
 	struct cell_id3 {
