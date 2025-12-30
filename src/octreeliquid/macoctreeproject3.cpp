@@ -195,6 +195,202 @@ void macoctreeproject3::assemble_matrix( grid3 &grid ) {
 	//
 	console::dump( "<<< ...Done. Took %s.\n", timer.stock("assemble_matrix").c_str());
 }
+//圧力点p1,p2,p3,p4のAを構築するためのMatrix上のidと、それぞれのm_grid上のcell_id3を受け取り、LHS行列を構築する
+void macoctreeproject3::assemble_Lhs(grid3 &grid,std::vector<int> p, cell_id3 top1, cell_id3 bottom1, cell_id3 top2, cell_id3 bottom2) {
+	
+	//top/bottomは圧力点のcell_id3
+	double upper_virtual_face_x = (grid.upper_face_xposition(top1) < grid.upper_face_xposition(top2)) ? grid.upper_face_xposition(top1) : grid.upper_face_xposition(top2);
+	double lower_virtual_face_x = (grid.lower_face_xposition(bottom1) > grid.lower_face_xposition(bottom2)) ? grid.lower_face_xposition(bottom1) : grid.lower_face_xposition(bottom2);
+	double center_virtual_face_x = 0.5 * (upper_virtual_face_x + lower_virtual_face_x);
+	double distance1 = grid.get_cell_position(top1)[0] - grid.get_cell_position(bottom1)[0];
+	double distance2 = grid.get_cell_position(top2)[0] - grid.get_cell_position(bottom2)[0];
+	double t = (grid.get_cell_position(top1)[0] - center_virtual_face_x) / distance1;
+	double s = (grid.get_cell_position(top2)[0] - center_virtual_face_x) / distance2;
+	std::vector<double> g = {1-t, t, -(1-s), -s};
+	for (int j = 0; j<4; j++) {
+		for (int k = 0; k<4; k++) {
+			m_matrix.Lhs->add_to_element(p[j], p[k], g[j]*g[k]);
+		}
+	}
+}
+bool should_Lhs_calc( grid3 &grid , cell_id3 cell_id) {
+	//
+	if (cell_id.pi[0] == 0) return true; //左端
+	cell_id3 left_cell_id;
+	cell_id3 upper_cell_id;
+	cell_id3 upper_left_cell_id;
+	left_cell_id.depth = cell_id.depth;
+	left_cell_id.pi = vec3i(cell_id.pi[0]-1, cell_id.pi[1], cell_id.pi[2]);
+	left_cell_id.index = grid.layers[left_cell_id.depth]->active_cells(left_cell_id.pi);
+
+	if (grid.layers[cell_id.depth]->active_cells.exist(cell_id.pi+vec3i(-1,0,0)) == true) {
+		upper_cell_id.depth = cell_id.depth;
+		upper_cell_id.pi = vec3i(cell_id.pi[0], cell_id.pi[1]+1, cell_id.pi[2]);
+		upper_cell_id.index = grid.layers[upper_cell_id.depth]->active_cells(upper_cell_id.pi);
+		upper_left_cell_id.depth = cell_id.depth;
+		upper_left_cell_id.pi = vec3i(cell_id.pi[0]-1, cell_id.pi[1]+1, cell_id.pi[2]);
+		upper_left_cell_id.index = grid.layers[upper_left_cell_id.depth]->active_cells(upper_left_cell_id.pi);
+
+		if ()
+
+	}
+
+
+	
+
+}
+
+//LHS（Ap=bのA）の構築
+//cloud_ocに定義されているcell_ids_included_merged_cells（merged_cell, 均一セルを含むセルのcell_id）を用いる
+void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf , int all_cell_count, int merged_cell_count, std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells) {
+	//
+	scoped_timer timer(this);
+	timer.tick(); console::dump( ">>> Assembling linear system...\n" );
+	//
+	grid.compute_cell_map();
+	grid.compute_face_map();
+	//
+	uint_type cell_count = grid.valid_cell_count;
+	uint_type face_count = grid.valid_face_count;
+	//
+	if( m_matrix.allocated ) {
+		m_matrix.Lhs->initialize(cell_count,cell_count);
+		if( m_param.debug_assemble ) {
+			m_matrix.G->initialize(face_count,cell_count);
+			m_matrix.D->initialize(cell_count,face_count);
+		}
+	} else {
+		m_matrix.Lhs = m_factory->allocate_matrix(cell_count,cell_count);
+		if( m_param.debug_assemble ) {
+			m_matrix.G = m_factory->allocate_matrix(face_count,cell_count);
+			m_matrix.D = m_factory->allocate_matrix(cell_count,face_count);
+		}
+		m_matrix.allocated = true;
+	}
+	//
+	if( m_param.debug_assemble ) {
+		//
+		// Scaled gradient matrix
+		grid.iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
+			if( grid.face_map[face_id.index] ) {
+				uint_type row = grid.face_map[face_id.index]-1;
+				grid.get_scaled_gradient(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3 &info ) {
+					if( value ) {
+						assert( grid.cell_map[cell_id.index] );
+						uint_type column = grid.cell_map[cell_id.index]-1;
+						m_matrix.G->add_to_element(row,column,value);
+					}
+				});
+			}
+		});
+		//
+		// Divergence matrix
+		grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+			if( grid.cell_map[cell_id.index] ) {
+				uint_type row = grid.cell_map[cell_id.index]-1;
+				grid.get_divergence(cell_id,[&]( const face_id3 &face_id, double value0, double value1 ) {
+					if( value0 && grid.face_map[face_id.index] ) {
+						uint_type column = grid.face_map[face_id.index]-1;
+						m_matrix.D->add_to_element(row,column,value0);
+					}
+				});
+			}
+		});
+		//
+		m_matrix.D->multiply(m_matrix.G.get(),m_matrix.Lhs.get());
+		RCMatrix_utility<size_t,double>::report(m_matrix.Lhs.get(),"Lhs");
+		//
+	} else {
+		//
+		// Directily assemble Lhs matrix
+		//走査するセルを圧力点（均一セルのセル中心とmerged_cellの上下2点）の配列に従って走査する
+
+		for (int i = 0; i < all_cell_count; i++) {
+			std::vector<int> p; //圧力点のmatrix上のidを格納する配列
+			cell_id3 top1, bottom1, top2, bottom2;
+
+			}
+		}
+	// 	grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+	// 		if( grid.cell_map[cell_id.index] ) {
+	// 			uint_type row0 = grid.cell_map[cell_id.index]-1;
+	// 			double diag (0.0);
+	// 			int count = 0;
+	// 			grid.get_divergence(cell_id,[&]( const face_id3 &face_id, double value0, double value1 ) {
+	// 				if( grid.face_map[face_id.index] ) {
+	// 					if( value0 ) {
+	// 						grid.get_scaled_gradient(face_id,[&]( const cell_id3 &cell_neigh_id, double value, const grid3::gradient_info3 &info ) {
+	// 							if( value ) {
+	// 								uint_type row1 = grid.cell_map[cell_neigh_id.index]-1;
+	// 								const double v = value0*value;
+
+	// 								if( row0 == row1 ) {
+	// 									diag += v;
+	// 									count++;
+	// 									console::dump("value0: %f, value: %f v: %f row0: %zu, row1: %zu\n", value0, value, v, row0, row1);
+	// 								}
+	// 								else {
+	// 									m_matrix.Lhs->add_to_element(row0,row1,v);
+	// 								}
+	// 							}
+	// 						});
+	// 					}
+	// 				}
+	// 			});
+	// 			// if (diag != 0.0) console::dump("Adding Lhs(%zu,%zu) += %f\n", row0, row0, diag);
+	// 			m_matrix.Lhs->add_to_element(row0,row0,diag);
+	// 			//console::dump("Row %zu: diag=%f, count=%d\n", row0, diag, count);
+	// 		}
+	// 	});
+	// 	RCMatrix_utility<size_t,double>::report(m_matrix.Lhs.get(),"Lhs");
+	// }
+	//
+	//ここは通常のLhsを作る際にいくつかの条件（対称性・正の対角成分など）をチェックして想定外の計算ミスをチェックするためのコード
+	// if( m_param.check_symmetric ) {
+	// 	const double symm_error = RCMatrix_utility<size_t,double>::symmetricity_error(m_matrix.Lhs.get());
+	// 	assert( symm_error == 0.0 );
+	// }
+	// if( m_param.check_positive_diag ) {
+	// 	const double min_diag = RCMatrix_utility<size_t,double>::min_diag(m_matrix.Lhs.get());
+	// 	assert( min_diag > 0.0 );
+	// }
+	m_matrix.assembled = true;
+	//
+	//以下はt_junction等の記録を書き出すもの
+	// Gather information
+	// std::vector<unsigned> num_t_junction_bucket(m_parallel.get_thread_num(),0);
+	// std::vector<unsigned> num_compromised_bucket(m_parallel.get_thread_num(),0);
+	// grid.iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
+	// 	//
+	// 	bool t_junction (false);
+	// 	bool compromised (false);
+	// 	//
+	// 	if( grid.face_map[face_id.index] ) {
+	// 		uint_type row = grid.face_map[face_id.index]-1;
+	// 		grid.get_scaled_gradient(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3 &info ) {
+	// 			if( info.t_junction && info.cross_interface ) {
+	// 				t_junction = true;
+	// 				if( info.compromised ) compromised = true;
+	// 			}
+	// 		});
+	// 		if( t_junction ) {
+	// 			num_t_junction_bucket[tid] ++;
+	// 			if( compromised ) num_compromised_bucket[tid] ++;
+	// 		}
+	// 	}
+	// });
+	// //
+	// unsigned num_t_junction = std::accumulate(num_t_junction_bucket.begin(),num_t_junction_bucket.end(),0);
+	// unsigned num_compromised = std::accumulate(num_compromised_bucket.begin(),num_compromised_bucket.end(),0);
+	// double compromised_ratio = num_t_junction ? num_compromised/(double)num_t_junction : 0.0;
+	// console::dump( "num_t_junction = %u, num_compromised=%u (compromised_ratio=%.2f%%)\n", num_t_junction, num_compromised, 100.0*compromised_ratio );
+	// //
+	// console::write("num_proj_t_junction",num_t_junction);
+	// console::write("num_proj_compromised",num_compromised);
+	// console::write("num_proj_compromised_ratio",compromised_ratio);
+	//
+	console::dump( "<<< ...Done. Took %s.\n", timer.stock("assemble_matrix").c_str());
+}
 void macoctreeproject3::assemble_matrix_density( grid3 &grid ) {
 	//
 	scoped_timer timer(this);

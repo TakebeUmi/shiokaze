@@ -42,7 +42,7 @@ int UnionFind::root(int x) {
 		return par[x] = root(par[x]);
 	}
 
-bool UnionFind::unite(grid3 grid, int x, int y) {
+bool UnionFind::unite(grid3& grid, int x, int y) {
         int rx = root(x);
         int ry = root(y);
         if (rx == ry) return false;
@@ -54,17 +54,22 @@ bool UnionFind::unite(grid3 grid, int x, int y) {
 
         siz[rx] += siz[ry];
 
-        // ★ 高さの最大・最小を統合
-        top[rx]    = (grid.get_cell_position(top[rx])[0] > grid.get_cell_position(top[ry])[0]) ? top[rx] : top[ry];
-        bottom[rx] = (grid.get_cell_position(bottom[rx])[0] > grid.get_cell_position(bottom[ry])[0]) ? bottom[ry] : bottom[rx];
+        // ★ 根の top/bottom を比較して統合
+        vec3d pos_top_rx = grid.get_cell_position(top[rx]);
+        vec3d pos_top_ry = grid.get_cell_position(top[ry]);
+        top[rx] = (pos_top_rx[0] > pos_top_ry[0]) ? top[rx] : top[ry];
+        
+        vec3d pos_bottom_rx = grid.get_cell_position(bottom[rx]);
+        vec3d pos_bottom_ry = grid.get_cell_position(bottom[ry]);
+        bottom[rx] = (pos_bottom_rx[0] < pos_bottom_ry[0]) ? bottom[rx] : bottom[ry];
 
         return true;
 }
 
-double UnionFind::get_top(int x) {
+cell_id3 UnionFind::get_top(int x) {
 		return top[root(x)];
 	}
-double UnionFind::get_bottom(int x) {
+cell_id3 UnionFind::get_bottom(int x) {
 		return bottom[root(x)];
 	}
 void grid3::configure( configuration &config ) {
@@ -1102,6 +1107,91 @@ void grid3::iterate_cell_neighbors( const cell_id3 &cell_id, std::function<void(
 			}
 		}
 	}
+}
+
+void grid3::right_cell_neighbor( const cell_id3 &cell_id,  std::function<void( char dim, const cell_id3 &cell_id )> func ) const {
+	// xの正の方向のみの隣接セルを取得
+	const auto &layer = *layers[cell_id.depth];
+	const char dim = 0;  // x方向
+	const int dir = 1;   // 正方向
+
+	vec3i ivec = vec3i(0,1,0);
+	vec3i jvec = vec3i(0,0,1);
+	vec3i nvec = vec3i(1,0,0);  // x方向の単位ベクトル
+	vec3i pi = cell_id.pi + nvec;
+	bool found (false);
+
+	// より細かいレイヤー（depth-1）に隣接セルがあるか確認
+	if( cell_id.depth > 0 ) {
+		const auto &high_layer = *layers[cell_id.depth-1];
+		vec3i bottom = 2*pi;
+		vec3i small_cells[4] = { bottom, bottom+ivec, bottom+jvec, bottom+ivec+jvec };
+		for( int n=0; n<4; ++n ) {
+			if( high_layer.active_cells.safe_active(small_cells[n])) {
+				uint_type column = high_layer.active_cells(small_cells[n]);
+				func(dim,{(char)(cell_id.depth-1),small_cells[n],column});
+				found = true;
+			}
+		}
+	}
+
+	// 同じレイヤー内に隣接セルがあるか確認
+	if( ! found ) {
+		if( layer.active_cells.safe_active(pi)) {
+			uint_type column = layer.active_cells(pi);
+			func(dim,{cell_id.depth,pi,column});
+			found = true;
+		}
+	}
+
+	// より粗いレイヤー（depth+1）に隣接セルがあるか確認
+	if( ! found && cell_id.depth < layers.size()-1 ) {
+		const auto &coarse_layer = *layers[cell_id.depth+1];
+		vec3i cell = 0.5 * pi;
+		if( coarse_layer.active_cells.safe_active(cell)) {
+			uint_type column = coarse_layer.active_cells(cell);
+			func(dim,{(char)(cell_id.depth+1),cell,column});
+			found = true;
+		}
+	}
+}
+
+double grid3::lower_face_xposition( const cell_id3 &cell_id ) {
+	//
+	const auto &layer = *layers[cell_id.depth];
+	vec3i fpi = cell_id.pi;
+	if (layer.active_faces[0].active(fpi)) {
+		face_id3 face_id = {cell_id.depth, (char)0, fpi, layer.active_faces[0](fpi)};
+		return get_face_position(face_id)[0];
+	}
+	else if( cell_id.depth < layers.size()-1 ) {
+        const auto &coarse_layer = *layers[cell_id.depth+1];
+        vec3i fpi = cell_id.pi/2;
+        if(coarse_layer.active_faces[0].active(fpi)) {
+            face_id3 face_id = {(char)(cell_id.depth+1), (char)0, fpi, coarse_layer.active_faces[0](fpi)};
+            return get_face_position(face_id)[0];
+        }
+	}
+	return -1.0;//エラー値
+}
+
+double grid3::upper_face_xposition( const cell_id3 &cell_id ) {
+	//
+	const auto &layer = *layers[cell_id.depth];
+	vec3i fpi = cell_id.pi + vec3i(1,0,0);
+	if (layer.active_faces[0].active(fpi)) {
+		face_id3 face_id = {cell_id.depth, (char)0, fpi, layer.active_faces[0](fpi)};
+		return get_face_position(face_id)[0];
+	}
+	else if( cell_id.depth < layers.size()-1 ) {
+        const auto &coarse_layer = *layers[cell_id.depth+1];
+        vec3i fpi = cell_id.pi/2 + vec3i(1,0,0);
+        if(coarse_layer.active_faces[0].active(fpi)) {
+            face_id3 face_id = {(char)(cell_id.depth+1), (char)0, fpi, coarse_layer.active_faces[0](fpi)};
+            return get_face_position(face_id)[0];
+        }
+	}
+	return 100000.0;//エラー
 }
 //さっきの面バージョン
 void grid3::iterate_face_neighbors( const face_id3 &face_id, std::function<void( const face_id3 &face_id )> func ) const {

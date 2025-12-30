@@ -122,9 +122,11 @@ void cloud_oc::write_to_txt(std::string type) const {
 void cloud_oc::print_position(grid3 &grid) const {
 	grid.iterate_active_cells([&]( const cell_id3 &cell_id, int thread_index ) {
 		vec3d pos = grid.get_cell_position(cell_id);
-		console::dump("Cell Index: (%d, %d, %d) Position: (%.6f, %.6f, %.6f)\n",
-			cell_id.pi[0], cell_id.pi[1], cell_id.pi[2],
-			pos[0], pos[1], pos[2]);
+		if (grid.get_cell_position(cell_id)[0] > 11000){
+			console::dump("Cell Index: (%d, %d, %d) Position: (%.6f, %.6f, %.6f)\n",
+				cell_id.pi[0], cell_id.pi[1], cell_id.pi[2],
+				pos[0], pos[1], pos[2]);
+		}
 	});
 }
 //
@@ -376,10 +378,13 @@ void cloud_oc::post_initialize ( bool initialized_from_file ) {
 	}
 	//print_position(*m_grid);
 	//m_grid->check_buoyancy();
-	// std::vector<uint_type> cell_count_vector;
-	// m_grid->iterate_active_cells([&]( const cell_id3 &cell_id, int thread_index ) {
+	std::vector<cell_id3> cell_ids(m_grid->cell_count);
+	m_grid->iterate_active_cells([&]( const cell_id3 &cell_id, int thread_index ) {
+		cell_ids[cell_id.index] = cell_id;
+	});
+	console::dump("Total active cells after initialization: %zu\n", cell_ids.size());
+	uf.initialize(m_grid->cell_count, cell_ids);
 
-	// });
 }
 
 //これを
@@ -461,31 +466,16 @@ void cloud_oc::add_source_cloud (double time, double dt , grid3 &grid) {
 		// console::dump( "Done. Min theta=%.6f, Min vapor=%.6f.\n", min_theta, min_vapor);
 }
 //
-// void cloud_oc::rasterize_dust_particles( array3<Real> &rasterized_density ) {
-// 	//
-// 	rasterized_density.clear();
-// 	double scale = 1.0 / pow(m_param.r_sample,DIM3);
-// 	for( const vec3d &p : m_dust_particles ) {
-// 		vec3i pi = p/m_dx;
-// 		if( ! m_shape.out_of_bounds(pi)) {
-// 			rasterized_density.increment(pi[0],pi[1],pi[2],scale);
-// 		}
-// 	}
-// }
-//
-// void cloud_oc::add_buoyancy_force( macarray3<Real> &velocity, const array3<Real> &density, double dt ) {
-// 	//
-// 	velocity[1].parallel_all([&]( int i, int j, int k, auto &it, int tn ) {
-// 		vec3d pi = vec3i(i,j,k).face(1);
-// 		Real d = array_interpolator3::interpolate<Real>(density,(pi-vec3d(0.5,0.5,0.5)));
-// 		it.increment(m_param.buoyancy_factor*dt*d);
-// 	});
-// }
-//
 void cloud_oc::idle() {
 	//
 	console::dump( "=================== Step %d ===================\n", m_timestepper->get_step_count() );
 	//write_to_txt("before_timestep"); //added
+
+	// m_grid->serial_iterate_active_cells([&]( const cell_id3 &cell_id ) {
+	// 	if (m_grid->get_cell_position(cell_id)[1] == 93.75 && 
+	// 		m_grid->get_cell_position(cell_id)[2] == 93.75) console::dump("cell_id.index: %d p: (%f, %f, %f)\n", cell_id.index, m_grid->get_cell_position(cell_id)[0], m_grid->get_cell_position(cell_id)[1], m_grid->get_cell_position(cell_id)[2]);
+	// 	// if (cell_id.index == 163455 ) console::dump("Before timestep - p: (%.6f, %.6f, %.6f)\n", p[0], p[1], p[2]);
+	// });
 	scoped_timer timer(this);
 	m_grid->iterate_active_cells([&]( const cell_id3 &cell_id, int thread_index ) {
 		vec3d p = m_grid->get_cell_position(cell_id);
@@ -519,6 +509,28 @@ void cloud_oc::idle() {
 	m_grid->source_func(m_dx);
 	m_grid->add_buoyancy(dt);
 	//added
+	m_grid->serial_iterate_active_cells([&]( const cell_id3 &cell_id ) {
+		m_grid->right_cell_neighbor(cell_id, [&]( char dim, const cell_id3 &neighbor_id ) {
+			if ((m_grid->qc[cell_id.index] == 0.0 && m_grid->qc[neighbor_id.index] == 0.0) || (m_grid->qc[cell_id.index] > 0.0 && m_grid->qc[neighbor_id.index] > 0.0 )) {
+				uf.unite(*m_grid, cell_id.index, neighbor_id.index);
+			}
+		});
+	});
+	std::vector<cell_id3_and_is_merged> cell_ids_included_merged_cells;
+	int merged_cell_count = 0;
+
+	for (int n = 0; n < uf.par.size(); n++) {
+		if (uf.par[n] == -1) {
+			cell_ids_included_merged_cells.push_back({uf.cell_ids[n], uf.top[n].index!=uf.bottom[n].index});
+			if (uf.top[n].index!=uf.bottom[n].index) {
+				merged_cell_count++;
+				//console::dump("Merged cell at index %d\n", n);
+			}
+			//cell_idsのindexを保存。この値をcell_ids[i]にアクセスすることでcell_idを得られる。その際、is_mergedがtrueならば、merged cellである。
+		}
+	}
+	int all_cell_count = cell_ids_included_merged_cells.size();
+
 	m_macoctreeproject.assemble_matrix_qc(*m_grid);
 	auto solid_velocity_func = [&]( const vec3d &p ) {
 		return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
@@ -603,6 +615,7 @@ void cloud_oc::idle() {
 	//
 	// Projection
 	//m_grid->check_buoyancy();
+	//print_position(*m_grid);
 }
 //
 void cloud_oc::draw( graphics_engine &g ) const {

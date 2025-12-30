@@ -53,22 +53,7 @@ namespace macotreeliquid3_namespace {
 using namespace std;
 
 // Union-Find
-	struct UnionFind {
-		vector<int> par, rank, siz;//parはルートノードを指す。rankは木の高さ。sizはその集合の要素数
-		vector<double> top, bottom;
 
-		UnionFind(int n, const vector<double>& height)
-			: par(n,-1), rank(n,0), siz(n,1),
-			top(height), bottom(height) {}//最初はサイズ1なのでtopもbottomも同じ値
-		//ここの初期化を要修正。
-		int root(int x);
-
-		bool unite(int x, int y);
-
-		double get_top(int x);
-
-		double get_bottom(int x);
-	};
 // 	vector<double> height(n);
 	// for (int i = 0; i < n; i++) {
 	//     height[i] = get_cell_position(i)[0];
@@ -80,7 +65,7 @@ using namespace std;
 	//
 	using uint_type = uint32_t;
 	//
-	struct cell_id3 {
+	struct  cell_id3 {
 		//
 		char depth;
 		vec3i pi;
@@ -395,6 +380,11 @@ using namespace std;
 		void balance_layers();
 		void assign_indices();
 		void iterate_cell_neighbors( const cell_id3 &cell_id, std::function<void( char dim, const cell_id3 &cell_id )> func ) const;
+		void right_cell_neighbor( const cell_id3 &cell_id, std::function<void( char dim, const cell_id3 &cell_id )> func ) const;
+		//added
+		double upper_face_xposition( const cell_id3 &cell_id );
+		double lower_face_xposition( const cell_id3 &cell_id );
+		//added
 		void iterate_face_neighbors( const face_id3 &face_id, std::function<void( const face_id3 &face_id )> func ) const;
 		void iterate_face_neighbors( const cell_id3 &cell_id, char dim, std::function<void( const face_id3 &face_id )> func ) const;
 		void iterate_active_cells( const std::function<void( const cell_id3 &cell_id, int thread_index )> func ) const;
@@ -561,6 +551,37 @@ using namespace std;
 	void check_buoyancy();
 	void source_func(double m_dx);
 };	
+	struct UnionFind {
+		std::vector<int> par, rank, siz;//parはルートノードを指す。rankは木の高さ。sizはその集合の要素数
+		std::vector<cell_id3> top, bottom, cell_ids;
+
+		UnionFind(int n, const std::vector<cell_id3>& height)
+			: par(n,-1), rank(n,0), siz(n,1),
+			top(height), bottom(height) {}//最初はサイズ1なのでtopもbottomも同じ値
+		//ここの初期化を要修正。
+		UnionFind()
+			: par(), rank(), siz(),
+			top(), bottom() {}
+		void initialize(int n, const std::vector<cell_id3>& height) {
+			par.resize(n, -1);
+			rank.resize(n, 0);
+			siz.resize(n, 1);
+			top = height;
+			bottom = height;
+			cell_ids = height;
+		}
+		int root(int x);
+
+		bool unite(grid3& grid, int x, int y);
+
+		cell_id3 get_top(int x);
+
+		cell_id3 get_bottom(int x);
+	};
+	struct cell_id3_and_is_merged {
+		cell_id3 cell_id;
+		bool is_merged;
+	};
 };
 //
 SHKZ_END_NAMESPACE

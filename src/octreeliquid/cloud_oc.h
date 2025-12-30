@@ -107,6 +107,7 @@ protected:
     grid3 *m_grid {&m_grid_0};
     grid3 *m_grid_prev {&m_grid_1};
     double m_accumulated_CFL {0.0};
+	UnionFind uf;
     macoctreeproject3 m_macoctreeproject{this};
 
 	struct Parameters {

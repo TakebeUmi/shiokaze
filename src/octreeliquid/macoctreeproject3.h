@@ -68,7 +68,10 @@ namespace macotreeliquid3_namespace {
 		};
 		Parameters m_param;
 		//
+		bool should_Lhs_calc( grid3 &grid , cell_id3 cell_id);
+		void assemble_Lhs(grid3 &grid, std::vector<int> p, cell_id3 top1, cell_id3 bottom1, cell_id3 top2, cell_id3 bottom2);
 		void assemble_matrix( grid3 &grid );
+		void assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf , int all_cell_count, int merged_cell_count, std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells);
 		void assemble_matrix_density( grid3 &grid );
 		void assemble_matrix_qc( grid3 &grid );
 		void assemble_matrix_qv( grid3 &grid );
