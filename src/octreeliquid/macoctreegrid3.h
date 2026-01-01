@@ -384,6 +384,8 @@ using namespace std;
 		//added
 		double upper_face_xposition( const cell_id3 &cell_id );
 		double lower_face_xposition( const cell_id3 &cell_id );
+		face_id3 upper_face_yz_position_of_x( const cell_id3 &cell_id , char dim);
+		face_id3 lower_face_yz_position_of_x( const cell_id3 &cell_id , char dim);
 		//added
 		void iterate_face_neighbors( const face_id3 &face_id, std::function<void( const face_id3 &face_id )> func ) const;
 		void iterate_face_neighbors( const cell_id3 &cell_id, char dim, std::function<void( const face_id3 &face_id )> func ) const;
@@ -554,23 +556,31 @@ using namespace std;
 	struct UnionFind {
 		std::vector<int> par, rank, siz;//parはルートノードを指す。rankは木の高さ。sizはその集合の要素数
 		std::vector<cell_id3> top, bottom, cell_ids;
+		std::vector<int> number_of_cells;
+		std::vector<double> velocity_sum_x;
+		//std::vector<int> merged_cell_id;
 
 		UnionFind(int n, const std::vector<cell_id3>& height)
-			: par(n,-1), rank(n,0), siz(n,1),
-			top(height), bottom(height) {}//最初はサイズ1なのでtopもbottomも同じ値
+			: par(n,-1), rank(n,0), siz(n,1), number_of_cells(n,1)
+			,top(height), bottom(height) {}//最初はサイズ1なのでtopもbottomも同じ値
 		//ここの初期化を要修正。
 		UnionFind()
-			: par(), rank(), siz(),
+			: par(), rank(), siz(), number_of_cells(),
 			top(), bottom() {}
 		void initialize(int n, const std::vector<cell_id3>& height) {
 			par.resize(n, -1);
 			rank.resize(n, 0);
 			siz.resize(n, 1);
+			number_of_cells.resize(n, 1);
 			top = height;
 			bottom = height;
 			cell_ids = height;
 		}
+
+		
 		int root(int x);
+
+		bool issame(int x, int y);
 
 		bool unite(grid3& grid, int x, int y);
 

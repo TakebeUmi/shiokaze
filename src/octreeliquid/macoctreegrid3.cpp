@@ -46,6 +46,7 @@ bool UnionFind::unite(grid3& grid, int x, int y) {
         int rx = root(x);
         int ry = root(y);
         if (rx == ry) return false;
+		
 
         if (rank[rx] < rank[ry]) std::swap(rx, ry);
 
@@ -62,9 +63,14 @@ bool UnionFind::unite(grid3& grid, int x, int y) {
         vec3d pos_bottom_rx = grid.get_cell_position(bottom[rx]);
         vec3d pos_bottom_ry = grid.get_cell_position(bottom[ry]);
         bottom[rx] = (pos_bottom_rx[0] < pos_bottom_ry[0]) ? bottom[rx] : bottom[ry];
+		number_of_cells[rx] += number_of_cells[ry];
 
         return true;
 }
+
+bool UnionFind::issame(int x, int y) {
+		return root(x) == root(y);
+	}
 
 cell_id3 UnionFind::get_top(int x) {
 		return top[root(x)];
@@ -1191,7 +1197,43 @@ double grid3::upper_face_xposition( const cell_id3 &cell_id ) {
             return get_face_position(face_id)[0];
         }
 	}
-	return 100000.0;//エラー
+	return -1.0;//エラー値
+}
+face_id3 grid3::upper_face_yz_position_of_x( const cell_id3 &cell_id, char dim ) {
+	//
+	const auto &layer = *layers[cell_id.depth];
+	vec3i fpi = cell_id.pi + vec3i(dim==0,dim==1,dim==2);
+	if (layer.active_faces[dim].active(fpi)) {
+		face_id3 face_id = {cell_id.depth, dim, fpi, layer.active_faces[dim](fpi)};
+		return face_id;
+	}
+	else if( cell_id.depth < layers.size()-1 ) {
+		const auto &coarse_layer = *layers[cell_id.depth+1];
+		vec3i fpi = cell_id.pi/2 + vec3i(dim==0,dim==1,dim==2);
+		if(coarse_layer.active_faces[dim].active(fpi)) {
+			face_id3 face_id = {(char)(cell_id.depth+1), dim, fpi, coarse_layer.active_faces[dim](fpi)};
+			return face_id;
+		}
+	}
+	return face_id3{};//エラー値
+}
+face_id3 grid3::lower_face_yz_position_of_x( const cell_id3 &cell_id, char dim ) {
+	//
+	const auto &layer = *layers[cell_id.depth];
+	vec3i fpi = cell_id.pi;
+	if (layer.active_faces[dim].active(fpi)) {
+		face_id3 face_id = {cell_id.depth, dim, fpi, layer.active_faces[dim](fpi)};
+		return face_id;
+	}
+	else if( cell_id.depth < layers.size()-1 ) {
+		const auto &coarse_layer = *layers[cell_id.depth+1];
+		vec3i fpi = cell_id.pi/2;
+		if(coarse_layer.active_faces[dim].active(fpi)) {
+			face_id3 face_id = {(char)(cell_id.depth+1), dim, fpi, coarse_layer.active_faces[dim](fpi)};
+			return face_id;
+		}
+	}
+	return face_id3{};//エラー値
 }
 //さっきの面バージョン
 void grid3::iterate_face_neighbors( const face_id3 &face_id, std::function<void( const face_id3 &face_id )> func ) const {
@@ -2596,6 +2638,8 @@ void grid3::get_unmofidied_divergence( const cell_id3 &cell_id, std::function<vo
 		});
 	}
 }
+
+
 //
 //coeffはそのまま表面張力の値。最終的に速度場にdt*levelset*表面張力を足す
 void grid3::add_surfacetense_force( double coeff, double dt ) {

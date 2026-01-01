@@ -213,36 +213,44 @@ void macoctreeproject3::assemble_Lhs(grid3 &grid,std::vector<int> p, cell_id3 to
 		}
 	}
 }
-bool should_Lhs_calc( grid3 &grid , cell_id3 cell_id) {
+
+bool macoctreeproject3::is_in_same_merged_cell( grid3 &grid , cell_id3 cell_id1, cell_id3 cell_id2, UnionFind &uf) {
+	//
+	return uf.issame(cell_id1.index, cell_id2.index);
+}
+
+bool macoctreeproject3::should_Lhs_calc( grid3 &grid , cell_id3 cell_id, UnionFind &uf, char dim) {
 	//
 	if (cell_id.pi[0] == 0) return true; //左端
 	cell_id3 left_cell_id;
 	cell_id3 upper_cell_id;
 	cell_id3 upper_left_cell_id;
 	left_cell_id.depth = cell_id.depth;
-	left_cell_id.pi = vec3i(cell_id.pi[0]-1, cell_id.pi[1], cell_id.pi[2]);
+	left_cell_id.pi = cell_id.pi + vec3i(-1,0,0);
 	left_cell_id.index = grid.layers[left_cell_id.depth]->active_cells(left_cell_id.pi);
-
-	if (grid.layers[cell_id.depth]->active_cells.exist(cell_id.pi+vec3i(-1,0,0)) == true) {
+	const auto &layer = *grid.layers[cell_id.depth];
+	if (layer.active_cells.safe_active(cell_id.pi+vec3i(dim==0,dim==1,dim==2))) {
 		upper_cell_id.depth = cell_id.depth;
-		upper_cell_id.pi = vec3i(cell_id.pi[0], cell_id.pi[1]+1, cell_id.pi[2]);
+		upper_cell_id.pi = cell_id.pi + vec3i(dim==0,dim==1,dim==2);
 		upper_cell_id.index = grid.layers[upper_cell_id.depth]->active_cells(upper_cell_id.pi);
 		upper_left_cell_id.depth = cell_id.depth;
-		upper_left_cell_id.pi = vec3i(cell_id.pi[0]-1, cell_id.pi[1]+1, cell_id.pi[2]);
+		upper_left_cell_id.pi = cell_id.pi + vec3i(dim==0,dim==1,dim==2) + vec3i(-1,0,0);
 		upper_left_cell_id.index = grid.layers[upper_left_cell_id.depth]->active_cells(upper_left_cell_id.pi);
-
-		if ()
-
+		if (uf.issame(cell_id.index, left_cell_id.index) && uf.issame(upper_cell_id.index, upper_left_cell_id.index)) {
+			return false;
+		}
+		else return true;
 	}
 
-
-	
-
+	else if (uf.issame(cell_id.index, left_cell_id.index)) {
+		return false;
+	}
+	else return true;
 }
 
 //LHS（Ap=bのA）の構築
 //cloud_ocに定義されているcell_ids_included_merged_cells（merged_cell, 均一セルを含むセルのcell_id）を用いる
-void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf , int all_cell_count, int merged_cell_count, std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells) {
+void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf , int all_cell_count, int merged_cell_count, std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells, std::vector<int> &merged_cell_id) {
 	//
 	scoped_timer timer(this);
 	timer.tick(); console::dump( ">>> Assembling linear system...\n" );
@@ -253,18 +261,19 @@ void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf 
 	uint_type cell_count = grid.valid_cell_count;
 	uint_type face_count = grid.valid_face_count;
 	//
+	int Lhs_cell_count = all_cell_count + merged_cell_count; //merged_cellの上下2点分を追加
 	if( m_matrix.allocated ) {
-		m_matrix.Lhs->initialize(cell_count,cell_count);
-		if( m_param.debug_assemble ) {
-			m_matrix.G->initialize(face_count,cell_count);
-			m_matrix.D->initialize(cell_count,face_count);
-		}
+		m_matrix.Lhs->initialize(Lhs_cell_count,Lhs_cell_count);
+		// if( m_param.debug_assemble ) {
+		// 	m_matrix.G->initialize(face_count,cell_count);
+		// 	m_matrix.D->initialize(cell_count,face_count);
+		// }
 	} else {
-		m_matrix.Lhs = m_factory->allocate_matrix(cell_count,cell_count);
-		if( m_param.debug_assemble ) {
-			m_matrix.G = m_factory->allocate_matrix(face_count,cell_count);
-			m_matrix.D = m_factory->allocate_matrix(cell_count,face_count);
-		}
+		m_matrix.Lhs = m_factory->allocate_matrix(Lhs_cell_count,Lhs_cell_count);
+		// if( m_param.debug_assemble ) {
+		// 	m_matrix.G = m_factory->allocate_matrix(face_count,cell_count);
+		// 	m_matrix.D = m_factory->allocate_matrix(cell_count,face_count);
+		// }
 		m_matrix.allocated = true;
 	}
 	//
@@ -306,11 +315,35 @@ void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf 
 		//走査するセルを圧力点（均一セルのセル中心とmerged_cellの上下2点）の配列に従って走査する
 
 		for (int i = 0; i < all_cell_count; i++) {
-			std::vector<int> p; //圧力点のmatrix上のidを格納する配列
-			cell_id3 top1, bottom1, top2, bottom2;
+			for( char dim : DIMS3 ) {
+				if (should_Lhs_calc(grid,cell_ids_included_merged_cells[i].cell_id, uf, dim)) {
+					std::vector<int> p(4); //圧力点のmatrix上のidを格納する配列
+					cell_id3 cell_id_this = cell_ids_included_merged_cells[i].cell_id;
+					cell_id3 upper_cell_id;
+					upper_cell_id.depth = cell_id_this.depth;
+					upper_cell_id.pi = cell_id_this.pi + vec3i(0, dim==1, dim==2);
+					upper_cell_id.index = grid.layers[upper_cell_id.depth]->active_cells(upper_cell_id.pi);
+					//p1はtop1、p2はbottom1、p3はtop2、p4はbottom2
+					//topはbottom+merged_cell_countで表現
+					p[0] = merged_cell_id[uf.root(cell_id_this.index)] + merged_cell_count; 
+					p[1] = merged_cell_id[uf.root(cell_id_this.index)];
+					p[2] = merged_cell_id[uf.root(upper_cell_id.index)] + merged_cell_count;
+					p[3] = merged_cell_id[uf.root(upper_cell_id.index)];
 
+					const auto &layer = *grid.layers[cell_id_this.depth];
+					if (layer.active_cells.safe_active(upper_cell_id.pi)) {
+						assemble_Lhs(grid, p,
+						uf.top[cell_id_this.index], //top1
+						uf.bottom[cell_id_this.index], //bottom1
+						uf.top[upper_cell_id.index], //top2
+						uf.bottom[upper_cell_id.index]  //bottom2
+					);
+					}
+				}
 			}
+
 		}
+	}
 	// 	grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
 	// 		if( grid.cell_map[cell_id.index] ) {
 	// 			uint_type row0 = grid.cell_map[cell_id.index]-1;
@@ -1909,6 +1942,360 @@ void macoctreeproject3::project_cloud( grid3 &grid, double dt,
 					}
 				}
 			}
+		}
+	});
+	console::dump( "Done. Took %s.\n", timer.stock("divergence_compute").c_str());
+	//
+	auto compute_vector_kind = [&]( std::vector<unsigned char> &result ) {
+		unsigned total_kinds (0);
+		result.resize(grid.valid_cell_count);
+		grid.serial_iterate_active_cells([&]( const cell_id3 &cell_id ) {
+			if( grid.cell_map[cell_id.index] ) {
+				uint_type row = grid.cell_map[cell_id.index]-1;
+				result[row] = cell_id.depth;
+				total_kinds = std::max(total_kinds,(unsigned)result[row]);
+			}
+		});
+		return total_kinds;
+	};
+	//
+	timer.tick(); console::dump( "Counting and forming the vector norm kind..." );
+	std::vector<unsigned char> vector_kind; unsigned total_kinds = compute_vector_kind(vector_kind);
+	m_solver->register_vector_norm_kind(vector_kind);
+	console::dump( "Done. Total=%u. Took %s.\n", total_kinds, timer.stock("count_vector_norm_kind").c_str());
+	//
+	timer.tick(); console::dump( "Solving the linear system..." );
+	rhs->const_for_each([]( size_t row, double value ){
+		assert( ! utility::is_nan(value));
+	});
+	//
+	if( m_param.remove_one_degrees_of_freedom ) {
+		m_matrix.Lhs->clear(0);
+		m_matrix.Lhs->add_to_element(0,0,1.0);
+		rhs->set(0,0);
+		m_parallel.for_each(grid.valid_cell_count,[&]( size_t row ) {
+			m_matrix.Lhs->for_each(row,[&]( size_t column, double& value ) {
+				if( column == 0 ) value = 0.0;
+			});
+		});
+	}
+	auto status = m_solver->solve(m_matrix.Lhs.get(),rhs.get(),result.get());
+	//
+	auto build_residual_string = [&]( const std::vector<double> &rhs ) {
+		std::string str;
+		if( rhs.size() <= 4 ) {
+			for( const auto &e : rhs ) {
+				str += " " + console::format_str("%.2e",e);
+			}
+		} else {
+			double max_resid (0.0);
+			double min_resid (-1.0);
+			unsigned slot_max (0), slot_min(0);
+			for( int n=0; n<rhs.size(); ++n ) {
+				const auto &e = rhs[n];
+				if( e > max_resid ) {
+					max_resid = e;
+					slot_max = n;
+				}
+				if( min_resid < 0.0 ) min_resid = max_resid;
+				else if( e < min_resid ) {
+					min_resid = e;
+					slot_min = n;
+				}
+			}
+			str = console::format_str("(num=%u, min[%u]=%.2e, max[%u]=%.2e)",status.vector_reresid.size(),min_resid,slot_min,max_resid,slot_max);
+		}
+		return str;
+	};
+	for( int n=0; n<status.vector_reresid.size(); ++n ) {
+		console::write(console::format_str("reresid%d",n),status.vector_reresid[n]);
+		console::write(console::format_str("absresid%d",n),status.vector_absresid[n]);
+	}
+	console::dump( "Done. Reresid=%.2e. Iterations = %u. Took %s.\n", status.reresid, status.count, timer.stock("solve_linear_system").c_str());
+	console::write("num_iteration_count",status.count);
+	//
+	if( ! status.vector_reresid.empty()) {
+		std::string reresid_str = build_residual_string(status.vector_reresid);
+		std::string absresid_str = build_residual_string(status.vector_absresid);
+		console::dump( "Reresid=%s\n", reresid_str.c_str());
+		console::dump( "Absresid=%s\n", absresid_str.c_str());
+	}
+	//
+	timer.tick(); console::dump( "Updating velocity..." );
+	for( uint_type n=0; n<grid.face_count; ++n ) {
+		if( ! grid.face_map[n] ) grid.velocity[n] = 0.0;
+	}
+	grid.iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
+		grid.get_scaled_gradient_qc(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
+			if( grid.face_map[face_id.index] && grid.cell_map[cell_id.index] && value ) {
+				grid.velocity[face_id.index] -= value * result->at(grid.cell_map[cell_id.index]-1);
+				// console::dump("face_id=%u, cell_id=%u, pressure=%e\n",face_id.index,cell_id.index,result->at(grid.cell_map[cell_id.index]-1));
+			}
+		});
+	});
+	//
+	if( pressure_vector ) {
+		pressure_vector->resize(grid.cell_count);
+		for( uint_type n=0; n<grid.cell_count; ++n ) {
+			if( grid.cell_map[n] ) {
+				(*pressure_vector)[n] = result->at(grid.cell_map[n]-1);
+			} else {
+				(*pressure_vector)[n] = 0.0;
+			}
+		}
+	}
+	//
+	console::dump( "Done. Took %s.\n", timer.stock("update_velocity").c_str());
+	//
+	grid.clear_map();
+	console::dump( "<<< Done. Took %s.\n", timer.stock("project").c_str());
+}
+void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, UnionFind &uf, int all_cell_count,
+					  int merged_cell_count,
+					  std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells,
+					  std::vector<int> &merged_cell_id, std::function<vec3d(const vec3d &p)> solid_velocity, std::vector<Real> *pressure) {
+	//
+	std::vector<uint_type> regions;
+	std::vector<Real> current_volumes;
+	std::vector<Real> target_volumes;
+	std::vector<Real> y_list;
+	//
+	project_merged_cell(grid,dt,0,regions,current_volumes,target_volumes,y_list, uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id, solid_velocity,pressure);
+}
+template<typename RHS_type>
+void macoctreeproject3::assemble_RHS(grid3 &grid, std::vector<int> p, double dx, cell_id3 top1, cell_id3 bottom1, cell_id3 top2, cell_id3 bottom2, char dim, bool upper, RHS_type rhs) {
+	cell_id3 p_top = (grid.get_cell_position(top1)[0] < grid.get_cell_position(top2)[0]) ? top1 : top2;
+	cell_id3 p_bottom = (grid.get_cell_position(bottom1)[0] > grid.get_cell_position(bottom2)[0]) ? bottom1 : bottom2;
+	int n = (p_top.pi - p_bottom.pi)[0];
+	double u_avg_upper = (grid.velocity[grid.upper_face_yz_position_of_x(p_top, dim).index] + grid.velocity[grid.upper_face_yz_position_of_x(p_bottom, dim).index]) * 0.5;
+	double u_avg_lower = (grid.velocity[grid.lower_face_yz_position_of_x(p_top, dim).index] + grid.velocity[grid.lower_face_yz_position_of_x(p_bottom, dim).index]) * 0.5;
+	bool top1_bigger = (grid.get_cell_position(top1)[0] > grid.get_cell_position(top1)[0]);
+	bool bottom1_bigger = (grid.get_cell_position(bottom1)[0] > grid.get_cell_position(bottom2)[0]);
+	double u_avg;
+	int dir;
+	if (upper) {
+		dir = 1;
+		u_avg = u_avg_upper;
+	}
+	else {
+		dir = -1;
+		u_avg = u_avg_lower;
+	}
+	if ( !top1_bigger && !bottom1_bigger ) {
+		double a = (top1.pi[0] - p_bottom.pi[0] + 1) / (double)(top1.pi[0] - bottom1.pi[0] + 1);
+		double t = (grid.get_cell_position(top1)[0] - (grid.get_cell_position(p_bottom)[0] + grid.get_cell_position(p_top)[0])/2.0) / (grid.get_cell_position(top1)[0] - grid.get_cell_position(bottom1)[0]);
+		rhs->add(p[0], dir * a * u_avg * (1-t)/ dx);
+		rhs->add(p[1], dir * a * u_avg * t / dx);
+	}
+	else if (top1_bigger && bottom1_bigger) {
+		double a = (p_top.pi[0] - bottom1.pi[0] + 1) / (double)(top1.pi[0] - bottom1.pi[0] + 1);
+		double t = (grid.get_cell_position(top1)[0] - (grid.get_cell_position(p_bottom)[0] + grid.get_cell_position(p_top)[0])/2.0)/(grid.get_cell_position(top1)[0] - grid.get_cell_position(bottom1)[0]);
+		rhs->add(p[0], dir * a * u_avg * (1-t)/ dx);
+		rhs->add(p[1], dir * a * u_avg * t / dx);
+	}
+	else {
+		rhs->add(p[0], dir * u_avg / 2.0 / dx);
+		rhs->add(p[1], dir * u_avg / 2.0 / dx);
+	}
+}
+void macoctreeproject3::project_merged_cell( grid3 &grid, double dt,
+					  size_t region_count,
+					  const std::vector<uint_type> &regions,
+					  const std::vector<Real> &current_volumes,
+					  const std::vector<Real> &target_volumes,
+					  std::vector<Real> &y_list,
+					  UnionFind &uf,
+					  int all_cell_count,
+					  int merged_cell_count,
+					  std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells,
+					  std::vector<int> &merged_cell_id,
+					  std::function<vec3d(const vec3d &p)> solid_velocity,
+					  std::vector<Real> *pressure_vector ) {
+	//
+	scoped_timer timer(this);
+	timer.tick(); console::dump( ">>> Projection step...\n" );
+	//
+	double rhs_correct (0.0);
+	std::vector<Real> rhs_corrects(region_count);
+	//
+	if( m_param.volume_correction ) {
+		const double dt0 = std::max(m_param.minimal_volume_correct_timestep,dt);
+		if( region_count ) {
+			timer.tick(); console::dump( "Computing regional volume corrector..." );
+			for( unsigned n=0; n<region_count; ++n ) {
+				double x = (current_volumes[n]-target_volumes[n])/target_volumes[n];
+				double y = y_list[n] + x*dt0; y_list[n] = y;
+				double kp = -log(1.0-m_param.volume_recover_ratio)/(m_param.np*dt0);
+				double ki = kp*kp/16.0;
+				rhs_corrects[n] = -(kp*x+ki*y)/(x+1.0);
+
+				assert( ! utility::is_nan(rhs_corrects[n]));
+				if( rhs_corrects[n] ) rhs_correct = 1.0;
+			}
+			console::dump( "Done. Took %s.\n", timer.stock("regional_volume_compute").c_str());
+		} else {
+			//
+			timer.tick(); console::dump( "Computing global volume corrector..." );
+			double current_volume = grid.get_volume_density();//ここの値がlevelsetを参照しているためNanになっている
+			console::dump( "current volume = %e", current_volume);
+			if( ! m_initial_volume ) m_initial_volume = current_volume;
+			double x = (current_volume-m_initial_volume)/m_initial_volume;
+			double y = m_y_prev + x*dt0; m_y_prev = y;
+			double kp = -log(1.0-m_param.volume_recover_ratio)/(m_param.np*dt0);
+			double ki = kp*kp/16.0;
+			rhs_correct = -(kp*x+ki*y)/(x+1.0);
+				// assert( ! utility::is_nan(x));
+				// assert( ! utility::is_nan(y));
+				// assert( ! utility::is_nan(kp));
+				// assert( ! utility::is_nan(ki));
+			// console::dump("x=%e, y=%e, kp=%e, ki=%e\n",x,y,kp,ki);
+			assert( ! utility::is_nan(rhs_correct));
+			//
+			const double volume_ratio = current_volume / m_initial_volume;
+			console::write("current_volume",current_volume);
+			console::write("volume_ratio",volume_ratio);
+			console::dump( "Done. Took %s. Volume ratio=%.2e\n", volume_ratio, timer.stock("volume_compute").c_str());
+		}
+	}
+	//
+	auto is_surface_cell = [&]( const cell_id3 &cell_id ) {
+		//
+		if( m_param.volume_correct_skip_surfaces ) {
+			bool touching_air (false);
+			grid.iterate_cell_neighbors(cell_id,[&]( char dim, const cell_id3 &cell_n_id ) {
+				if( grid.levelset[cell_n_id.index] > 0.0 ) touching_air = true;
+			});
+			return touching_air;
+		} else {
+			return false;
+		}
+	};
+	//
+	assert( m_matrix.assembled );
+	//
+	//こっからRHSの作成
+	timer.tick(); console::dump( "Allocating vectors..." );
+	auto rhs = m_factory->allocate_vector(all_cell_count);
+	auto result = m_factory->allocate_vector(all_cell_count);
+	console::dump( "Done. Took %s.\n", timer.stock("allocate_vector").c_str());
+	//
+	timer.tick(); console::dump( "Computing divergence..." );
+	//
+
+	for (int n = 0; n < all_cell_count; n++) {
+		for (int dir = -1; dir <= 1; dir += 2) {
+			for (char dim : DIMS3) {
+				if (should_Lhs_calc(grid, cell_ids_included_merged_cells[n].cell_id, uf, dim)) {
+					std::vector<int> p(4); //圧力点のmatrix上のidを格納する配列
+					cell_id3 cell_id_this = cell_ids_included_merged_cells[n].cell_id;
+					cell_id3 neighbor_cell_id;
+					neighbor_cell_id.depth = cell_id_this.depth;
+					neighbor_cell_id.pi = cell_id_this.pi + vec3i(0, dir * (dim == 1), dir * (dim == 2));
+					neighbor_cell_id.index = grid.layers[neighbor_cell_id.depth]->active_cells(neighbor_cell_id.pi);
+					//p1はtop1、p2はbottom1、p3はtop2、p4はbottom2
+					//topはbottom+merged_cell_countで表現
+					p[0] = merged_cell_id[uf.root(cell_id_this.index)] + merged_cell_count;
+					p[1] = merged_cell_id[uf.root(cell_id_this.index)];
+					p[2] = merged_cell_id[uf.root(neighbor_cell_id.index)] + merged_cell_count;
+					p[3] = merged_cell_id[uf.root(neighbor_cell_id.index)];
+					assemble_RHS(grid, p, grid.get_cell_dx(cell_id_this), cell_id_this, cell_id_this, neighbor_cell_id, neighbor_cell_id, dim, dir == 1, rhs);
+					
+					
+				}
+			}
+		}
+	}
+		// for( char dim : DIMS3 ) {
+		// 	if (should_Lhs_calc(grid,cell_ids_included_merged_cells[n].cell_id, uf, dim)) {
+		// 			std::vector<int> p(4); //圧力点のmatrix上のidを格納する配列
+		// 			cell_id3 cell_id_this = cell_ids_included_merged_cells[n].cell_id;
+		// 			cell_id3 upper_cell_id;
+		// 			upper_cell_id.depth = cell_id_this.depth;
+		// 			upper_cell_id.pi = cell_id_this.pi + vec3i(0, dim==1, dim==2);
+		// 			upper_cell_id.index = grid.layers[upper_cell_id.depth]->active_cells(upper_cell_id.pi);
+		// 			//p1はtop1、p2はbottom1、p3はtop2、p4はbottom2
+		// 			//topはbottom+merged_cell_countで表現
+		// 			p[0] = merged_cell_id[uf.root(cell_id_this.index)] + merged_cell_count; 
+		// 			p[1] = merged_cell_id[uf.root(cell_id_this.index)];
+		// 			p[2] = merged_cell_id[uf.root(upper_cell_id.index)] + merged_cell_count;
+		// 			p[3] = merged_cell_id[uf.root(upper_cell_id.index)];
+		// 			assemble_RHS(grid, p, cell_id_this, cell_id_this, upper_cell_id, upper_cell_id, dim, );
+
+		// 	}
+		// }
+		// }
+	grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+		if( grid.cell_map[cell_id.index] ) {
+			uint_type row = grid.cell_map[cell_id.index]-1;
+			// if( rhs_correct ) {
+			// 	bool solid_cell (false);
+			// 	for( char dim : DIMS3 ) {
+			// 		grid.iterate_face_neighbors(cell_id,dim,[&]( const face_id3 &face_id ){
+			// 			if( grid.area[face_id.index] < 1.0 ) solid_cell = true;
+			// 		});
+			// 		if( solid_cell ) break;
+			// 	}
+			// 	if( rhs_correct && ! solid_cell && ! is_surface_cell(cell_id)) {
+			// 		const double dx = grid.get_cell_dx(cell_id);
+			// 		if( region_count ) {
+			// 			rhs->add(row,(dx*dx*dx)*rhs_corrects[regions[cell_id.index]-1]);
+			// 		} else {
+			// 			console::dump("rhs_correct=%e\n",rhs_correct);
+			// 			rhs->add(row,(dx*dx*dx)*rhs_correct);
+			// 		}
+			// 	}
+			// }
+			//
+			// if( m_param.fix_divergence ) {
+			// 	double err (0.0);
+			// 	if( solid_velocity ) {
+			// 		grid.get_unmofidied_divergence(cell_id,[&]( const face_id3 &face_id, double value ) {
+			// 			err += value*grid.sample_solid_face_velocity(face_id,solid_velocity);
+			// 		});
+			// 	}
+			// 	bool boundary_flag (false);
+			// 	for( int dim : DIMS3 ) {
+			// 		boundary_flag = cell_id.pi[dim] == 0 || cell_id.pi[dim] == grid.layers[cell_id.depth]->shape[dim]-1;
+			// 		if( boundary_flag ) break;
+			// 	}
+			// 	if( ! boundary_flag ) rhs->add(row,-err);
+			// }
+			//
+			const vec3d p = grid.get_cell_position(cell_id);
+			const double dx = grid.get_cell_dx(cell_id);
+			//
+			grid.get_divergence_qc(cell_id,[&]( const face_id3 &face_id, double value0, double value1 ) {
+				bool add_divergence (true);
+				// if( m_param.special_boundary_condition == 1 && cell_id.pi[0] == grid.layers[cell_id.depth]->shape[0]-1 && face_id.dim == 0 ) {
+				// 	add_divergence = false;
+				// }
+				// if( m_param.special_boundary_condition == 1 && cell_id.pi[0] == 0 && face_id.dim == 0 ) {
+				// 	// if( m_moving_solid_func(p) < dx ) {
+				// 	// 	add_divergence = false;
+				// 	// }
+				// }
+				if( add_divergence ) {
+					if( solid_velocity && value1 ) {
+						if( cell_id.pi[0] != grid.layers[cell_id.depth]->shape[0]-1 ) {
+							rhs->add(row,value1*grid.sample_solid_face_velocity(face_id,solid_velocity));
+						}
+					}
+					if( value0 ) {
+						rhs->add(row,value0*grid.velocity[face_id.index]);
+					}
+				}
+			});
+			//
+			// if( grid.flux_boundary_condition.has_flux()) {
+			// 	const vec3d p = grid.get_cell_position(cell_id);
+			// 	for( int dim : DIMS3 ) {
+			// 		if( cell_id.pi[dim] == 0 ) {
+			// 			rhs->add(row,(dx*dx)*grid.flux_boundary_condition.velocity[dim][0]);
+			// 		} else if( cell_id.pi[dim] == grid.layers[cell_id.depth]->shape[dim]-1 ) {
+			// 			rhs->add(row,-(dx*dx)*grid.flux_boundary_condition.velocity[dim][1]);
+			// 		}
+			// 	}
+			// }
 		}
 	});
 	console::dump( "Done. Took %s.\n", timer.stock("divergence_compute").c_str());

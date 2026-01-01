@@ -517,26 +517,33 @@ void cloud_oc::idle() {
 		});
 	});
 	std::vector<cell_id3_and_is_merged> cell_ids_included_merged_cells;
+	//
+	std::vector<int> merged_cell_id(uf.par.size(), -1);
 	int merged_cell_count = 0;
-
+	int merged_id = 0;
 	for (int n = 0; n < uf.par.size(); n++) {
-		if (uf.par[n] == -1) {
+		if (uf.root(n) == n) {
 			cell_ids_included_merged_cells.push_back({uf.cell_ids[n], uf.top[n].index!=uf.bottom[n].index});
 			if (uf.top[n].index!=uf.bottom[n].index) {
 				merged_cell_count++;
 				//console::dump("Merged cell at index %d\n", n);
 			}
-			//cell_idsのindexを保存。この値をcell_ids[i]にアクセスすることでcell_idを得られる。その際、is_mergedがtrueならば、merged cellである。
+			merged_cell_id[n] = merged_id++;
+			//任意のセルidに対してuf.root(cell_id.index)で参照することでmerged_cellのidを得られる
 		}
 	}
 	int all_cell_count = cell_ids_included_merged_cells.size();
 
-	m_macoctreeproject.assemble_matrix_qc(*m_grid);
-	auto solid_velocity_func = [&]( const vec3d &p ) {
-		return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
-	};
+	m_macoctreeproject.assemble_matrix_merged_cell(*m_grid, uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id);
+
+	
+
+	// m_macoctreeproject.assemble_matrix_qc(*m_grid);
+	// auto solid_velocity_func = [&]( const vec3d &p ) {
+	// 	return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
+	// };
 	// // // Project(added)
-	m_macoctreeproject.project_cloud(*m_grid,dt,solid_velocity_func);
+	// m_macoctreeproject.project_cloud(*m_grid,dt,solid_velocity_func);
 	//m_grid->check_buoyancy();
 	std::swap(m_grid,m_grid_prev);
     if( m_accumulated_CFL >= m_param.maximal_CFL_accumulation ) {
