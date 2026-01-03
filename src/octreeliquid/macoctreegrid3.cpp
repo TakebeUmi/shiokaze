@@ -64,6 +64,7 @@ bool UnionFind::unite(grid3& grid, int x, int y) {
         vec3d pos_bottom_ry = grid.get_cell_position(bottom[ry]);
         bottom[rx] = (pos_bottom_rx[0] < pos_bottom_ry[0]) ? bottom[rx] : bottom[ry];
 		number_of_cells[rx] += number_of_cells[ry];
+		velocity_sum_x[rx] += velocity_sum_x[ry];
 
         return true;
 }
@@ -3942,6 +3943,74 @@ void grid3::compute_face_map_cloud () {
 	//
 	console::dump( "Done. Found %u faces. Took %s.\n", valid_face_count, timer.stock("gather_cloud_faces").c_str());
 	console::write("num_gather_cloud_faces",valid_face_count);
+}
+
+void grid3::compute_cell_map_merged (UnionFind &uf ) {
+	//
+	scoped_timer timer(this);
+	timer.tick(); console::dump( "Gathering active liquid cells..." );
+	//
+	valid_cell_count = 0;
+	cell_map.clear();
+	cell_map.resize(cell_count);
+	//
+	iterate_active_cells([&](const cell_id3 &cell_id, int tid ) {
+		bool valid (false);
+		bool open (false);
+		if ((cell_id.index == uf.top[uf.root(cell_id.index)].index || cell_id.index == uf.bottom[uf.root(cell_id.index)].index) && uf.top[uf.root(cell_id.index)].index != uf.bottom[uf.root(cell_id.index)].index) open = true;
+			// for( char dim : DIMS3 ) {
+			// 	this->iterate_face_neighbors(cell_id,dim,[&]( const face_id3 &face_id ){
+			// 		if( area[face_id.index] ) open = true;
+			// 	});
+			// 	if( open ) break;
+			// }
+		if( open ) {
+			cell_map[cell_id.index] = 1;
+		}
+	});
+	//
+	for( uint_type n=0; n<cell_count; ++n ) {
+		if( cell_map[n] ) {
+			cell_map[n] = ++ valid_cell_count;
+			
+		}
+	}
+	//
+	cell_map.shrink_to_fit();
+	//
+	console::dump( "Done. Found %u cells. Took %s.\n", valid_cell_count, timer.stock("gather_liquid_cells").c_str());
+	console::write("num_gather_liquid_cells",valid_cell_count);
+}
+
+void grid3::compute_face_map_merged () {
+	//
+	scoped_timer timer(this);
+	timer.tick(); console::dump( "Gathering active velocity faces..." );
+	//
+	valid_face_count = 0;
+	face_map.clear();
+	face_map.resize(face_count);
+	//
+	iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
+		bool valid (false);
+		this->get_gradient(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3 &info ) {
+			valid = true;
+		});
+		if( valid ) {
+			face_map[face_id.index] = 1;
+		}
+	});
+	//
+	for( uint_type n=0; n<face_count; ++n ) {
+		if( face_map[n] ) {
+			face_map[n] = ++ valid_face_count;
+		}
+	}
+	//
+	face_map.shrink_to_fit();
+	//
+	console::dump( "Done. Found %u faces. Took %s.\n", valid_face_count, timer.stock("gather_liquid_faces").c_str());
+	console::write("num_gather_liquid_faces",valid_face_count);
 }
 //
 void grid3::clear_map () {

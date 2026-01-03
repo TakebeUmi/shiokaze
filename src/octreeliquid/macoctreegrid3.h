@@ -39,7 +39,7 @@ SHKZ_BEGIN_NAMESPACE
 //
 namespace macotreeliquid3_namespace {
 	//
-	
+	struct UnionFind;
 	struct MergerdCell {
 	int z, y;
 	std::vector<int> x_list;
@@ -507,6 +507,9 @@ using namespace std;
 		//added
 		void compute_cell_map_cloud();
 		void compute_face_map_cloud();
+
+		void compute_face_map_merged();
+		void compute_cell_map_merged(UnionFind &uf);
 		//added
 		void clear_map ();
 		//
@@ -562,16 +565,17 @@ using namespace std;
 
 		UnionFind(int n, const std::vector<cell_id3>& height)
 			: par(n,-1), rank(n,0), siz(n,1), number_of_cells(n,1)
-			,top(height), bottom(height) {}//最初はサイズ1なのでtopもbottomも同じ値
+			,top(height), bottom(height), velocity_sum_x(n, 0.0) {}//最初はサイズ1なのでtopもbottomも同じ値
 		//ここの初期化を要修正。
 		UnionFind()
 			: par(), rank(), siz(), number_of_cells(),
-			top(), bottom() {}
-		void initialize(int n, const std::vector<cell_id3>& height) {
+			top(), bottom(), velocity_sum_x() {}
+		void initialize(int n, const std::vector<cell_id3>& height, std::vector<double>& velocity_x) {
 			par.resize(n, -1);
 			rank.resize(n, 0);
 			siz.resize(n, 1);
 			number_of_cells.resize(n, 1);
+			velocity_sum_x = velocity_x;
 			top = height;
 			bottom = height;
 			cell_ids = height;

@@ -284,6 +284,7 @@ void cloud_oc::post_initialize ( bool initialized_from_file ) {
         m_grid_1.add_layer(shape,n*m_dx);
         n *= 2;
     }
+	console::dump("Created %d layers for macoctree grid.\n",m_grid_0.layers.size());
 
 	int refinement_count = m_param.use_sizing_func ? m_param.initial_refinement : 1;
 	int count (0);
@@ -379,11 +380,13 @@ void cloud_oc::post_initialize ( bool initialized_from_file ) {
 	//print_position(*m_grid);
 	//m_grid->check_buoyancy();
 	std::vector<cell_id3> cell_ids(m_grid->cell_count);
+	std::vector<double> velocity_x(m_grid->cell_count);
 	m_grid->iterate_active_cells([&]( const cell_id3 &cell_id, int thread_index ) {
 		cell_ids[cell_id.index] = cell_id;
+		velocity_x[cell_id.index] = m_grid->velocity[m_grid->layers[cell_id.depth]->active_faces[0](cell_id.pi+vec3i(1,0,0))];
 	});
 	console::dump("Total active cells after initialization: %zu\n", cell_ids.size());
-	uf.initialize(m_grid->cell_count, cell_ids);
+	uf.initialize(m_grid->cell_count, cell_ids, velocity_x);
 
 }
 
@@ -511,7 +514,7 @@ void cloud_oc::idle() {
 	//added
 	m_grid->serial_iterate_active_cells([&]( const cell_id3 &cell_id ) {
 		m_grid->right_cell_neighbor(cell_id, [&]( char dim, const cell_id3 &neighbor_id ) {
-			if ((m_grid->qc[cell_id.index] == 0.0 && m_grid->qc[neighbor_id.index] == 0.0) || (m_grid->qc[cell_id.index] > 0.0 && m_grid->qc[neighbor_id.index] > 0.0 )) {
+			if (m_grid->qc[cell_id.index] > 0.0 && m_grid->qc[neighbor_id.index] > 0.0 ) {
 				uf.unite(*m_grid, cell_id.index, neighbor_id.index);
 			}
 		});
@@ -544,7 +547,10 @@ void cloud_oc::idle() {
 	// };
 	// // // Project(added)
 	// m_macoctreeproject.project_cloud(*m_grid,dt,solid_velocity_func);
-	//m_grid->check_buoyancy();
+
+	m_macoctreeproject.assemble_matrix_merged_cell(*m_grid, uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id);
+	m_macoctreeproject.project_merged_cell(*m_grid, dt, uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id);
+
 	std::swap(m_grid,m_grid_prev);
     if( m_accumulated_CFL >= m_param.maximal_CFL_accumulation ) {
         m_accumulated_CFL = 0.0;

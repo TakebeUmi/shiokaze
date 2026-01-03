@@ -71,6 +71,8 @@ namespace macotreeliquid3_namespace {
 		bool should_Lhs_calc( grid3 &grid , cell_id3 cell_id, UnionFind &uf, char dim);
 		bool is_in_same_merged_cell( grid3 &grid , cell_id3 cell_id1, cell_id3 cell_id2, UnionFind &uf);
 		void assemble_Lhs(grid3 &grid, std::vector<int> p, cell_id3 top1, cell_id3 bottom1, cell_id3 top2, cell_id3 bottom2);
+		void assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx);
+		void assemble_lhs_x(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx);
 		void assemble_matrix( grid3 &grid );
 		void assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf , int all_cell_count, int merged_cell_count, std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells, std::vector<int> &merged_cell_id);
 		void assemble_matrix_density( grid3 &grid );
@@ -138,7 +140,7 @@ namespace macotreeliquid3_namespace {
                     std::vector<Real> *pressure_vector
 					  );
 		template<typename RHS_type>
-		void assemble_RHS(grid3 &grid, std::vector<int> p, double dx,  cell_id3 top1, cell_id3 bottom1, cell_id3 top2, cell_id3 bottom2, char dim, bool upper, RHS_type rhs);
+		void assemble_RHS(grid3 &grid, std::vector<uint_type> p, double dx,  cell_id3 top1, cell_id3 bottom1, cell_id3 top2, cell_id3 bottom2, char dim, bool upper, RHS_type rhs, UnionFind uf);
 		// void project_merged_cell( grid3 &grid, double dt, int all_cell_count,
 		// 			  int merged_cell_count,
 		// 			  cell_id3_and_is_merged &cell_ids_included_merged_cells,
