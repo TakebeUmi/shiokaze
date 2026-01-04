@@ -32,6 +32,9 @@
 SHKZ_USING_NAMESPACE
 using namespace macotreeliquid3_namespace;
 //
+void is_valid_double(double value) {
+       if(std::isnan(value) || std::isinf(value)) console::dump("Invalid double value: %f\n", value);
+}
 void macoctreeproject3::configure( configuration &config ) {
 	//
 	configuration::auto_group group(config,*this);
@@ -54,6 +57,13 @@ void macoctreeproject3::post_initialize( bool initialized_from_file ) {
 	//
 	m_initial_volume = 0.0;
 	m_y_prev = 0.0;
+}
+void macoctreeproject3::add_element_symm(uint_type row, uint_type col, double value) {
+	if (m_matrix.Lhs->get(col, row)) {
+		m_matrix.Lhs->add_to_element(row, col, m_matrix.Lhs->get(col, row));
+	} else {
+		m_matrix.Lhs->add_to_element(row, col, value);
+	}
 }
 //
 void macoctreeproject3::assemble_matrix( grid3 &grid ) {
@@ -214,8 +224,8 @@ void macoctreeproject3::assemble_Lhs(grid3 &grid,std::vector<int> p, cell_id3 to
 	}
 }
 
-void macoctreeproject3::assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx) {
-	//j1<j2, j3<j4と仮定。jaはminimal faceの下、jbは上
+void macoctreeproject3::assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx, int dir) {
+	//j0<j1, j2<j3と仮定。jaはminimal faceの下、jbは上
 	if (cell_ids[0].index != cell_ids[1].index && cell_ids[2].index != cell_ids[3].index) {
 		std::vector<int> j(4);
 		for (int i = 0; i < 4; i++) {
@@ -225,13 +235,13 @@ void macoctreeproject3::assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, s
 		int ja = std::max(j[0], j[2]);
 		int jb = std::min(j[1], j[3]);
 		//virtual faceの位置
-		double scale2 = dx * (double)(J-j[0]) / (j[1]-j[0]);
-		double scale1 = dx * (double)(j[1]-J) / (j[1]-j[0]);
+		double scale_to_upper = dx * (double)(J-j[0]) / (j[1]-j[0]);
+		double scale_to_lower = dx * (double)(j[1]-J) / (j[1]-j[0]);
 		std::vector<double> coeff(4);
-		coeff[0] = - (double) (j[1] - J) / (j[1] - j[0]);
-		coeff[1] = - (double) (J - j[0]) / (j[1] - j[0]);
-		coeff[2] = (double) (j[3] - J) / (j[3] - j[2]);
-		coeff[3] = (double) (J - j[2]) / (j[3] - j[2]);
+		coeff[0] = - (double) (j[1] - J) / (double)(j[1] - j[0]);
+		coeff[1] = - (double) (J - j[0]) / (double)(j[1] - j[0]);
+		coeff[2] = (double) (j[3] - J) / (double)(j[3] - j[2]);
+		coeff[3] = (double) (J - j[2]) / (double)(j[3] - j[2]);
 		std::vector<uint_type> cell_maps(4);
 		for (int i = 0; i < 4; i++) {
 			cell_maps[i] = grid.cell_map[cell_ids[i].index];
@@ -242,56 +252,56 @@ void macoctreeproject3::assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, s
 			if (cell_maps[i]) {
 				if (cell_maps[i] > grid.valid_cell_count) console::dump("cell_map[%zu] = %u\n", cell_ids[i].index, cell_maps[i]);
 				assert(cell_maps[i] <= grid.valid_cell_count);
-				m_matrix.Lhs->add_to_element(p[0], p[i], scale2 *coeff[i]);
-				m_matrix.Lhs->add_to_element(p[1], p[i], scale1 *coeff[i]);
+				m_matrix.Lhs->add_to_element(p[1], p[i],  scale_to_upper *coeff[i]);
+				m_matrix.Lhs->add_to_element(p[0], p[i],  scale_to_lower *coeff[i]);
 			}
 		}
 	}
-	else if (cell_ids[0].index != cell_ids[1].index) { //対セルがuniform j1!=j2
+	else if (cell_ids[0].index != cell_ids[1].index) { //対セルがuniform j1!=j2 j3==j4
 		std::vector<int> j(3);
 		for (int i = 0; i < 2; i++) {
 			j[i] = cell_ids[i].pi[0];
 		}
 		int J = cell_id_this.pi[0];
 		//virtual faceの位置
-		double scale2 = dx * (double)(J-j[0]) / (j[1]-j[0]);
-		double scale1 = dx * (double)(j[1]-J) / (j[1]-j[0]);
+		double scale_to_upper = dx * (double)(J-j[0]) / (j[1]-j[0]);
+		double scale_to_lower = dx * (double)(j[1]-J) / (j[1]-j[0]);
 		std::vector<double> coeff(3);
-		coeff[0] = - (double) (j[1] - J) / (j[1] - j[0]);
-		coeff[1] = - (double) (J - j[0]) / (j[1] - j[0]);
+		coeff[0] = - (double) (j[1] - J) / (double)(j[1] - j[0]);
+		coeff[1] = - (double) (J - j[0]) / (double)(j[1] - j[0]);
 		coeff[2] = 1.0;
 		//LHSの構築
 		//水平方向成分
 		for (int i = 0; i < 3; i++) {
-				m_matrix.Lhs->add_to_element(p[0], p[i], scale2 *coeff[i]);
-				m_matrix.Lhs->add_to_element(p[1], p[i], scale1 *coeff[i]);
+				m_matrix.Lhs->add_to_element(p[1], p[i],  scale_to_upper *coeff[i]);
+				m_matrix.Lhs->add_to_element(p[0], p[i],  scale_to_lower *coeff[i]);
 		}
 	}
-	else if (cell_ids[2].index != cell_ids[3].index) { //自セルがuniform j3!=j4
+	else if (cell_ids[2].index != cell_ids[3].index) { //自セルがuniform j3!=j4 j1==j2
 		std::vector<int> j(3);
 		for (int i = 1; i < 4; i++) {
 			j[i-1] = cell_ids[i].pi[0];
 		}
 		int J = cell_id_this.pi[0];
 		//virtual faceの位置
-		double scale2 = dx;
-		double scale1 = dx;
+		double scale_to_upper = dx;
+		double scale_to_lower = dx;
 		std::vector<double> coeff(3);
 		coeff[0] = -1.0;
-		coeff[1] = (double) (j[2] - J) / (j[2] - j[1]);
-		coeff[2] = (double) (J - j[1]) / (j[2] - j[1]);
+		coeff[1] = (double) (j[2] - J) / (double)(j[2] - j[1]);
+		coeff[2] = (double) (J - j[1]) / (double)(j[2] - j[1]);
 		//LHSの構築
 		//水平方向成分
 		for (int i = 0; i < 3; i++) {
-				m_matrix.Lhs->add_to_element(p[1], p[i+1], scale1 *coeff[i]);
+				m_matrix.Lhs->add_to_element(p[1], p[i+1],  scale_to_lower *coeff[i]);
 		}
 	}
 	else { //両方uniform
 		double scale = dx;
 		//LHSの構築
 		//水平方向成分
-		m_matrix.Lhs->add_to_element(p[0], p[0], -scale);
-		m_matrix.Lhs->add_to_element(p[0], p[2], scale);
+		m_matrix.Lhs->add_to_element(p[0], p[0],  (-scale));
+		m_matrix.Lhs->add_to_element(p[0], p[2],  scale);
 	}
 }
 
@@ -306,8 +316,8 @@ void macoctreeproject3::assemble_lhs_x(grid3 &grid, std::vector<uint_type> p, st
 	double scale = dx / (i[1]-i[0]);
 	//LHSの構築
 	//鉛直方向成分
-	m_matrix.Lhs->add_to_element(p[0], p[0], -scale);
-	m_matrix.Lhs->add_to_element(p[0], p[1], scale);
+	m_matrix.Lhs->add_to_element(p[0], p[0], scale);
+	m_matrix.Lhs->add_to_element(p[0], p[1], -scale);
 	m_matrix.Lhs->add_to_element(p[1], p[0], -scale);
 	m_matrix.Lhs->add_to_element(p[1], p[1], scale);
 }
@@ -374,6 +384,12 @@ void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf 
 		// }
 		m_matrix.allocated = true;
 	}
+	// for (int i = 0; i < grid.valid_cell_count; i++) {
+	// 	for (int j = 0; j < grid.valid_cell_count; j++) {
+	// 		double val1 = m_matrix.Lhs->get(i, j);
+	// 		console::dump("Lhs before assembly at (%d, %d): %f\n", i, j, val1);
+	// 	}
+	// }
 	//
 	if( m_param.debug_assemble ) {
 		//
@@ -414,32 +430,36 @@ void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf 
 
 		grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
 			if( grid.cell_map[uf.top[uf.root(cell_id.index)].index] || grid.cell_map[uf.bottom[uf.root(cell_id.index)].index] ) {
+			for (int dir = -1; dir <= 1; dir+=2) {
 				//merged_cellのtop/bottomいずれかに対応する圧力点が存在する場合のみLHSを構築
 			for( char dim : DIMS3 ) {
 					std::vector<uint_type> p(4); //圧力点のmatrix上のidを格納する配列
 					cell_id3 upper_cell_id;
 					upper_cell_id.depth = cell_id.depth;
-					upper_cell_id.pi = cell_id.pi + vec3i(0, dim==1, dim==2);
+					upper_cell_id.pi = cell_id.pi + dir * vec3i(0, dim==1, dim==2);
 					if (!grid.layers[upper_cell_id.depth]->active_cells.safe_active(upper_cell_id.pi)) {
 						continue;
 					}
 					upper_cell_id.index = grid.layers[upper_cell_id.depth]->active_cells(upper_cell_id.pi);
-					//p1はtop1、p2はbottom1、p3はtop2、p4はbottom2
+					//p0はbottom1、p1はtop1、p2はbottom2、p3はtop2
 					//topはbottom+merged_cell_countで表現
 					//ここをcell_mapに依拠した
-					p[0] = grid.cell_map[uf.top[uf.root(cell_id.index)].index]- 1;
-					p[1] = grid.cell_map[uf.bottom[uf.root(cell_id.index)].index]- 1;
-					p[2] = grid.cell_map[uf.top[uf.root(upper_cell_id.index)].index]- 1;
-					p[3] = grid.cell_map[uf.bottom[uf.root(upper_cell_id.index)].index]- 1;
+					
+					p[0] = grid.cell_map[uf.bottom[uf.root(cell_id.index)].index]- 1;
+					p[1] = grid.cell_map[uf.top[uf.root(cell_id.index)].index]- 1;
+					p[2] = grid.cell_map[uf.bottom[uf.root(upper_cell_id.index)].index]- 1;
+					p[3] = grid.cell_map[uf.top[uf.root(upper_cell_id.index)].index]- 1;
+					
 					std::vector<cell_id3> cell_ids(4);
-					cell_ids[0] = uf.top[uf.root(cell_id.index)];
-					cell_ids[1] = uf.bottom[uf.root(cell_id.index)];
-					cell_ids[2] = uf.top[uf.root(upper_cell_id.index)];
-					cell_ids[3] = uf.bottom[uf.root(upper_cell_id.index)];
+					cell_ids[0] = uf.bottom[uf.root(cell_id.index)];
+					cell_ids[1] = uf.top[uf.root(cell_id.index)];
+					cell_ids[2] = uf.bottom[uf.root(upper_cell_id.index)];
+					cell_ids[3] = uf.top[uf.root(upper_cell_id.index)];
+					
 					const auto &layer = *grid.layers[cell_id.depth];
 					if (layer.active_cells.safe_active(upper_cell_id.pi) && (grid.cell_map[uf.top[uf.root(upper_cell_id.index)].index]) && (grid.cell_map[uf.bottom[uf.root(upper_cell_id.index)].index])) {
 						if (dim != 0) {
-							assemble_lhs_yz(grid, p, cell_ids, cell_id, dim, grid.get_cell_dx(cell_id));
+							assemble_lhs_yz(grid, p, cell_ids, cell_id, dim, grid.get_cell_dx(cell_id), dir);
 						}
 						//p[0]はtop1、p[1]はbottom1、p[2]はtop2、p[3]はbottom2それぞれの(cell_map上の値)-1。これはそのままLHSの行列idとして使える
 						else {
@@ -447,6 +467,7 @@ void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf 
 						}
 					}
 			}
+		}
 		}
 		});
 	}
@@ -484,15 +505,39 @@ void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf 
 	// 	RCMatrix_utility<size_t,double>::report(m_matrix.Lhs.get(),"Lhs");
 	// }
 	//
+
 	//ここは通常のLhsを作る際にいくつかの条件（対称性・正の対角成分など）をチェックして想定外の計算ミスをチェックするためのコード
-	// if( m_param.check_symmetric ) {
-	// 	const double symm_error = RCMatrix_utility<size_t,double>::symmetricity_error(m_matrix.Lhs.get());
-	// 	assert( symm_error == 0.0 );
+	// for (int i = 0; i < grid.valid_cell_count; i++) {
+	// 	for (int j = 0; j < grid.valid_cell_count; j++) {
+	// 		double val1 = m_matrix->get(i, j);
+	// 		double val2 = m_matrix.Lhs->get(j, i);
+	// 		if (val1 != val2) {
+	// 			console::dump("Lhs is not symmetric at (%d, %d): %f != %f, difference %f\n", i, j, val1, val2, val1 - val2);
+	// 		}
+	// 	}
 	// }
-	// if( m_param.check_positive_diag ) {
-	// 	const double min_diag = RCMatrix_utility<size_t,double>::min_diag(m_matrix.Lhs.get());
-	// 	assert( min_diag > 0.0 );
-	// }
+	// auto Lhs_copy = m_matrix.Lhs;
+	// m_matrix.Lhs->clear();
+	// //再度Lhs_copyを参照して値を取り出すテスト
+	for (int i = 0; i < grid.valid_cell_count; i++) {
+		for (int j = i; j < grid.valid_cell_count; j++) {
+			double val1 = m_matrix.Lhs->get(i, j);
+			double val2 = m_matrix.Lhs->get(j, i);
+			if (val1 != val2) {
+				m_matrix.Lhs->add_to_element(j, i, -val2);
+				m_matrix.Lhs->add_to_element(j, i, val1);
+				// console::dump("After re-adding, Lhs is not symmetric at (%d, %d): %f != %f, difference %f\n", i, j, val1, val2, val1 - val2);
+			}
+		}
+	}
+	if( m_param.check_symmetric ) {
+		const double symm_error = RCMatrix_utility<size_t,double>::symmetricity_error(m_matrix.Lhs.get());
+		assert( symm_error == 0.0 );
+	}
+	if( m_param.check_positive_diag ) {
+		const double min_diag = RCMatrix_utility<size_t,double>::min_diag(m_matrix.Lhs.get());
+		assert( min_diag > 0.0 );
+	}
 	m_matrix.assembled = true;
 	//
 	//以下はt_junction等の記録を書き出すもの
@@ -555,6 +600,7 @@ void macoctreeproject3::assemble_matrix_density( grid3 &grid ) {
 		}
 		m_matrix.allocated = true;
 	}
+
 	//
 	if( m_param.debug_assemble ) {
 		//
@@ -2198,6 +2244,9 @@ void macoctreeproject3::assemble_RHS(grid3 &grid, std::vector<uint_type> p, doub
 			double a = (top1.pi[0] - p_bottom.pi[0] + 1) / (double)(top1.pi[0] - bottom1.pi[0] + 1);
 			double t = (grid.get_cell_position(top1)[0] - (grid.get_cell_position(p_bottom)[0] + grid.get_cell_position(p_top)[0])/2.0) / (grid.get_cell_position(top1)[0] - grid.get_cell_position(bottom1)[0]);
 			A = dx*dx * (p_top.pi[0] - p_bottom.pi[0] + 1);
+			if (utility::is_nan(A * dir * a * u_avg * (1-t) / dx) || utility::is_nan( A * dir * a * u_avg * t / dx)) {
+				console::dump("1.A=%e, u_avg=%e, a=%e, t=%e, dir=%d\n",A,u_avg,a,t,dir);
+			}
 			rhs->add(p[1], A * dir * a * u_avg * (1-t) / dx);
 			rhs->add(p[0], A * dir * a * u_avg * t / dx);
 		}
@@ -2205,11 +2254,17 @@ void macoctreeproject3::assemble_RHS(grid3 &grid, std::vector<uint_type> p, doub
 			double a = (p_top.pi[0] - bottom1.pi[0] + 1) / (double)(top1.pi[0] - bottom1.pi[0] + 1);
 			double t = (grid.get_cell_position(top1)[0] - (grid.get_cell_position(p_bottom)[0] + grid.get_cell_position(p_top)[0])/2.0)/(grid.get_cell_position(top1)[0] - grid.get_cell_position(bottom1)[0]);
 			A = dx*dx * (p_top.pi[0] - p_bottom.pi[0] + 1);
+			if (utility::is_nan(A * dir * a * u_avg * (1-t) / dx) || utility::is_nan( A * dir * a * u_avg * t / dx)) {
+				console::dump("2.A=%e, u_avg=%e, a=%e, t=%e, dir=%d\n",A,u_avg,a,t,dir);
+			}
 			rhs->add(p[1], A * dir * a * u_avg * (1-t)/ dx);
 			rhs->add(p[0], A * dir * a * u_avg * t / dx);
 		}
 		else {
 			A = dx*dx * (p_top.pi[0] - p_bottom.pi[0] + 1);
+			if (utility::is_nan(A * dir * u_avg / 2.0 / dx) || utility::is_nan( A * dir * u_avg / 2.0 / dx)) {
+				console::dump("3.A=%e, u_avg=%e, dir=%d\n",A,u_avg,dir);
+			}
 			rhs->add(p[1], A * dir * u_avg / 2.0 / dx);
 			rhs->add(p[0], A * dir * u_avg / 2.0 / dx);
 		}
@@ -2219,10 +2274,16 @@ void macoctreeproject3::assemble_RHS(grid3 &grid, std::vector<uint_type> p, doub
 		double u_top = grid.velocity[grid.layers[top1.depth]->active_faces[0](top1.pi+vec3i(1,0,0))];
 		double u_bottom = grid.velocity[grid.layers[bottom1.depth]->active_faces[0](bottom1.pi+vec3i(0,0,0))];
 		if (top1 == bottom1) {
+			if (utility::is_nan(dx*dx * u_top / dx) || utility::is_nan(dx*dx * (- u_bottom) / dx)) {
+				console::dump("4.u_top=%e, u_bottom=%e\n", u_top, u_bottom);
+			}
 			rhs->add(p[1], dx*dx * u_top / dx);
 			rhs->add(p[0], dx*dx * (- u_bottom) / dx);
 		}
 		else {
+			if (utility::is_nan(dx*dx * (u_top - u_avg) / dx) || utility::is_nan(dx*dx * (u_avg - u_bottom) / dx)) {
+				console::dump("5.u_top=%e, u_bottom=%e, u_avg=%e\n", u_top, u_bottom, u_avg);
+			}
 			rhs->add(p[1], dx*dx * (u_top - u_avg) / dx);
 			rhs->add(p[0], dx*dx * (u_avg - u_bottom) / dx);
 		}
@@ -2325,7 +2386,6 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt,
 						continue;
 					}
 					neighbor_cell_id.index = grid.layers[neighbor_cell_id.depth]->active_cells(neighbor_cell_id.pi);
-					neighbor_cell_id.index = grid.layers[neighbor_cell_id.depth]->active_cells(neighbor_cell_id.pi);
 					// p1はtop1、p2はbottom1、p3はtop2、p4はbottom2
 					// topはbottom+merged_cell_countで表現
 					p[0] = grid.cell_map[uf.bottom[uf.root(cell_id.index)].index] -1;
@@ -2374,33 +2434,48 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt,
 							double a = (top1.pi[0] - p_bottom.pi[0] + 1) / (double)(top1.pi[0] - bottom1.pi[0] + 1);
 							double t = (grid.get_cell_position(top1)[0] - (grid.get_cell_position(p_bottom)[0] + grid.get_cell_position(p_top)[0])/2.0) / (grid.get_cell_position(top1)[0] - grid.get_cell_position(bottom1)[0]);
 							A = dx*dx * (p_top.pi[0] - p_bottom.pi[0] + 1);
-							rhs->add(p[1], A * dir * a * u_avg * (1-t) / dx);
-							rhs->add(p[0], A * dir * a * u_avg * t / dx);
+							if (!utility::is_nan(u_avg)) {
+								rhs->add(p[1], A * dir * a * u_avg * (1-t) / dx);
+								rhs->add(p[0], A * dir * a * u_avg * t / dx);
+							}
 						}
 						else if (top1_bigger && bottom1_bigger) {
 							double a = (p_top.pi[0] - bottom1.pi[0] + 1) / (double)(top1.pi[0] - bottom1.pi[0] + 1);
 							double t = (grid.get_cell_position(top1)[0] - (grid.get_cell_position(p_bottom)[0] + grid.get_cell_position(p_top)[0])/2.0)/(grid.get_cell_position(top1)[0] - grid.get_cell_position(bottom1)[0]);
 							A = dx*dx * (p_top.pi[0] - p_bottom.pi[0] + 1);
-							rhs->add(p[1], A * dir * a * u_avg * (1-t)/ dx);
-							rhs->add(p[0], A * dir * a * u_avg * t / dx);
+							if (!utility::is_nan(u_avg)) {
+								rhs->add(p[1], A * dir * a * u_avg * (1-t)/ dx);
+								rhs->add(p[0], A * dir * a * u_avg * t / dx);
+							}
 						}
 						else {
 							A = dx*dx * (p_top.pi[0] - p_bottom.pi[0] + 1);
-							rhs->add(p[1], A * dir * u_avg / 2.0 / dx);
-							rhs->add(p[0], A * dir * u_avg / 2.0 / dx);
+							if (!utility::is_nan(u_avg)) {
+								rhs->add(p[1], A * dir * u_avg / 2.0 / dx);
+								rhs->add(p[0], A * dir * u_avg / 2.0 / dx);
+							}
+
 						}
 					}
 					else {
 						double u_avg = uf.velocity_sum_x[uf.root(top1.index)] / uf.number_of_cells[uf.root(top1.index)];
 						double u_top = grid.velocity[grid.layers[top1.depth]->active_faces[0](top1.pi+vec3i(1,0,0))];
+						if (grid.layers[bottom1.depth]->active_faces[dim].safe_active(bottom1.pi)){
+							
+						}
 						double u_bottom = grid.velocity[grid.layers[bottom1.depth]->active_faces[0](bottom1.pi+vec3i(0,0,0))];
+						
 						if (top1 == bottom1) {
-							rhs->add(p[1], dx*dx * u_top / dx);
-							rhs->add(p[0], dx*dx * (- u_bottom) / dx);
+							if (!utility::is_nan(u_top) && !utility::is_nan(u_bottom)) {
+								rhs->add(p[1], dx*dx * u_top / dx);
+								rhs->add(p[0], dx*dx * (- u_bottom) / dx);
+							}
 						}
 						else {
-							rhs->add(p[1], dx*dx * (u_top - u_avg) / dx);
-							rhs->add(p[0], dx*dx * (u_avg - u_bottom) / dx);
+							if (!utility::is_nan(u_top) && !utility::is_nan(u_avg) && !utility::is_nan(u_bottom)) {
+								rhs->add(p[1], dx*dx * (u_top - u_avg) / dx);
+								rhs->add(p[0], dx*dx * (u_avg - u_bottom) / dx);
+							}
 						}
 					}
 								}
@@ -2467,19 +2542,19 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt,
 			const vec3d p = grid.get_cell_position(cell_id);
 			const double dx = grid.get_cell_dx(cell_id);
 			//
-			grid.get_divergence_qc(cell_id,[&]( const face_id3 &face_id, double value0, double value1 ) {
-				bool add_divergence (true);
-				if( add_divergence ) {
-					if( solid_velocity && value1 ) {
-						if( cell_id.pi[0] != grid.layers[cell_id.depth]->shape[0]-1 ) {
-							rhs->add(row,value1*grid.sample_solid_face_velocity(face_id,solid_velocity));
-						}
-					}
-					if( value0 ) {
-						rhs->add(row,value0*grid.velocity[face_id.index]);
-					}
-				}
-			});
+			// grid.get_divergence_qc(cell_id,[&]( const face_id3 &face_id, double value0, double value1 ) {
+			// 	bool add_divergence (true);
+			// 	if( add_divergence ) {
+			// 		if( solid_velocity && value1 ) {
+			// 			if( cell_id.pi[0] != grid.layers[cell_id.depth]->shape[0]-1 ) {
+			// 				rhs->add(row,value1*grid.sample_solid_face_velocity(face_id,solid_velocity));
+			// 			}
+			// 		}
+			// 		if( value0 ) {
+			// 			rhs->add(row,value0*grid.velocity[face_id.index]);
+			// 		}
+			// 	}
+			// });
 		}
 	});
 	console::dump( "Done. Took %s.\n", timer.stock("divergence_compute").c_str());
@@ -2507,7 +2582,6 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt,
 		assert( ! utility::is_nan(value));
 	});
 	//
-
 	auto status = m_solver->solve(m_matrix.Lhs.get(),rhs.get(),result.get());
 	//
 	auto build_residual_string = [&]( const std::vector<double> &rhs ) {

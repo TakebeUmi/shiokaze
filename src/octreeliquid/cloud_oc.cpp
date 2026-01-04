@@ -537,19 +537,21 @@ void cloud_oc::idle() {
 	}
 	int all_cell_count = cell_ids_included_merged_cells.size();
 
-	m_macoctreeproject.assemble_matrix_merged_cell(*m_grid, uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id);
 
 	
 
-	// m_macoctreeproject.assemble_matrix_qc(*m_grid);
-	// auto solid_velocity_func = [&]( const vec3d &p ) {
-	// 	return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
-	// };
-	// // // Project(added)
-	// m_macoctreeproject.project_cloud(*m_grid,dt,solid_velocity_func);
+	m_macoctreeproject.assemble_matrix_qc(*m_grid);
+	auto solid_velocity_func = [&]( const vec3d &p ) {
+		return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
+	};
+	// // Project(added)
+	m_macoctreeproject.project_cloud(*m_grid,dt,solid_velocity_func);
 
-	m_macoctreeproject.assemble_matrix_merged_cell(*m_grid, uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id);
-	m_macoctreeproject.project_merged_cell(*m_grid, dt, uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id);
+	// m_macoctreeproject.assemble_matrix_merged_cell(*m_grid, uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id);
+
+	// if (m_grid->valid_cell_count != 0) {
+	// 		m_macoctreeproject.project_merged_cell(*m_grid, dt, uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id);
+	// }
 
 	std::swap(m_grid,m_grid_prev);
     if( m_accumulated_CFL >= m_param.maximal_CFL_accumulation ) {
