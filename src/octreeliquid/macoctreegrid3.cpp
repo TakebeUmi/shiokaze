@@ -3895,6 +3895,7 @@ void grid3::compute_face_map () {
 			face_map[face_id.index] = 1;
 		}
 	});
+
 	//
 	for( uint_type n=0; n<face_count; ++n ) {
 		if( face_map[n] ) {
@@ -3958,12 +3959,16 @@ void grid3::compute_cell_map_merged (UnionFind &uf ) {
 		bool valid (false);
 		bool open (false);
 		if ((cell_id.index == uf.top[uf.root(cell_id.index)].index || cell_id.index == uf.bottom[uf.root(cell_id.index)].index) && uf.top[uf.root(cell_id.index)].index != uf.bottom[uf.root(cell_id.index)].index) open = true;
+		// if (cell_id.index == uf.top[uf.root(cell_id.index)].index || cell_id.index == uf.bottom[uf.root(cell_id.index)].index) open = true;
 			// for( char dim : DIMS3 ) {
 			// 	this->iterate_face_neighbors(cell_id,dim,[&]( const face_id3 &face_id ){
 			// 		if( area[face_id.index] ) open = true;
 			// 	});
 			// 	if( open ) break;
 			// }
+		iterate_cell_neighbors(cell_id,[&]( char dim, const cell_id3 &cell_neigh_id ) {
+			if ((cell_neigh_id.index == uf.top[uf.root(cell_id.index)].index || cell_neigh_id.index == uf.bottom[uf.root(cell_id.index)].index) && uf.top[uf.root(cell_id.index)].index == uf.bottom[uf.root(cell_id.index)].index) open = true;
+		});
 		if( open ) {
 			cell_map[cell_id.index] = 1;
 		}
@@ -3982,7 +3987,7 @@ void grid3::compute_cell_map_merged (UnionFind &uf ) {
 	console::write("num_gather_liquid_cells",valid_cell_count);
 }
 
-void grid3::compute_face_map_merged () {
+void grid3::compute_face_map_merged (UnionFind &uf ) {
 	//
 	scoped_timer timer(this);
 	timer.tick(); console::dump( "Gathering active velocity faces..." );
@@ -3993,13 +3998,41 @@ void grid3::compute_face_map_merged () {
 	//
 	iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
 		bool valid (false);
-		this->get_gradient(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3 &info ) {
-			valid = true;
-		});
+		const vec3i p_forward = face_id.pi;  // 前方セル
+		const vec3i p_backward = face_id.pi - vec3i(
+			face_id.dim == 0,  // dim=0 なら -1、それ以外 0
+			face_id.dim == 1,  // dim=1 なら -1、それ以外 0
+			face_id.dim == 2   // dim=2 なら -1、それ以外 0
+		);
+		if( layers[0]->active_cells.active(p_forward) && layers[0]->active_cells.active(p_backward)) {
+			uint_type forward_index = layers[0]->active_cells(p_forward);
+			cell_id3 forward_id = {face_id.depth, p_forward, forward_index};
+
+			uint_type backward_index = layers[0]->active_cells(p_backward);
+			cell_id3 backward_id = {face_id.depth, p_backward, backward_index};
+
+			if (cell_map[forward_id.index] && cell_map[backward_id.index]) {
+				valid = true;
+			}
+		}
 		if( valid ) {
 			face_map[face_id.index] = 1;
 		}
 	});
+	// iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+	// 	bool valid (false);
+	// 	if (cell_map[uf.top[uf.root(cell_id.index)].index] || cell_map[uf.bottom[uf.root(cell_id.index)].index]) {
+	// 			valid = true;
+	// 	}
+	// 	if( valid ) {
+	// 		for( char dim : DIMS3 ) {
+	// 			this->iterate_face_neighbors(cell_id,dim,[&]( const face_id3 &face_id ) {
+	// 				face_map[face_id.index] = 1;
+	// 			});
+	// 		}
+	// 	}
+	// });
+	
 	//
 	for( uint_type n=0; n<face_count; ++n ) {
 		if( face_map[n] ) {
@@ -4074,7 +4107,7 @@ double grid3::get_volume() const {
 	for( auto &e : volume_threads ) {
 		current_volume += e / DIM3;
 		//eがゼロなのがうまくいかない原因→2774行目の
-		//console::dump( "current_volume: %e\n", current_volume );
+		console::dump( "current_volume: %e\n", current_volume );
 	}
 	return current_volume;
 }
@@ -4188,8 +4221,8 @@ double grid3::get_volume_qc() const {
 	double current_volume (0.0);
 	for( auto &e : volume_threads ) {
 		current_volume += e / DIM3;
-		// console::dump( "current_volume: %e\n", current_volume );
-		// console::dump( "e: %e\n", e );
+		console::dump( "current_volume: %e\n", current_volume );
+		console::dump( "e: %e\n", e );
 	}
 	return current_volume;
 }

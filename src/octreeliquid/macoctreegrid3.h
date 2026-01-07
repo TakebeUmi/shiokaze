@@ -508,7 +508,7 @@ using namespace std;
 		void compute_cell_map_cloud();
 		void compute_face_map_cloud();
 
-		void compute_face_map_merged();
+		void compute_face_map_merged(UnionFind &uf);
 		void compute_cell_map_merged(UnionFind &uf);
 		//added
 		void clear_map ();

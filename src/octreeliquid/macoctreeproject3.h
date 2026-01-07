@@ -27,6 +27,7 @@
 #include "macoctreegrid3.h"
 #include <shiokaze/math/RCMatrix_interface.h>
 #include <shiokaze/linsolver/RCMatrix_solver.h>
+#include <eigen3/Eigen/Sparse>
 //
 SHKZ_BEGIN_NAMESPACE
 //
@@ -52,6 +53,8 @@ namespace macotreeliquid3_namespace {
 			bool assembled {false};
 		};
 		matrix3 m_matrix;
+		Eigen::VectorXd x, b;
+		Eigen::SparseMatrix<double> A;
 		//
 		struct Parameters {
 			bool volume_correction {true};
@@ -72,11 +75,12 @@ namespace macotreeliquid3_namespace {
 		bool is_in_same_merged_cell( grid3 &grid , cell_id3 cell_id1, cell_id3 cell_id2, UnionFind &uf);
 		void assemble_Lhs(grid3 &grid, std::vector<int> p, cell_id3 top1, cell_id3 bottom1, cell_id3 top2, cell_id3 bottom2);
 		void assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx, int dir);
-		void assemble_lhs_x(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx);
-		void assemble_matrix( grid3 &grid );
-		void assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf , int all_cell_count, int merged_cell_count, std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells, std::vector<int> &merged_cell_id);
-		void assemble_matrix_density( grid3 &grid );
-		void assemble_matrix_qc( grid3 &grid );
+		void assemble_lhs_x(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx, int dir);
+		void assemble_matrix( grid3 &grid);
+		void compute_maps( grid3 &grid, UnionFind &uf);
+		void assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf , bool use_Eigen, int all_cell_count, int merged_cell_count, std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells, std::vector<int> &merged_cell_id, int step_count );
+		void assemble_matrix_density( grid3 &grid);
+		void assemble_matrix_qc( grid3 &grid , int step_count);
 		void assemble_matrix_qv( grid3 &grid );
 		void assemble_matrix_qr( grid3 &grid );
 		void clear_matrix();
@@ -100,7 +104,7 @@ namespace macotreeliquid3_namespace {
 					  std::function<vec3d(const vec3d &p)> solid_velocity=nullptr,
 					  std::vector<Real> *pressure_vector=nullptr );
 		void project_density( grid3 &grid, double dt, std::function<vec3d(const vec3d &p)>  solid_velocity=nullptr, std::vector<Real> *pressure=nullptr );
-		void project_density( grid3 &grid, double dt,
+		void project_density( grid3 &grid, double dt, 
 					  size_t region_count,
 					  const std::vector<uint_type> &regions,
 					  const std::vector<Real> &current_volumes,
@@ -108,8 +112,8 @@ namespace macotreeliquid3_namespace {
 					  std::vector<Real> &y_list,
 					  std::function<vec3d(const vec3d &p)> solid_velocity=nullptr,
 					  std::vector<Real> *pressure=nullptr );
-		void project_cloud( grid3 &grid, double dt, std::function<vec3d(const vec3d &p)> solid_velocity=nullptr, std::vector<Real> *pressure=nullptr );
-		void project_cloud( grid3 &grid, double dt,
+		void project_cloud( grid3 &grid, double dt, int step_count, std::function<vec3d(const vec3d &p)> solid_velocity=nullptr, std::vector<Real> *pressure=nullptr );
+		void project_cloud( grid3 &grid, double dt, int step_count,
 					  size_t region_count,
 					  const std::vector<uint_type> &regions,
 					  const std::vector<Real> &current_volumes,
@@ -118,14 +122,14 @@ namespace macotreeliquid3_namespace {
 					  std::function<vec3d(const vec3d &p)> solid_velocity=nullptr,
 					  std::vector<Real> *pressure=nullptr );
 		//
-		void project_merged_cell( grid3 &grid, double dt, 
+		void project_merged_cell( grid3 &grid, double dt, bool use_Eigen, int step_count,
                     UnionFind &uf, int all_cell_count,
                     int merged_cell_count,
                     std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells,
                     std::vector<int> &merged_cell_id, 
                     std::function<vec3d(const vec3d &p)> solid_velocity=nullptr, 
                     std::vector<Real> *pressure=nullptr );
-		void project_merged_cell( grid3 &grid, double dt,
+		void project_merged_cell( grid3 &grid, double dt, bool use_Eigen, int step_count,
                     size_t region_count,
                     const std::vector<uint_type> &regions,
                     const std::vector<Real> &current_volumes,
@@ -140,6 +144,7 @@ namespace macotreeliquid3_namespace {
                     std::vector<Real> *pressure_vector
 					  );
 		void add_element_symm(uint_type row, uint_type col, double value);
+		bool solveWithICCG(Eigen::SparseMatrix<double> &A, Eigen::VectorXd &b, Eigen::VectorXd &x);
 		//
 		template<typename RHS_type>
 		void assemble_RHS(grid3 &grid, std::vector<uint_type> p, double dx,  cell_id3 top1, cell_id3 bottom1, cell_id3 top2, cell_id3 bottom2, char dim, bool upper, RHS_type rhs, UnionFind uf);
@@ -161,6 +166,8 @@ namespace macotreeliquid3_namespace {
 			file.w(m_initial_volume);
 			file.w(m_y_prev);
 		}
+
+		
 	};
 };
 //

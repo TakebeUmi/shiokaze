@@ -29,6 +29,7 @@
 #include <shiokaze/core/console.h>
 #include <cmath>
 #include <limits>
+#include <fstream>
 //
 SHKZ_BEGIN_NAMESPACE
 //

@@ -73,10 +73,10 @@ protected:
 	}
 	//
 	struct Parameters {
-		double residual {1e-4};
-		unsigned max_iterations {30000};
+		double residual {1e-4}; // 1e-4 scaled for Shiokaze
+		unsigned max_iterations {3000};
 		double modified_incomplete_cholesky_parameter {0.97};
-		double min_diagonal_ratio {0.25};
+		double min_diagonal_ratio {0.15};
 	};
 	Parameters m_param;
 };

@@ -87,7 +87,7 @@ struct SparseColumnLowerFactor
 
 template<class T>
 void factor_modified_incomplete_cholesky0(const SparseMatrix<T> &matrix, SparseColumnLowerFactor<T> &factor,
-														T modification_parameter=0.97, T min_diagonal_ratio=0.25)
+														T modification_parameter=0.0, T min_diagonal_ratio=0.25)
 {
 	// first copy lower triangle of matrix into factor (Note: assuming A is symmetric of course!)
 	factor.resize(matrix.n);
@@ -283,6 +283,8 @@ struct PCGSolver
 				residual_out /= residual0;
 				return true; 
 			}
+			if ( iteration % 5000 == 0 )
+			printf( "  Iteration %d: residual = %e alpha = %e rho = %e\n", iteration, residual_out, alpha, rho );
 			apply_preconditioner(r, z);
 			double rho_new=BLAS::dot(z, r);
 			double beta=rho_new/rho;
