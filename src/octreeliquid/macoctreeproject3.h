@@ -74,11 +74,12 @@ namespace macotreeliquid3_namespace {
 		bool should_Lhs_calc( grid3 &grid , cell_id3 cell_id, UnionFind &uf, char dim);
 		bool is_in_same_merged_cell( grid3 &grid , cell_id3 cell_id1, cell_id3 cell_id2, UnionFind &uf);
 		void assemble_Lhs(grid3 &grid, std::vector<int> p, cell_id3 top1, cell_id3 bottom1, cell_id3 top2, cell_id3 bottom2);
-		void assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx, int dir);
-		void assemble_lhs_x(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx, int dir);
+		void assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx, int dir, bool use_Eigen);
+		void assemble_lhs_x(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx, int dir, bool use_Eigen);
 		void assemble_matrix( grid3 &grid);
 		void compute_maps( grid3 &grid, UnionFind &uf);
 		void assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf , bool use_Eigen, int all_cell_count, int merged_cell_count, std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells, std::vector<int> &merged_cell_id, int step_count );
+		void assemble_matrix_merged_cell_Eigen( grid3 &grid, UnionFind &uf , bool use_Eigen, int all_cell_count, int merged_cell_count, std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells, std::vector<int> &merged_cell_id, int step_count );
 		void assemble_matrix_density( grid3 &grid);
 		void assemble_matrix_qc( grid3 &grid , int step_count);
 		void assemble_matrix_qv( grid3 &grid );
@@ -143,7 +144,29 @@ namespace macotreeliquid3_namespace {
                     std::function<vec3d(const vec3d &p)> solid_velocity,
                     std::vector<Real> *pressure_vector
 					  );
+		void project_merged_cell_Eigen( grid3 &grid, double dt, bool use_Eigen, int step_count,
+                    UnionFind &uf, int all_cell_count,
+                    int merged_cell_count,
+                    std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells,
+                    std::vector<int> &merged_cell_id, 
+                    std::function<vec3d(const vec3d &p)> solid_velocity=nullptr, 
+                    std::vector<Real> *pressure=nullptr );
+		void project_merged_cell_Eigen( grid3 &grid, double dt, bool use_Eigen, int step_count,
+                    size_t region_count,
+                    const std::vector<uint_type> &regions,
+                    const std::vector<Real> &current_volumes,
+                    const std::vector<Real> &target_volumes,
+                    std::vector<Real> &y_list,
+                    UnionFind &uf,
+                    int all_cell_count,
+                    int merged_cell_count,
+                    std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells,
+                    std::vector<int> &merged_cell_id,
+                    std::function<vec3d(const vec3d &p)> solid_velocity,
+                    std::vector<Real> *pressure_vector
+					);
 		void add_element_symm(uint_type row, uint_type col, double value);
+		bool solveWithBiCGSTAB (Eigen::SparseMatrix<double> &A, Eigen::VectorXd &b, Eigen::VectorXd &x);
 		bool solveWithICCG(Eigen::SparseMatrix<double> &A, Eigen::VectorXd &b, Eigen::VectorXd &x);
 		//
 		template<typename RHS_type>

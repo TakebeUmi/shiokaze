@@ -543,10 +543,9 @@ void cloud_oc::idle() {
 		}
 	}
 	int all_cell_count = cell_ids_included_merged_cells.size();
-
 	// // Project(added)
 	bool use_all_cells = false;
-	bool use_Eigen = false;
+	bool use_Eigen = true;
 	if (use_all_cells) {
 		m_macoctreeproject.assemble_matrix_qc(*m_grid, m_timestepper->get_step_count());
 		auto solid_velocity_func = [&]( const vec3d &p ) {
@@ -555,10 +554,9 @@ void cloud_oc::idle() {
 		m_macoctreeproject.project_cloud(*m_grid,dt,m_timestepper->get_step_count(), solid_velocity_func);
 	} else {
 		//m_macoctreeproject.compute_maps(*m_grid, uf);
-		m_macoctreeproject.assemble_matrix_merged_cell(*m_grid, uf, use_Eigen, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id, m_timestepper->get_step_count());
+		m_macoctreeproject.assemble_matrix_merged_cell_Eigen(*m_grid, uf, use_Eigen, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id, m_timestepper->get_step_count());
 		if (m_grid->valid_cell_count > 4) {
-			
-			m_macoctreeproject.project_merged_cell(*m_grid, dt, use_Eigen, m_timestepper->get_step_count(), uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id);
+			m_macoctreeproject.project_merged_cell_Eigen(*m_grid, dt, use_Eigen, m_timestepper->get_step_count(), uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id);
 		}
 	}
 
