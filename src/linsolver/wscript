@@ -24,19 +24,24 @@
 #
 def build(bld):
 #
-	bld.shlib(source = 'cg.cpp',
-			cxxflags = ['-DINDEX_TYPE=size_t','-DFLOAT_TYPE=double'],
-			target = bld.get_target_name(bld,'cg'),
-			use = bld.get_target_name(bld,'core'))
+    bld.shlib(source = 'cg.cpp',
+            cxxflags = ['-DINDEX_TYPE=size_t','-DFLOAT_TYPE=double'],
+            target = bld.get_target_name(bld,'cg'),
+            use = bld.get_target_name(bld,'core'))
 #
-	bld.shlib(source = 'pcg.cpp',
-			cxxflags = ['-DINDEX_TYPE=size_t','-DFLOAT_TYPE=double'],
-			target = bld.get_target_name(bld,'pcg'),
-			use = bld.get_target_name(bld,'core'),
-			lib = ['blas'])
+    bld.shlib(source = 'pcg.cpp',
+            cxxflags = ['-DINDEX_TYPE=size_t','-DFLOAT_TYPE=double'],
+            target = bld.get_target_name(bld,'pcg'),
+            use = bld.get_target_name(bld,'core'),
+            lib = ['blas'])
 #
-	bld.shlib(source = 'amg.cpp',
-			cxxflags = ['-DINDEX_TYPE=size_t','-DFLOAT_TYPE=double'],
-			target = bld.get_target_name(bld,'amg'),
-			use = bld.get_target_name(bld,'core'))
-
+    bld.shlib(source = 'bicgstab.cpp',
+            cxxflags = ['-DINDEX_TYPE=size_t','-DFLOAT_TYPE=double'],
+            target = bld.get_target_name(bld,'bicgstab'),
+            use = bld.get_target_name(bld,'core'),
+            lib = ['blas'])
+#
+    bld.shlib(source = 'amg.cpp',
+            cxxflags = ['-DINDEX_TYPE=size_t','-DFLOAT_TYPE=double'],
+            target = bld.get_target_name(bld,'amg'),
+            use = bld.get_target_name(bld,'core'))

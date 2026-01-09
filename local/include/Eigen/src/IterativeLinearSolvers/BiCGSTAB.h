@@ -102,6 +102,9 @@ bool bicgstab(const MatrixType& mat, const Rhs& rhs, Dest& x,
     ++i;
   }
   tol_error = sqrt(r.squaredNorm()/rhs_sqnorm);
+  if (std::isnan(tol_error)) {
+    printf("rhs_sqnorm=%f, squaredNorm=%f\n", rhs_sqnorm, r.squaredNorm());
+  }
   iters = i;
   return true; 
 }

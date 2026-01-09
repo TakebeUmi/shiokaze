@@ -41,6 +41,7 @@
 #include <iomanip>
 #include <numeric>
 #include <vector>
+#include "../../local/include/Eigen/Sparse"
 
 #include "../../../PerlinNoise/PerlinNoise.hpp"
 
@@ -81,7 +82,7 @@ double cloud_oc::circle_source(const vec3d &p) const {
 	} else if ((p_2d - center*m_param.scale).len() < radius*m_param.scale ) {
 		return -12.5*p_2d.len()/m_param.scale + 13.0;
 	}
-	else return 0.5;
+	else return 0.0;
 }
 
 double cloud_oc::perlin_noise_source(const vec3d &p) const {
@@ -92,9 +93,9 @@ double cloud_oc::perlin_noise_source(const vec3d &p) const {
 	double ratio(0.8); // Seed for reproducibility
 	vec2d p_2d(p[0], p[2]);
 	const double noise = perlin.octave2D_01(p_2d[0], p_2d[1], 3, 0.3);
-	//if ((p_2d - center*m_param.scale).len() < radius*m_param.scale ) {
+	if ((p_2d - center*m_param.scale).len() < radius*m_param.scale ) {
 		return noise;
-	//}
+	}
 	return 0.0;
 }
 
@@ -545,7 +546,9 @@ void cloud_oc::idle() {
 	int all_cell_count = cell_ids_included_merged_cells.size();
 	// // Project(added)
 	bool use_all_cells = false;
-	bool use_Eigen = true;
+	bool use_Eigen = false;
+	Eigen::SparseMatrix<double> A;
+	Eigen::VectorXd b, x;
 	if (use_all_cells) {
 		m_macoctreeproject.assemble_matrix_qc(*m_grid, m_timestepper->get_step_count());
 		auto solid_velocity_func = [&]( const vec3d &p ) {
@@ -553,11 +556,13 @@ void cloud_oc::idle() {
 		};
 		m_macoctreeproject.project_cloud(*m_grid,dt,m_timestepper->get_step_count(), solid_velocity_func);
 	} else {
-		//m_macoctreeproject.compute_maps(*m_grid, uf);
-		m_macoctreeproject.assemble_matrix_merged_cell_Eigen(*m_grid, uf, use_Eigen, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id, m_timestepper->get_step_count());
+		m_macoctreeproject.compute_maps(*m_grid, uf);
+		m_macoctreeproject.assemble_matrix_merged_cell(*m_grid, uf, use_Eigen, m_timestepper->get_step_count());
 		if (m_grid->valid_cell_count > 4) {
-			m_macoctreeproject.project_merged_cell_Eigen(*m_grid, dt, use_Eigen, m_timestepper->get_step_count(), uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id);
+			m_macoctreeproject.project_merged_cell(*m_grid, dt, use_Eigen, m_timestepper->get_step_count(), uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id);
 		}
+
+		// m_macoctreeproject.project_merged_cell_all(*m_grid, dt, use_Eigen, m_timestepper->get_step_count(), uf);
 	}
 
 

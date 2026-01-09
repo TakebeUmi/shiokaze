@@ -281,6 +281,7 @@ struct PCGSolver
 			if(residual_out<=tol) {
 				iterations_out=iteration+1;
 				residual_out /= residual0;
+				printf( " converged. Iteration %d: residual = %e alpha = %e rho = %e\n", iteration, residual_out, alpha, rho );
 				return true; 
 			}
 			if ( iteration % 5000 == 0 )
@@ -293,6 +294,7 @@ struct PCGSolver
 		}
 		iterations_out=iteration;
 		residual_out /= residual0;
+		printf( " did not converge. Iteration %d: residual = %e\n", iteration, residual_out );
 		return false;
 	}
 	//
