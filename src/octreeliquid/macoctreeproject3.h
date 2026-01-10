@@ -125,10 +125,7 @@ namespace macotreeliquid3_namespace {
 					  std::vector<Real> *pressure=nullptr );
 		//
 		void project_merged_cell( grid3 &grid, double dt, bool use_Eigen, int step_count,
-                    UnionFind &uf, int all_cell_count,
-                    int merged_cell_count,
-                    std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells,
-                    std::vector<int> &merged_cell_id, 
+                    UnionFind &uf, int shape 
                     std::function<vec3d(const vec3d &p)> solid_velocity=nullptr, 
                     std::vector<Real> *pressure=nullptr );
 		void project_merged_cell( grid3 &grid, double dt, bool use_Eigen, int step_count,
@@ -138,10 +135,7 @@ namespace macotreeliquid3_namespace {
                     const std::vector<Real> &target_volumes,
                     std::vector<Real> &y_list,
                     UnionFind &uf,
-                    int all_cell_count,
-                    int merged_cell_count,
-                    std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells,
-                    std::vector<int> &merged_cell_id,
+                    int shape,
                     std::function<vec3d(const vec3d &p)> solid_velocity,
                     std::vector<Real> *pressure_vector
 					  );
@@ -160,7 +154,7 @@ namespace macotreeliquid3_namespace {
                     std::vector<Real> *pressure_vector
 					  );
 		void add_element_symm(uint_type row, uint_type col, double value);
-		
+
 		bool solveWithBiCGSTAB (Eigen::SparseMatrix<double> &A, Eigen::VectorXd &b, Eigen::VectorXd &x);
 		bool solveWithICCG(Eigen::SparseMatrix<double> &A, Eigen::VectorXd &b, Eigen::VectorXd &x);
 		//

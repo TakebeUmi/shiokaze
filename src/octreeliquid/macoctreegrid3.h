@@ -511,6 +511,10 @@ using namespace std;
 		void compute_face_map_merged(UnionFind &uf);
 		void compute_cell_map_merged(UnionFind &uf);
 		//added
+		void compute_cell_map_merged_former(UnionFind &uf);
+		void compute_cell_map_merged_middle(UnionFind &uf);
+		void compute_cell_map_merged_latter(UnionFind &uf);
+		//
 		void clear_map ();
 		//
 		double get_finest_dx() const;

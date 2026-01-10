@@ -3946,6 +3946,51 @@ void grid3::compute_face_map_cloud () {
 	console::write("num_gather_cloud_faces",valid_face_count);
 }
 
+void grid3::compute_cell_map_merged_former(UnionFind &uf) {
+	scoped_timer timer(this);
+	timer.tick(); console::dump( "Gathering active liquid cells..." );
+	//
+	valid_cell_count = 0;
+	cell_map.clear();
+	cell_map.resize(cell_count);
+	//
+	
+		iterate_active_cells([&](const cell_id3 &cell_id, int tid ) {
+			bool valid (false);
+			bool open (false);
+			//mergedセルのtop/bottomかどうか
+			if ((cell_id.index == uf.top[uf.root(cell_id.index)].index || cell_id.index == uf.bottom[uf.root(cell_id.index)].index) && uf.top[uf.root(cell_id.index)].index != uf.bottom[uf.root(cell_id.index)].index) open = true;
+			
+			//隣がmergedセルのtop/bottomかどうか
+			iterate_cell_neighbors(cell_id,[&]( char dim, const cell_id3 &cell_neigh_id ) {
+				if (((cell_neigh_id.index == uf.top[uf.root(cell_id.index)].index 
+				|| cell_neigh_id.index == uf.bottom[uf.root(cell_id.index)].index)
+				 && uf.top[uf.root(cell_id.index)].index == uf.bottom[uf.root(cell_id.index)].index)) open = true;
+			});
+			if( open ) {
+				cell_map[cell_id.index] = 1;
+			}
+		});
+}
+
+void grid3::compute_cell_map_merged_middle(UnionFind &uf) {
+	iterate_active_cells([&](const cell_id3 &cell_id, int tid ) {
+		iterate_cell_neighbors(cell_id,[&]( char dim, const cell_id3 &cell_neigh_id ) {
+			if (cell_map[cell_neigh_id.index] && (uf.top[uf.root(cell_id.index)].index != cell_id.index && uf.bottom[uf.root(cell_id.index)].index != cell_id.index) && uf.top[uf.root(cell_id.index)].index != uf.bottom[uf.root(cell_id.index)].index) {
+				cell_map[cell_id.index] = 1;
+			}
+		});
+	});
+}
+
+void grid3::compute_cell_map_merged_latter(UnionFind &uf) {
+	for( uint_type n=0; n<cell_count; ++n ) {
+		if( cell_map[n] ) {
+			cell_map[n] = ++ valid_cell_count;
+		}
+	}
+}
+
 void grid3::compute_cell_map_merged (UnionFind &uf ) {
 	//
 	scoped_timer timer(this);
@@ -3955,24 +4000,28 @@ void grid3::compute_cell_map_merged (UnionFind &uf ) {
 	cell_map.clear();
 	cell_map.resize(cell_count);
 	//
-	iterate_active_cells([&](const cell_id3 &cell_id, int tid ) {
-		bool valid (false);
-		bool open (false);
-		if ((cell_id.index == uf.top[uf.root(cell_id.index)].index || cell_id.index == uf.bottom[uf.root(cell_id.index)].index) && uf.top[uf.root(cell_id.index)].index != uf.bottom[uf.root(cell_id.index)].index) open = true;
-		// if (cell_id.index == uf.top[uf.root(cell_id.index)].index || cell_id.index == uf.bottom[uf.root(cell_id.index)].index) open = true;
-			// for( char dim : DIMS3 ) {
-			// 	this->iterate_face_neighbors(cell_id,dim,[&]( const face_id3 &face_id ){
-			// 		if( area[face_id.index] ) open = true;
-			// 	});
-			// 	if( open ) break;
-			// }
-		iterate_cell_neighbors(cell_id,[&]( char dim, const cell_id3 &cell_neigh_id ) {
-			if ((cell_neigh_id.index == uf.top[uf.root(cell_id.index)].index || cell_neigh_id.index == uf.bottom[uf.root(cell_id.index)].index) && uf.top[uf.root(cell_id.index)].index == uf.bottom[uf.root(cell_id.index)].index) open = true;
+	
+		iterate_active_cells([&](const cell_id3 &cell_id, int tid ) {
+			bool valid (false);
+			bool open (false);
+			//mergedセルのtop/bottomかどうか
+			if ((cell_id.index == uf.top[uf.root(cell_id.index)].index || cell_id.index == uf.bottom[uf.root(cell_id.index)].index) && uf.top[uf.root(cell_id.index)].index != uf.bottom[uf.root(cell_id.index)].index) open = true;
+			
+			//隣がmergedセルのtop/bottomかどうか
+			iterate_cell_neighbors(cell_id,[&]( char dim, const cell_id3 &cell_neigh_id ) {
+				if (((cell_neigh_id.index == uf.top[uf.root(cell_id.index)].index 
+				|| cell_neigh_id.index == uf.bottom[uf.root(cell_id.index)].index)
+				 && uf.top[uf.root(cell_id.index)].index == uf.bottom[uf.root(cell_id.index)].index)) open = true;
+			});
+			// iterate_cell_neighbors(cell_id,[&]( char dim, const cell_id3 &cell_neigh_id ) {
+			// 	if ((cell_map[cell_neigh_id.index] )
+			// 	 && !(uf.top[uf.root(cell_id.index)].index != cell_id.index && uf.bottom[uf.root(cell_id.index)].index != cell_id.index)) open = true;
+			// });
+			if( open ) {
+				cell_map[cell_id.index] = 1;
+			}
 		});
-		if( open ) {
-			cell_map[cell_id.index] = 1;
-		}
-	});
+
 	//
 	for( uint_type n=0; n<cell_count; ++n ) {
 		if( cell_map[n] ) {

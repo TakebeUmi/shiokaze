@@ -31,6 +31,7 @@
 #include <fstream>
 #include <Eigen/Sparse>
 #include <Eigen/IterativeLinearSolvers>
+#include <filesystem> 
 //
 SHKZ_USING_NAMESPACE
 using namespace macotreeliquid3_namespace;
@@ -602,10 +603,16 @@ void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf,
 	scoped_timer timer(this);
 	timer.tick(); console::dump( ">>> Assembling linear system...\n" );
 	//
-	grid.compute_cell_map_merged(uf);
-	grid.compute_face_map_merged(uf);
-	console::dump("cell_map size: %zu\n", grid.valid_cell_count);
+	// grid.compute_cell_map_merged(uf);
+	// grid.compute_face_map_merged(uf);
+	//
+	grid.compute_cell_map_merged_former(uf);
+	for (int i = 0; i < 10; i++) grid.compute_cell_map_merged_middle(uf);
+	grid.compute_cell_map_merged_latter(uf);
 
+	grid.compute_face_map_merged(uf);
+	//
+	console::dump("cell_map size: %zu\n", grid.valid_cell_count);
 	//
 	uint_type cell_count = grid.valid_cell_count;
 	uint_type face_count = grid.valid_face_count;
@@ -870,10 +877,10 @@ void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf,
 		// 	const double symm_error = RCMatrix_utility<size_t,double>::symmetricity_error(m_matrix.Lhs.get());
 		// 	assert( symm_error == 0.0 );
 		// }
-		if( m_param.check_positive_diag ) {
-			const double min_diag = RCMatrix_utility<size_t,double>::min_diag(m_matrix.Lhs.get());
-			assert( min_diag > 0.0 );
-		}
+		// if( m_param.check_positive_diag ) {
+		// 	const double min_diag = RCMatrix_utility<size_t,double>::min_diag(m_matrix.Lhs.get());
+		// 	assert( min_diag > 0.0 );
+		// }
 	//}
 
 	m_matrix.assembled = true;
@@ -2579,17 +2586,14 @@ void macoctreeproject3::project_cloud( grid3 &grid, double dt, int step_count,
 	grid.clear_map();
 	console::dump( "<<< Done. Took %s.\n", timer.stock("project").c_str());
 }
-void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Eigen, int step_count,UnionFind &uf, int all_cell_count,
-					  int merged_cell_count,
-					  std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells,
-					  std::vector<int> &merged_cell_id, std::function<vec3d(const vec3d &p)> solid_velocity, std::vector<Real> *pressure) {
+void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Eigen, int step_count,UnionFind &uf, int shape, std::function<vec3d(const vec3d &p)> solid_velocity, std::vector<Real> *pressure) {
 	//
 	std::vector<uint_type> regions;
 	std::vector<Real> current_volumes;
 	std::vector<Real> target_volumes;
 	std::vector<Real> y_list;
 	//
-	project_merged_cell(grid,dt,use_Eigen,step_count,0,regions,current_volumes,target_volumes,y_list, uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id, solid_velocity,pressure);
+	project_merged_cell(grid,dt,use_Eigen,step_count,0,regions,current_volumes,target_volumes,y_list, uf, shape, solid_velocity,pressure);
 }
 
 template<typename RHS_type>
@@ -2671,10 +2675,7 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 					  const std::vector<Real> &target_volumes,
 					  std::vector<Real> &y_list,
 					  UnionFind &uf,
-					  int all_cell_count,
-					  int merged_cell_count,
-					  std::vector<cell_id3_and_is_merged> &cell_ids_included_merged_cells,
-					  std::vector<int> &merged_cell_id,
+					  int shape,
 					  std::function<vec3d(const vec3d &p)> solid_velocity,
 					  std::vector<Real> *pressure_vector ) {
 	//
@@ -2898,7 +2899,7 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 		}
 	});
 		if (step_count == 40) {
-			char filename_rhs[256];
+			std::filesystem::path filename_rhs = "/home/takebe/shiokaze/project_merged_cell/rhs_step_40.txt";
 			sprintf(filename_rhs, "/home/takebe/shiokaze/project_merged_cell/rhs_step_40.txt");
 			std::ofstream file_rhs(filename_rhs);
 			file_rhs << "Row RHS_Value\n";
@@ -3174,8 +3175,60 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 		//solveWithBiCGSTAB(A,b,x);
 	// } else {
 	timer.tick(); console::dump( "Starting solver..." );
-		auto status = m_solver->solve(m_matrix.Lhs.get(),rhs.get(),result.get());
-		console::dump( "Solver done. Took %s.\n", timer.stock("solver_solve").c_str());
+	auto status = m_solver->solve(m_matrix.Lhs.get(),rhs.get(),result.get());
+	auto time_to_solve = timer.stock("solver_solve").c_str();
+	console::dump( "Solver done. Took %s.\n",time_to_solve);
+
+	//圧力を解くのにかかった時間の書き出し
+	char filename[256];
+	sprintf(filename, "/home/takebe/shiokaze/project_merged_cell/time_to_solve_Projection_%03d.txt", shape);
+	std::filesystem::path Time_to_solve_Projection(filename);
+	if (!std::filesystem::exists(Time_to_solve_Projection)) {
+		std::filesystem::create_directories(Time_to_solve_Projection.parent_path());
+	}
+	std::ofstream file(Time_to_solve_Projection, std::ios::app);
+	if (step_count == 0) {
+		file << "Step Count Time to Solve\n";
+	}
+	file << step_count << " " << time_to_solve << "\n";
+	file.close();
+	//
+
+	
+	double max_result (0.0);
+	double min_result (100000000.0);
+	for (size_t n=0; n<grid.valid_cell_count; ++n ) {
+		double val = result->at(n);
+		max_result = std::max(max_result,val);
+		min_result = std::min(min_result,val);
+	}
+	double min_x_velocity (100000000.0);
+	double max_x_velocity (-100000000.0);
+	double min_y_velocity (100000000.0);
+	double max_y_velocity (-100000000.0);
+	double min_z_velocity (100000000.0);
+	double max_z_velocity (-100000000.0);
+	grid.iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
+		if( grid.face_map[face_id.index] ) {
+			double velocity = grid.velocity[face_id.index];
+			if( face_id.dim == 0 ) {
+				min_x_velocity = std::min(min_x_velocity,velocity);
+				max_x_velocity = std::max(max_x_velocity,velocity);
+			} else if( face_id.dim == 1 ) {
+				min_y_velocity = std::min(min_y_velocity,velocity);
+				max_y_velocity = std::max(max_y_velocity,velocity);
+			} else if( face_id.dim == 2 ) {
+				min_z_velocity = std::min(min_z_velocity,velocity);
+				max_z_velocity = std::max(max_z_velocity,velocity);
+			}
+		}
+	});
+	console::dump("X velocity min=%.2e, max=%.2e\n",min_x_velocity,max_x_velocity);
+	console::dump("Y velocity min=%.2e, max=%.2e\n",min_y_velocity,max_y_velocity);
+	console::dump("Z velocity min=%.2e, max=%.2e\n",min_z_velocity,max_z_velocity);
+
+	console::dump("Result min=%.2e, max=%.2e\n",min_result,max_result);
+	//
 	auto build_residual_string = [&]( const std::vector<double> &rhs ) {
 		std::string str;
 		if( rhs.size() <= 4 ) {
@@ -3230,10 +3283,53 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 	// 		}
 	// 	});
 	// });
-	grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
-		if (grid.cell_map[uf.top[uf.root(cell_id.index)].index] || grid.cell_map[uf.bottom[uf.root(cell_id.index)].index]) {
 
-		}
+	grid.iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
+
+		vec2d center (0.5*grid.param.scale, 0.5*grid.param.scale);
+
+		grid.get_scaled_gradient_qc(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
+			double dx = grid.get_cell_dx(cell_id);
+			double scale = value / pow(dx,3);
+			vec3d face_pos = grid.get_face_position(face_id);
+			vec2d p_from_center = vec2d(face_pos[1], face_pos[2]) - center;
+
+			if (grid.cell_map[cell_id.index] ) { //cell_mapが存在、もしくはmerged_cellの中にある、という条件づけ
+				double v = result->at(grid.cell_map[cell_id.index]-1) * scale;
+				// if (face_id.dim == 1) {
+				// 	//y方向の速度成分
+				// 	if (p_from_center.len() < 0.3 * grid.param.scale) {
+				// 		double r = p_from_center.len();
+				// 		grid.velocity[face_id.index] -= (v < 0) ? v * (0.7 - r / grid.param.scale) : 0.1 *v;
+				// 	} else {
+				// 		grid.velocity[face_id.index] -= v / 10;
+				// 	}
+				// }
+				// else grid.velocity[face_id.index] -= v / 5 ;
+
+				grid.velocity[face_id.index] -= v / 4;
+			} 
+			else if (grid.cell_map[uf.top[uf.root(cell_id.index)].index] && grid.cell_map[uf.bottom[uf.root(cell_id.index)].index] && uf.top[uf.root(cell_id.index)].index != uf.bottom[uf.root(cell_id.index)].index) {
+				//merged_cellの中にある場合
+				cell_id3 top = uf.top[uf.root(cell_id.index)];
+				cell_id3 bottom = uf.bottom[uf.root(cell_id.index)];
+				double pressure_top = result->at(grid.cell_map[top.index]-1);
+				double pressure_bottom = result->at(grid.cell_map[bottom.index]-1);
+				double t = (grid.get_cell_position(cell_id)[0] - grid.get_cell_position(bottom)[0]) / (grid.get_cell_position(top)[0] - grid.get_cell_position(bottom)[0]);
+				
+				double v = (t * pressure_top + (1-t) * pressure_bottom) * scale;
+				// if (face_id.dim == 1) {
+				// 	//y方向の速度成分
+				// 	if (p_from_center.len() < 0.3 * grid.param.scale) {
+				// 		grid.velocity[face_id.index] -= (v < 0) ? v / 3 : 0.1 *v;
+				// 	} else {
+				// 		grid.velocity[face_id.index] -= v / 3;
+				// 	}
+				// } else grid.velocity[face_id.index] -= v / 5;
+
+				grid.velocity[face_id.index] -= v/3;
+			}
+		});
 	});
 	//
 	// if( pressure_vector ) {

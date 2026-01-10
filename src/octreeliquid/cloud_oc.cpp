@@ -41,6 +41,7 @@
 #include <iomanip>
 #include <numeric>
 #include <vector>
+#include <chrono>
 #include "../../local/include/Eigen/Sparse"
 
 #include "../../../PerlinNoise/PerlinNoise.hpp"
@@ -479,6 +480,7 @@ void cloud_oc::add_source_cloud (double time, double dt , grid3 &grid) {
 void cloud_oc::idle() {
 	//
 	console::dump( "=================== Step %d ===================\n", m_timestepper->get_step_count() );
+	auto start_time = std::chrono::high_resolution_clock::now();
 	//write_to_txt("before_timestep"); //added
 
 	// m_grid->serial_iterate_active_cells([&]( const cell_id3 &cell_id ) {
@@ -556,10 +558,10 @@ void cloud_oc::idle() {
 		};
 		m_macoctreeproject.project_cloud(*m_grid,dt,m_timestepper->get_step_count(), solid_velocity_func);
 	} else {
-		m_macoctreeproject.compute_maps(*m_grid, uf);
+		//m_macoctreeproject.compute_maps(*m_grid, uf);
 		m_macoctreeproject.assemble_matrix_merged_cell(*m_grid, uf, use_Eigen, m_timestepper->get_step_count());
 		if (m_grid->valid_cell_count > 4) {
-			m_macoctreeproject.project_merged_cell(*m_grid, dt, use_Eigen, m_timestepper->get_step_count(), uf, all_cell_count, merged_cell_count, cell_ids_included_merged_cells, merged_cell_id);
+			m_macoctreeproject.project_merged_cell(*m_grid, dt, use_Eigen, m_timestepper->get_step_count(), uf, m_shape[0]);
 		}
 
 		// m_macoctreeproject.project_merged_cell_all(*m_grid, dt, use_Eigen, m_timestepper->get_step_count(), uf);
@@ -644,6 +646,25 @@ void cloud_oc::idle() {
 	// Projection
 	//m_grid->check_buoyancy();
 	//print_position(*m_grid);
+	
+	//1ステップ当たりにかかる時間を計測
+	auto end_time = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> elapsed = end_time - start_time;
+	console::dump( "Timestep finished. Elapsed time: %.2f seconds.\n", elapsed.count());
+
+	char filename[256];
+	sprintf(filename, "/home/takebe/shiokaze/project_merged_cell/time_to_finish_step_%03d.txt", m_shape[0]);
+	std::filesystem::path Time_to_finish_step(filename);
+	if (!std::filesystem::exists(Time_to_finish_step)) {
+		std::filesystem::create_directories(Time_to_finish_step.parent_path());
+	}
+	std::ofstream file(Time_to_finish_step, std::ios::app);
+	if (m_timestepper->get_step_count() == 0) {
+		file << "Step Count Time to Solve\n";
+	}
+	file << m_timestepper->get_step_count() << " " << elapsed.count() << "\n";
+	file.close();
+
 }
 //
 void cloud_oc::draw( graphics_engine &g ) const {
