@@ -114,8 +114,8 @@ namespace macotreeliquid3_namespace {
 					  std::vector<Real> &y_list,
 					  std::function<vec3d(const vec3d &p)> solid_velocity=nullptr,
 					  std::vector<Real> *pressure=nullptr );
-		void project_cloud( grid3 &grid, double dt, int step_count, std::function<vec3d(const vec3d &p)> solid_velocity=nullptr, std::vector<Real> *pressure=nullptr );
-		void project_cloud( grid3 &grid, double dt, int step_count,
+		void project_cloud( grid3 &grid, double dt, int step_count, int shape, std::function<vec3d(const vec3d &p)> solid_velocity=nullptr, std::vector<Real> *pressure=nullptr );
+		void project_cloud( grid3 &grid, double dt, int step_count, int shape, 
 					  size_t region_count,
 					  const std::vector<uint_type> &regions,
 					  const std::vector<Real> &current_volumes,
@@ -125,7 +125,7 @@ namespace macotreeliquid3_namespace {
 					  std::vector<Real> *pressure=nullptr );
 		//
 		void project_merged_cell( grid3 &grid, double dt, bool use_Eigen, int step_count,
-                    UnionFind &uf, int shape 
+                    UnionFind &uf, int shape,
                     std::function<vec3d(const vec3d &p)> solid_velocity=nullptr, 
                     std::vector<Real> *pressure=nullptr );
 		void project_merged_cell( grid3 &grid, double dt, bool use_Eigen, int step_count,

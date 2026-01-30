@@ -31,7 +31,7 @@
 #include <fstream>
 #include <Eigen/Sparse>
 #include <Eigen/IterativeLinearSolvers>
-#include <filesystem> 
+#include <filesystem>
 //
 SHKZ_USING_NAMESPACE
 using namespace macotreeliquid3_namespace;
@@ -90,7 +90,7 @@ void debugMatrixVector(const Eigen::SparseMatrix<double>& A,
     console::dump("  Norm: %.2e\n", residual.norm());
     console::dump("  Relative: %.2e\n", residual.norm() / b.norm());
 }
-bool macoctreeproject3::solveWithBiCGSTAB (Eigen::SparseMatrix<double> &A, Eigen::VectorXd &b, Eigen::VectorXd &x) {
+bool macoctreeproject3::solveWithBiCGSTAB (Eigen::SparseMatrix<double> &A, Eigen::VectorXd &b, Eigen::VectorXd &x) { 
     //Eigen::BiCGSTAB<Eigen::SparseMatrix<double>, Eigen::IncompleteCholesky<double>> solver;
 	//Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>, Eigen::LeastSquareDiagonalPreconditioner<double>> solver;
 	Eigen::ConjugateGradient<Eigen::SparseMatrix<double>, Eigen::Lower, Eigen::IncompleteCholesky<double>> solver;
@@ -377,6 +377,7 @@ void macoctreeproject3::assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, s
 		coeff[1] = (double) (J - j[0]) / (double)(j[1] - j[0]);
 		coeff[2] = - (double) (j[3] - J) / (double)(j[3] - j[2]);
 		coeff[3] = - (double) (J - j[2]) / (double)(j[3] - j[2]);
+
 		std::vector<uint_type> cell_maps(4);
 		for (int i = 0; i < 4; i++) {
 			cell_maps[i] = grid.cell_map[cell_ids[i].index];
@@ -400,6 +401,7 @@ void macoctreeproject3::assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, s
 				// } else {
 					m_matrix.Lhs->add_to_element(p[1], p[i], ratio * scale_to_upper *coeff[i]);
 					m_matrix.Lhs->add_to_element(p[0], p[i], ratio * scale_to_lower *coeff[i]);
+
 					// coefficients.push_back(TD(p[1], p[i], ratio * scale_to_upper *coeff[i]));
 					// coefficients.push_back(TD(p[0], p[i], ratio * scale_to_lower *coeff[i]));
 				//}
@@ -434,6 +436,7 @@ void macoctreeproject3::assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, s
 				// } else {
 					m_matrix.Lhs->add_to_element(p[1], p[i],  scale_to_upper *coeff[i]);
 					m_matrix.Lhs->add_to_element(p[0], p[i],  scale_to_lower *coeff[i]);
+					
 					// coefficients.push_back(TD(p[1], p[i], scale_to_upper *coeff[i]));
 					// coefficients.push_back(TD(p[0], p[i], scale_to_lower *coeff[i]));
 				//}
@@ -462,7 +465,9 @@ void macoctreeproject3::assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, s
 				// if (use_Eigen) {
 				// 	A.coeffRef(p[1], p[i+1]) += scale_to_lower *coeff[i];
 				// } else {
+
 					m_matrix.Lhs->add_to_element(p[0], p[i+1],  scale_to_upper *coeff[i]);
+
 					// coefficients.push_back(TD(p[0], p[i+1], scale_to_upper *coeff[i]));
 				//}
 				
@@ -480,7 +485,8 @@ void macoctreeproject3::assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, s
 		// 	A.coeffRef(p[2], p[0]) += -scale;
 		// } else {
 			m_matrix.Lhs->add_to_element(p[0], p[0], scale);
-			m_matrix.Lhs->add_to_element(p[2], p[0], -scale);
+			
+			m_matrix.Lhs->add_to_element(p[0], p[2], -scale);
 			// coefficients.push_back(TD(p[0], p[0], scale));
 			// coefficients.push_back(TD(p[2], p[0], -scale));
 		//}
@@ -512,10 +518,10 @@ void macoctreeproject3::assemble_lhs_x(grid3 &grid, std::vector<uint_type> p, st
 			// 	A.coeffRef(p[1], p[0]) += -scale * ratio;
 			// 	A.coeffRef(p[1], p[1]) += scale * ratio;
 			// } else {
-				m_matrix.Lhs->add_to_element(p[0], p[0], scale * ratio);
-				m_matrix.Lhs->add_to_element(p[0], p[1], -scale * ratio);
-				m_matrix.Lhs->add_to_element(p[1], p[0], -scale * ratio);
-				m_matrix.Lhs->add_to_element(p[1], p[1], scale * ratio);
+				// m_matrix.Lhs->add_to_element(p[0], p[0], scale * ratio);
+				// m_matrix.Lhs->add_to_element(p[0], p[1], -scale * ratio);
+				// m_matrix.Lhs->add_to_element(p[1], p[0], -scale * ratio);
+				// m_matrix.Lhs->add_to_element(p[1], p[1], scale * ratio);
 				// coefficients.push_back(TD(p[0], p[0], scale * ratio));
 				// coefficients.push_back(TD(p[0], p[1], -scale * ratio));
 				// coefficients.push_back(TD(p[1], p[0], -scale * ratio));
@@ -534,23 +540,26 @@ void macoctreeproject3::assemble_lhs_x(grid3 &grid, std::vector<uint_type> p, st
 			// if (use_Eigen) {
 			// 	A.coeffRef(p[0], p[0]) += scale;
 			// } else {
-				m_matrix.Lhs->add_to_element(p[0], p[0], scale);
+				//m_matrix.Lhs->add_to_element(p[0], p[0], scale);
 			//}
 			
 		// }
 		cell_id3 neighbor_cell_id;
 		neighbor_cell_id.depth = cell_id_this.depth;
 		neighbor_cell_id.pi = cell_id_this.pi + dir * vec3i(dim==0, dim==1, dim==2);
-		neighbor_cell_id.index = grid.layers[neighbor_cell_id.depth]->active_cells(neighbor_cell_id.pi);
-		if (grid.cell_map[neighbor_cell_id.index]) {
-			uint_type neighbor_p = grid.cell_map[neighbor_cell_id.index]-1;
+		if (grid.layers[neighbor_cell_id.depth]->active_cells.safe_active(neighbor_cell_id.pi)) {
+			neighbor_cell_id.index = grid.layers[neighbor_cell_id.depth]->active_cells(neighbor_cell_id.pi);
+			if (grid.cell_map[neighbor_cell_id.index]) {
+			//uint_type neighbor_p = grid.cell_map[neighbor_cell_id.index]-1;
 			// if (use_Eigen) {
 			// 	A.coeffRef(p[0], neighbor_p) += -scale;
 			// } else { 
-				m_matrix.Lhs->add_to_element(p[0], neighbor_p, -scale);
+				//m_matrix.Lhs->add_to_element(p[0], neighbor_p, -scale);
 				//coefficients.push_back(TD(p[0], neighbor_p, -scale));
 			//}
 		}
+		}
+		
 	}
 }
 
@@ -607,10 +616,10 @@ void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf,
 	// grid.compute_face_map_merged(uf);
 	//
 	grid.compute_cell_map_merged_former(uf);
-	for (int i = 0; i < 10; i++) grid.compute_cell_map_merged_middle(uf);
+	//for (int i = 0; i < 1; i++) grid.compute_cell_map_merged_middle(uf);
 	grid.compute_cell_map_merged_latter(uf);
 
-	grid.compute_face_map_merged(uf);
+	//grid.compute_face_map_merged(uf);
 	//
 	console::dump("cell_map size: %zu\n", grid.valid_cell_count);
 	//
@@ -1154,19 +1163,19 @@ void macoctreeproject3::assemble_matrix_qc( grid3 &grid , int step_count) {
 	
 		{
 		
-		if(step_count == 40) {  // Step 40でのみ出力
-			char filename[256];
-			sprintf(filename, "/home/takebe/matrix_dumps/project/matrix_lhs_step_40.txt");
-			std::ofstream file(filename);
-			file << "Row Col Value\n";
-			for( size_t i=0; i<m_matrix.Lhs->rows(); ++i ) {
-				m_matrix.Lhs->const_for_each(i,[&]( size_t j, double v ) {
-					file << i << " " << j << " " << v << "\n";
-				});
-			}
-			file.close();
-			console::dump("Matrix dumped to: %s (Step %d)\n", filename, step_count);
-		}
+		// if(step_count == 40) {  // Step 40でのみ出力
+		// 	char filename[256];
+		// 	sprintf(filename, "/home/takebe/matrix_dumps/project/matrix_lhs_step_40.txt");
+		// 	std::ofstream file(filename);
+		// 	file << "Row Col Value\n";
+		// 	for( size_t i=0; i<m_matrix.Lhs->rows(); ++i ) {
+		// 		m_matrix.Lhs->const_for_each(i,[&]( size_t j, double v ) {
+		// 			file << i << " " << j << " " << v << "\n";
+		// 		});
+		// 	}
+		// 	file.close();
+		// 	console::dump("Matrix dumped to: %s (Step %d)\n", filename, step_count);
+		// }
 	}
 	//
 	if( m_param.check_symmetric ) {
@@ -2300,17 +2309,17 @@ void macoctreeproject3::project_density( grid3 &grid, double dt,
 	console::dump( "<<< Done. Took %s.\n", timer.stock("project").c_str());
 }
 
-void macoctreeproject3::project_cloud( grid3 &grid, double dt, int step_count, std::function<vec3d(const vec3d &p)> solid_velocity, std::vector<Real> *pressure ) {
+void macoctreeproject3::project_cloud( grid3 &grid, double dt, int step_count, int shape,std::function<vec3d(const vec3d &p)> solid_velocity, std::vector<Real> *pressure ) {
 	//
 	std::vector<uint_type> regions;
 	std::vector<Real> current_volumes;
 	std::vector<Real> target_volumes;
 	std::vector<Real> y_list;
 	//
-	project_cloud(grid,dt,step_count, 0,regions,current_volumes,target_volumes,y_list,solid_velocity,pressure);
+	project_cloud(grid,dt,step_count, shape, 0,regions,current_volumes,target_volumes,y_list,solid_velocity,pressure);
 }
 //
-void macoctreeproject3::project_cloud( grid3 &grid, double dt, int step_count,
+void macoctreeproject3::project_cloud( grid3 &grid, double dt, int step_count, int shape,
 					  size_t region_count,
 					  const std::vector<uint_type> &regions,
 					  const std::vector<Real> &current_volumes,
@@ -2478,16 +2487,16 @@ void macoctreeproject3::project_cloud( grid3 &grid, double dt, int step_count,
 		});
 		return total_kinds;
 	};
-	if (step_count == 40) {
-			char filename_rhs[256];
-			sprintf(filename_rhs, "/home/takebe/shiokaze/project/rhs_step_40.txt");
-			std::ofstream file_rhs(filename_rhs);
-			file_rhs << "Row RHS_Value\n";
-            rhs->const_for_each([&]( size_t row, double value ) {
-                file_rhs << row << " " << value << "\n";
-            });
-			file_rhs.close();
-		}
+	// if (step_count == 40) {
+	// 		char filename_rhs[256];
+	// 		sprintf(filename_rhs, "/home/takebe/shiokaze/project/rhs_step_40.txt");
+	// 		std::ofstream file_rhs(filename_rhs);
+	// 		file_rhs << "Row RHS_Value\n";
+    //         rhs->const_for_each([&]( size_t row, double value ) {
+    //             file_rhs << row << " " << value << "\n";
+    //         });
+	// 		file_rhs.close();
+	// 	}
 	//
 	timer.tick(); console::dump( "Counting and forming the vector norm kind..." );
 	std::vector<unsigned char> vector_kind; unsigned total_kinds = compute_vector_kind(vector_kind);
@@ -2515,8 +2524,25 @@ void macoctreeproject3::project_cloud( grid3 &grid, double dt, int step_count,
 		sum += rhs->at(n);
 	}
 	console::dump("RHS sum=%e\n",sum);
+	timer.tick(); console::dump("Starting solver...\n");
 	auto status = m_solver->solve(m_matrix.Lhs.get(),rhs.get(),result.get());
 	//
+	auto solving_time = timer.stock("solver_solve").c_str();
+	console::dump( "Solver done. Took %s.\n", solving_time );
+
+	// 射影の収束を解くための時間
+	char filename_pressure[256];
+	sprintf(filename_pressure, "/home/takebe/shiokaze/project/time_to_finish_solving_projection_%03d.txt", shape);
+	std::filesystem::path Time_to_finish_solving(filename_pressure);
+	if (!std::filesystem::exists(Time_to_finish_solving)) {
+		std::filesystem::create_directories(Time_to_finish_solving.parent_path());
+	}
+	std::ofstream file(Time_to_finish_solving, std::ios::app);
+	if (step_count == 0) {
+		file << "Time to Solve Projection\n";
+	}
+	file << step_count << " " << solving_time << " " << grid.valid_cell_count << "\n";
+	file.close();
 	auto build_residual_string = [&]( const std::vector<double> &rhs ) {
 		std::string str;
 		if( rhs.size() <= 4 ) {
@@ -2674,8 +2700,7 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 					  const std::vector<Real> &current_volumes,
 					  const std::vector<Real> &target_volumes,
 					  std::vector<Real> &y_list,
-					  UnionFind &uf,
-					  int shape,
+					  UnionFind &uf, int shape,
 					  std::function<vec3d(const vec3d &p)> solid_velocity,
 					  std::vector<Real> *pressure_vector ) {
 	//
@@ -2752,165 +2777,165 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 	//
 	bool use_new_rhs = false;
 	//rhsの新バージョン
-	if (use_new_rhs) 
-	grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
-		uint_type point = grid.cell_map[cell_id.index]-1;
-		if (grid.cell_map[cell_id.index]) {
-			for (char dim : DIMS3) {
-				std::vector<uint_type> p(4); //圧力点のmatrix上のidを格納する配列
-				cell_id3 neighbor_cell_id;
-				neighbor_cell_id.depth = cell_id.depth;
-				neighbor_cell_id.pi = cell_id.pi + vec3i(dim==0, dim == 1,dim == 2);
-				if (!grid.layers[neighbor_cell_id.depth]->active_cells.safe_active(neighbor_cell_id.pi)) {
-					continue;
-				}
-				neighbor_cell_id.index = grid.layers[neighbor_cell_id.depth]->active_cells(neighbor_cell_id.pi);
-				// p1はbottom1、p2はtop1、p3はbottom2、p4はtop2
-				// topはbottom+merged_cell_countで表現
-				p[0] = grid.cell_map[uf.bottom[uf.root(cell_id.index)].index] -1;
-				p[1] = grid.cell_map[uf.top[uf.root(cell_id.index)].index] -1;
-				p[2] = grid.cell_map[uf.bottom[uf.root(neighbor_cell_id.index)].index] -1;
-				p[3] = grid.cell_map[uf.top[uf.root(neighbor_cell_id.index)].index] -1;
+	// if (use_new_rhs) 
+	// grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+	// 	uint_type point = grid.cell_map[cell_id.index]-1;
+	// 	if (grid.cell_map[cell_id.index]) {
+	// 		for (char dim : DIMS3) {
+	// 			std::vector<uint_type> p(4); //圧力点のmatrix上のidを格納する配列
+	// 			cell_id3 neighbor_cell_id;
+	// 			neighbor_cell_id.depth = cell_id.depth;
+	// 			neighbor_cell_id.pi = cell_id.pi + vec3i(dim==0, dim == 1,dim == 2);
+	// 			if (!grid.layers[neighbor_cell_id.depth]->active_cells.safe_active(neighbor_cell_id.pi)) {
+	// 				continue;
+	// 			}
+	// 			neighbor_cell_id.index = grid.layers[neighbor_cell_id.depth]->active_cells(neighbor_cell_id.pi);
+	// 			// p1はbottom1、p2はtop1、p3はbottom2、p4はtop2
+	// 			// topはbottom+merged_cell_countで表現
+	// 			p[0] = grid.cell_map[uf.bottom[uf.root(cell_id.index)].index] -1;
+	// 			p[1] = grid.cell_map[uf.top[uf.root(cell_id.index)].index] -1;
+	// 			p[2] = grid.cell_map[uf.bottom[uf.root(neighbor_cell_id.index)].index] -1;
+	// 			p[3] = grid.cell_map[uf.top[uf.root(neighbor_cell_id.index)].index] -1;
 
-				bool is_uniform_this = p[0] == p[1];
-				bool is_uniform_neighbor = p[2] == p[3];
-				// ★ root を事前計算してキャッシュ
-				uint_type root_cell = uf.root(cell_id.index);
+	// 			bool is_uniform_this = p[0] == p[1];
+	// 			bool is_uniform_neighbor = p[2] == p[3];
+	// 			// ★ root を事前計算してキャッシュ
+	// 			uint_type root_cell = uf.root(cell_id.index);
 
-				uint_type root_neighbor = uf.root(neighbor_cell_id.index);
+	// 			uint_type root_neighbor = uf.root(neighbor_cell_id.index);
 
-				// ★ top/bottom を事前取得
-				cell_id3 top1 = uf.top[root_cell];
-				cell_id3 bottom1 = uf.bottom[root_cell];
-				cell_id3 top2 = uf.top[root_neighbor];
-				cell_id3 bottom2 = uf.bottom[root_neighbor];
-				double dx = grid.get_cell_dx(cell_id);
-				//bool upper = true;
-				bool is_top1_bigger = (grid.get_cell_position(cell_id)[0] > grid.get_cell_position(top2)[0]);
-				bool is_bottom1_bigger = (grid.get_cell_position(bottom1)[0] > grid.get_cell_position(bottom2)[0]);
-				//以下はassemble_RHSの中身。関数から呼び出すと遅かったので直接書くことで関数呼び出しオーバーヘッドを削減（？）
+	// 			// ★ top/bottom を事前取得
+	// 			cell_id3 top1 = uf.top[root_cell];
+	// 			cell_id3 bottom1 = uf.bottom[root_cell];
+	// 			cell_id3 top2 = uf.top[root_neighbor];
+	// 			cell_id3 bottom2 = uf.bottom[root_neighbor];
+	// 			double dx = grid.get_cell_dx(cell_id);
+	// 			//bool upper = true;
+	// 			bool is_top1_bigger = (grid.get_cell_position(cell_id)[0] > grid.get_cell_position(top2)[0]);
+	// 			bool is_bottom1_bigger = (grid.get_cell_position(bottom1)[0] > grid.get_cell_position(bottom2)[0]);
+	// 			//以下はassemble_RHSの中身。関数から呼び出すと遅かったので直接書くことで関数呼び出しオーバーヘッドを削減（？）
 
-				if (dim == 1 || dim == 2) {//x方向以外
-					//p[1]は今回top1, p[0]はbottom1に対応
-					//LHSと現状逆になっていることに注意
+	// 			if (dim == 1 || dim == 2) {//x方向以外
+	// 				//p[1]は今回top1, p[0]はbottom1に対応
+	// 				//LHSと現状逆になっていることに注意
 
-					cell_id3 p_top = (grid.get_cell_position(top1)[0] < grid.get_cell_position(top2)[0]) ? top1 : top2;
-					cell_id3 p_bottom = (grid.get_cell_position(bottom1)[0] > grid.get_cell_position(bottom2)[0]) ? bottom1 : bottom2;
+	// 				cell_id3 p_top = (grid.get_cell_position(top1)[0] < grid.get_cell_position(top2)[0]) ? top1 : top2;
+	// 				cell_id3 p_bottom = (grid.get_cell_position(bottom1)[0] > grid.get_cell_position(bottom2)[0]) ? bottom1 : bottom2;
 
-					//int n = (p_top.pi - p_bottom.pi)[0];
-					if (cell_id.pi[0] == top2.pi[0] || cell_id.pi[0] == bottom2.pi[0]) { //x方向以外の均一セル 対称性◯
+	// 				//int n = (p_top.pi - p_bottom.pi)[0];
+	// 				if (cell_id.pi[0] == top2.pi[0] || cell_id.pi[0] == bottom2.pi[0]) { //x方向以外の均一セル 対称性◯
 
-						if (grid.face_map[grid.layers[neighbor_cell_id.depth]->active_faces[dim](neighbor_cell_id.pi)])
-						rhs->add(point, dx*dx* (grid.velocity[grid.layers[neighbor_cell_id.depth]->active_faces[dim](neighbor_cell_id.pi)] ));
+	// 					if (grid.face_map[grid.layers[neighbor_cell_id.depth]->active_faces[dim](neighbor_cell_id.pi)])
+	// 					rhs->add(point, dx*dx* (grid.velocity[grid.layers[neighbor_cell_id.depth]->active_faces[dim](neighbor_cell_id.pi)] ));
 
-						if (grid.face_map[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)])
-						rhs->add(point, dx*dx*(- grid.velocity[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)]));
+	// 					if (grid.face_map[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)])
+	// 					rhs->add(point, dx*dx*(- grid.velocity[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)]));
 
-					}
-					else if ( (is_top1_bigger && is_bottom1_bigger) || (!is_top1_bigger && !is_bottom1_bigger) ) { //mergedセルのうち両方ともtop2/bottom2より大きいor小さい場合
-						if (is_top1_bigger) {
+	// 				}
+	// 				else if ( (is_top1_bigger && is_bottom1_bigger) || (!is_top1_bigger && !is_bottom1_bigger) ) { //mergedセルのうち両方ともtop2/bottom2より大きいor小さい場合
+	// 					if (is_top1_bigger) {
 
-							if (grid.face_map[grid.layers[neighbor_cell_id.depth]->active_faces[dim](neighbor_cell_id.pi)]) {
-								// if (use_Eigen) {
-								// 	b(point) += dx*dx* (grid.velocity[grid.layers[neighbor_cell_id.depth]->active_faces[dim](top2.pi)]);
-								// } else {
-									rhs->add(point, dx*dx* (grid.velocity[grid.layers[neighbor_cell_id.depth]->active_faces[dim](top2.pi)]));
-								//}
-							}
+	// 						if (grid.face_map[grid.layers[neighbor_cell_id.depth]->active_faces[dim](neighbor_cell_id.pi)]) {
+	// 							// if (use_Eigen) {
+	// 							// 	b(point) += dx*dx* (grid.velocity[grid.layers[neighbor_cell_id.depth]->active_faces[dim](top2.pi)]);
+	// 							// } else {
+	// 								rhs->add(point, dx*dx* (grid.velocity[grid.layers[neighbor_cell_id.depth]->active_faces[dim](top2.pi)]));
+	// 							//}
+	// 						}
 
-							if (grid.face_map[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)]) {
-								// if (use_Eigen) {
-								// 	b(point) += dx*dx* ( - grid.velocity[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)]);
-								// } else {
-									rhs->add(point, dx*dx*( - grid.velocity[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)]));
-								//}
-							}
-						} else if (!is_top1_bigger) {
+	// 						if (grid.face_map[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)]) {
+	// 							// if (use_Eigen) {
+	// 							// 	b(point) += dx*dx* ( - grid.velocity[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)]);
+	// 							// } else {
+	// 								rhs->add(point, dx*dx*( - grid.velocity[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)]));
+	// 							//}
+	// 						}
+	// 					} else if (!is_top1_bigger) {
 
-							if (grid.face_map[grid.layers[neighbor_cell_id.depth]->active_faces[dim](neighbor_cell_id.pi)]) {
-								// if (use_Eigen) {
-								// 	b(point) += dx*dx* (grid.velocity[grid.layers[neighbor_cell_id.depth]->active_faces[dim](cell_id.pi)]);
-								// } else {
-									rhs->add(point, dx*dx* (grid.velocity[grid.layers[neighbor_cell_id.depth]->active_faces[dim](cell_id.pi)]));
-								//}
+	// 						if (grid.face_map[grid.layers[neighbor_cell_id.depth]->active_faces[dim](neighbor_cell_id.pi)]) {
+	// 							// if (use_Eigen) {
+	// 							// 	b(point) += dx*dx* (grid.velocity[grid.layers[neighbor_cell_id.depth]->active_faces[dim](cell_id.pi)]);
+	// 							// } else {
+	// 								rhs->add(point, dx*dx* (grid.velocity[grid.layers[neighbor_cell_id.depth]->active_faces[dim](cell_id.pi)]));
+	// 							//}
 								
-							}
+	// 						}
 							
 
-							if (grid.face_map[grid.layers[cell_id.depth]->active_faces[dim](bottom1.pi)]) {
-								// if (use_Eigen) {
-								// 	b(point) += dx*dx* ( - grid.velocity[grid.layers[cell_id.depth]->active_faces[dim](bottom1.pi)]);
-								// } else {
-									rhs->add(point, dx*dx*( - grid.velocity[grid.layers[cell_id.depth]->active_faces[dim](bottom1.pi)]));
-								//}
-							}
-						}
-					}
-				}
-				else {//dim==0(x方向)
-					double u_upper = grid.velocity[grid.layers[top1.depth]->active_faces[dim](top1.pi+vec3i(1,0,0))];
-					double u_lower = grid.velocity[grid.layers[bottom1.depth]->active_faces[dim](bottom1.pi)];
-					double u_avg = (u_upper + u_lower) * 0.5;
+	// 						if (grid.face_map[grid.layers[cell_id.depth]->active_faces[dim](bottom1.pi)]) {
+	// 							// if (use_Eigen) {
+	// 							// 	b(point) += dx*dx* ( - grid.velocity[grid.layers[cell_id.depth]->active_faces[dim](bottom1.pi)]);
+	// 							// } else {
+	// 								rhs->add(point, dx*dx*( - grid.velocity[grid.layers[cell_id.depth]->active_faces[dim](bottom1.pi)]));
+	// 							//}
+	// 						}
+	// 					}
+	// 				}
+	// 			}
+	// 			else {//dim==0(x方向)
+	// 				double u_upper = grid.velocity[grid.layers[top1.depth]->active_faces[dim](top1.pi+vec3i(1,0,0))];
+	// 				double u_lower = grid.velocity[grid.layers[bottom1.depth]->active_faces[dim](bottom1.pi)];
+	// 				double u_avg = (u_upper + u_lower) * 0.5;
 
-					if (top1.index==bottom1.index) {//均一セルの場合
+	// 				if (top1.index==bottom1.index) {//均一セルの場合
 
-						if (grid.face_map[grid.layers[neighbor_cell_id.depth]->active_faces[dim](neighbor_cell_id.pi+vec3i(1,0,0))]) {
-							// if (use_Eigen) {
-							// 	b(point) += dx*dx* ( grid.velocity[grid.layers[neighbor_cell_id.depth]->active_faces[dim](neighbor_cell_id.pi)]);
-							// } else {
-								rhs->add(point, dx*dx* ( grid.velocity[grid.layers[neighbor_cell_id.depth]->active_faces[dim](neighbor_cell_id.pi)]));
-							//}
-						}
+	// 					if (grid.face_map[grid.layers[neighbor_cell_id.depth]->active_faces[dim](neighbor_cell_id.pi+vec3i(1,0,0))]) {
+	// 						// if (use_Eigen) {
+	// 						// 	b(point) += dx*dx* ( grid.velocity[grid.layers[neighbor_cell_id.depth]->active_faces[dim](neighbor_cell_id.pi)]);
+	// 						// } else {
+	// 							rhs->add(point, dx*dx* ( grid.velocity[grid.layers[neighbor_cell_id.depth]->active_faces[dim](neighbor_cell_id.pi)]));
+	// 						//}
+	// 					}
 
-						if (grid.face_map[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)]) {
-							// if (use_Eigen) {
-							// 	b(point) += dx*dx* ( - grid.velocity[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)]);
-							// } else {
-								rhs->add(point, dx*dx* ( - grid.velocity[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)]));
-							//}
-						}
-					}
-					else {//mergedセルの場合
-						if (cell_id.index == top1.index) {
-							if (grid.face_map[grid.layers[top1.depth]->active_faces[dim](top1.pi+vec3i(1,0,0))])  {
-								// if (use_Eigen) {
-								// 	b(point) += dx*dx* ( u_upper);
-								// 	b(point) += dx*dx* ( - u_avg);
-								// } else {
-									rhs->add(point, dx*dx* ( u_upper));
-									rhs->add(point, dx*dx* (- u_avg) );
-								//}
-							}
-						}
-						else if (cell_id.index == bottom1.index) {
-							if (grid.face_map[grid.layers[bottom1.depth]->active_faces[dim](bottom1.pi)]) {
-								// if (use_Eigen) {
-								// 	b(point) += dx*dx* ( u_avg);
-								// 	b(point) += dx*dx* ( - u_lower);
-								// } else {
-									rhs->add(point, dx*dx* ( u_avg));
-									rhs->add(point, dx*dx* (- u_lower));
-								//}
-							}
-						}
-					}
-				}
-			}
-		}
-	});
-		if (step_count == 40) {
-			std::filesystem::path filename_rhs = "/home/takebe/shiokaze/project_merged_cell/rhs_step_40.txt";
-			sprintf(filename_rhs, "/home/takebe/shiokaze/project_merged_cell/rhs_step_40.txt");
-			std::ofstream file_rhs(filename_rhs);
-			file_rhs << "Row RHS_Value\n";
-            rhs->const_for_each([&]( size_t row, double value ) {
-                file_rhs << row << " " << value << "\n";
-            });
-			file_rhs.close();
-		}
+	// 					if (grid.face_map[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)]) {
+	// 						// if (use_Eigen) {
+	// 						// 	b(point) += dx*dx* ( - grid.velocity[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)]);
+	// 						// } else {
+	// 							rhs->add(point, dx*dx* ( - grid.velocity[grid.layers[cell_id.depth]->active_faces[dim](cell_id.pi)]));
+	// 						//}
+	// 					}
+	// 				}
+	// 				else {//mergedセルの場合
+	// 					if (cell_id.index == top1.index) {
+	// 						if (grid.face_map[grid.layers[top1.depth]->active_faces[dim](top1.pi+vec3i(1,0,0))])  {
+	// 							// if (use_Eigen) {
+	// 							// 	b(point) += dx*dx* ( u_upper);
+	// 							// 	b(point) += dx*dx* ( - u_avg);
+	// 							// } else {
+	// 								rhs->add(point, dx*dx* ( u_upper));
+	// 								rhs->add(point, dx*dx* (- u_avg) );
+	// 							//}
+	// 						}
+	// 					}
+	// 					else if (cell_id.index == bottom1.index) {
+	// 						if (grid.face_map[grid.layers[bottom1.depth]->active_faces[dim](bottom1.pi)]) {
+	// 							// if (use_Eigen) {
+	// 							// 	b(point) += dx*dx* ( u_avg);
+	// 							// 	b(point) += dx*dx* ( - u_lower);
+	// 							// } else {
+	// 								rhs->add(point, dx*dx* ( u_avg));
+	// 								rhs->add(point, dx*dx* (- u_lower));
+	// 							//}
+	// 						}
+	// 					}
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// });
+		// if (step_count == 40) {
+		// 	char filename_rhs[256];
+		// 	sprintf(filename_rhs, "/home/takebe/shiokaze/project_merged_cell/rhs_step_40.txt");
+		// 	std::ofstream file_rhs(filename_rhs);
+		// 	file_rhs << "Row RHS_Value\n";
+        //     rhs->const_for_each([&]( size_t row, double value ) {
+        //         file_rhs << row << " " << value << "\n";
+        //     });
+		// 	file_rhs.close();
+		// }
 
 	//rhs設計の旧バージョン
-	if (!use_new_rhs)
+	//if (!use_new_rhs)
 	grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
 		for (int dir = -1; dir <= 1; dir += 2) {
 			for (char dim : DIMS3) {
@@ -2964,7 +2989,11 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 							dir = -1;
 							u_avg = u_avg_lower;
 						}
-						if ( !top1_bigger && !bottom1_bigger && !((top1==top2) && (bottom1==bottom2))) {
+						if (top1.index == bottom1.index) {
+							//均一セルの場合
+							rhs->add(p[0], u_avg * dir * dx * dx / dx);
+						}
+						else if ( !top1_bigger && !bottom1_bigger && !((top1==top2) && (bottom1==bottom2))) {
 							double a = (top1.pi[0] - p_bottom.pi[0] + 1) / (double)(top1.pi[0] - bottom1.pi[0] + 1);
 							double t = (grid.get_cell_position(top1)[0] - (grid.get_cell_position(p_bottom)[0] + grid.get_cell_position(p_top)[0])/2.0) / (grid.get_cell_position(top1)[0] - grid.get_cell_position(bottom1)[0]);
 							A = dx*dx * (p_top.pi[0] - p_bottom.pi[0] + 1);
@@ -3156,6 +3185,7 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 	//
 	timer.tick(); console::dump( "Solving the linear system..." );
 	rhs->const_for_each([]( size_t row, double value ){
+		if (utility::is_nan(value)) console::dump("RHS[%zu]=%e\n", row, value);
 		assert( ! utility::is_nan(value));
 	});
 	//
@@ -3176,58 +3206,57 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 	// } else {
 	timer.tick(); console::dump( "Starting solver..." );
 	auto status = m_solver->solve(m_matrix.Lhs.get(),rhs.get(),result.get());
-	auto time_to_solve = timer.stock("solver_solve").c_str();
-	console::dump( "Solver done. Took %s.\n",time_to_solve);
+	auto solving_time = timer.stock("solver_solve").c_str();
+	console::dump( "Solver done. Took %s.\n", solving_time );
 
-	//圧力を解くのにかかった時間の書き出し
-	char filename[256];
-	sprintf(filename, "/home/takebe/shiokaze/project_merged_cell/time_to_solve_Projection_%03d.txt", shape);
-	std::filesystem::path Time_to_solve_Projection(filename);
-	if (!std::filesystem::exists(Time_to_solve_Projection)) {
-		std::filesystem::create_directories(Time_to_solve_Projection.parent_path());
+	// 射影の収束を解くための時間
+	char filename_pressure[256];
+	sprintf(filename_pressure, "/home/takebe/shiokaze/project_merged_cell/time_to_finish_solving_projection_%03d.txt", shape);
+	std::filesystem::path Time_to_finish_solving(filename_pressure);
+	if (!std::filesystem::exists(Time_to_finish_solving)) {
+		std::filesystem::create_directories(Time_to_finish_solving.parent_path());
 	}
-	std::ofstream file(Time_to_solve_Projection, std::ios::app);
+	std::ofstream file(Time_to_finish_solving, std::ios::app);
 	if (step_count == 0) {
-		file << "Step Count Time to Solve\n";
+		file << "Time to Solve Projection\n";
 	}
-	file << step_count << " " << time_to_solve << "\n";
+	file << step_count << " " << solving_time << " " << grid.valid_cell_count << "\n";
 	file.close();
-	//
+	console::dump("Wrote time to solve projection to %s\n", filename_pressure);
 
-	
-	double max_result (0.0);
-	double min_result (100000000.0);
-	for (size_t n=0; n<grid.valid_cell_count; ++n ) {
-		double val = result->at(n);
-		max_result = std::max(max_result,val);
-		min_result = std::min(min_result,val);
-	}
-	double min_x_velocity (100000000.0);
-	double max_x_velocity (-100000000.0);
-	double min_y_velocity (100000000.0);
-	double max_y_velocity (-100000000.0);
-	double min_z_velocity (100000000.0);
-	double max_z_velocity (-100000000.0);
-	grid.iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
-		if( grid.face_map[face_id.index] ) {
-			double velocity = grid.velocity[face_id.index];
-			if( face_id.dim == 0 ) {
-				min_x_velocity = std::min(min_x_velocity,velocity);
-				max_x_velocity = std::max(max_x_velocity,velocity);
-			} else if( face_id.dim == 1 ) {
-				min_y_velocity = std::min(min_y_velocity,velocity);
-				max_y_velocity = std::max(max_y_velocity,velocity);
-			} else if( face_id.dim == 2 ) {
-				min_z_velocity = std::min(min_z_velocity,velocity);
-				max_z_velocity = std::max(max_z_velocity,velocity);
-			}
-		}
-	});
-	console::dump("X velocity min=%.2e, max=%.2e\n",min_x_velocity,max_x_velocity);
-	console::dump("Y velocity min=%.2e, max=%.2e\n",min_y_velocity,max_y_velocity);
-	console::dump("Z velocity min=%.2e, max=%.2e\n",min_z_velocity,max_z_velocity);
+	// double max_result (0.0);
+	// double min_result (100000000.0);
+	// for (size_t n=0; n<grid.valid_cell_count; ++n ) {
+	// 	double val = result->at(n);
+	// 	max_result = std::max(max_result,val);
+	// 	min_result = std::min(min_result,val);
+	// }
+	// double min_x_velocity (100000000.0);
+	// double max_x_velocity (-100000000.0);
+	// double min_y_velocity (100000000.0);
+	// double max_y_velocity (-100000000.0);
+	// double min_z_velocity (100000000.0);
+	// double max_z_velocity (-100000000.0);
+	// grid.iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
+	// 	if( grid.face_map[face_id.index] ) {
+	// 		double velocity = grid.velocity[face_id.index];
+	// 		if( face_id.dim == 0 ) {
+	// 			min_x_velocity = std::min(min_x_velocity,velocity);
+	// 			max_x_velocity = std::max(max_x_velocity,velocity);
+	// 		} else if( face_id.dim == 1 ) {
+	// 			min_y_velocity = std::min(min_y_velocity,velocity);
+	// 			max_y_velocity = std::max(max_y_velocity,velocity);
+	// 		} else if( face_id.dim == 2 ) {
+	// 			min_z_velocity = std::min(min_z_velocity,velocity);
+	// 			max_z_velocity = std::max(max_z_velocity,velocity);
+	// 		}
+	// 	}
+	// });
+	// console::dump("X velocity min=%.2e, max=%.2e\n",min_x_velocity,max_x_velocity);
+	// console::dump("Y velocity min=%.2e, max=%.2e\n",min_y_velocity,max_y_velocity);
+	// console::dump("Z velocity min=%.2e, max=%.2e\n",min_z_velocity,max_z_velocity);
 
-	console::dump("Result min=%.2e, max=%.2e\n",min_result,max_result);
+	// console::dump("Result min=%.2e, max=%.2e\n",min_result,max_result);
 	//
 	auto build_residual_string = [&]( const std::vector<double> &rhs ) {
 		std::string str;
@@ -3287,27 +3316,17 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 	grid.iterate_active_faces([&]( const face_id3 &face_id, int tid ) {
 
 		vec2d center (0.5*grid.param.scale, 0.5*grid.param.scale);
-
+		vec3d face_pos = grid.get_face_position(face_id);
 		grid.get_scaled_gradient_qc(face_id,[&]( const cell_id3 &cell_id, double value, const grid3::gradient_info3_cloud &info ) {
 			double dx = grid.get_cell_dx(cell_id);
 			double scale = value / pow(dx,3);
-			vec3d face_pos = grid.get_face_position(face_id);
-			vec2d p_from_center = vec2d(face_pos[1], face_pos[2]) - center;
-
+			
 			if (grid.cell_map[cell_id.index] ) { //cell_mapが存在、もしくはmerged_cellの中にある、という条件づけ
 				double v = result->at(grid.cell_map[cell_id.index]-1) * scale;
-				// if (face_id.dim == 1) {
-				// 	//y方向の速度成分
-				// 	if (p_from_center.len() < 0.3 * grid.param.scale) {
-				// 		double r = p_from_center.len();
-				// 		grid.velocity[face_id.index] -= (v < 0) ? v * (0.7 - r / grid.param.scale) : 0.1 *v;
-				// 	} else {
-				// 		grid.velocity[face_id.index] -= v / 10;
-				// 	}
-				// }
-				// else grid.velocity[face_id.index] -= v / 5 ;
-
-				grid.velocity[face_id.index] -= v / 4;
+				//grid.velocity[face_id.index] -= v / 8;
+				// if (face_id.dim != 1) grid.velocity[face_id.index] -= v / 10;
+				// else grid.velocity[face_id.index] -= v < 0 ? v : 0.01 * v; //y方向の圧力勾配は減衰させる
+				grid.velocity[face_id.index] -= v;
 			} 
 			else if (grid.cell_map[uf.top[uf.root(cell_id.index)].index] && grid.cell_map[uf.bottom[uf.root(cell_id.index)].index] && uf.top[uf.root(cell_id.index)].index != uf.bottom[uf.root(cell_id.index)].index) {
 				//merged_cellの中にある場合
@@ -3316,18 +3335,12 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 				double pressure_top = result->at(grid.cell_map[top.index]-1);
 				double pressure_bottom = result->at(grid.cell_map[bottom.index]-1);
 				double t = (grid.get_cell_position(cell_id)[0] - grid.get_cell_position(bottom)[0]) / (grid.get_cell_position(top)[0] - grid.get_cell_position(bottom)[0]);
-				
+				//if (face_id.dim !=1)
 				double v = (t * pressure_top + (1-t) * pressure_bottom) * scale;
-				// if (face_id.dim == 1) {
-				// 	//y方向の速度成分
-				// 	if (p_from_center.len() < 0.3 * grid.param.scale) {
-				// 		grid.velocity[face_id.index] -= (v < 0) ? v / 3 : 0.1 *v;
-				// 	} else {
-				// 		grid.velocity[face_id.index] -= v / 3;
-				// 	}
-				// } else grid.velocity[face_id.index] -= v / 5;
-
-				grid.velocity[face_id.index] -= v/3;
+				// if (face_id.dim != 1) grid.velocity[face_id.index] -= v / 10;
+				// else grid.velocity[face_id.index] -= v < 0 ? v : 0.01 * v; //y方向の圧力勾配は減衰させる
+				
+				grid.velocity[face_id.index] -= v;
 			}
 		});
 	});

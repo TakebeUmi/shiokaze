@@ -3847,7 +3847,7 @@ void grid3::compute_cell_map_cloud () {
 	//
 	iterate_active_cells([&](const cell_id3 &cell_id, int tid ) {
 		bool valid (false);
-		if ( qc[cell_id.index] >= 0.0 ) {
+		//if ( qc[cell_id.index] >= 0.0 ) {
 			bool open (false);
 			for( char dim : DIMS3 ) {
 				this->iterate_face_neighbors(cell_id,dim,[&]( const face_id3 &face_id ){
@@ -3861,7 +3861,7 @@ void grid3::compute_cell_map_cloud () {
 			if( open ) {
 				cell_map[cell_id.index] = 1;
 			}
-		}
+		//}
 	});
 	//
 	for( uint_type n=0; n<cell_count; ++n ) {
@@ -3957,16 +3957,20 @@ void grid3::compute_cell_map_merged_former(UnionFind &uf) {
 	
 		iterate_active_cells([&](const cell_id3 &cell_id, int tid ) {
 			bool valid (false);
-			bool open (false);
+			//bool open (false);
+			bool open(false);
 			//mergedセルのtop/bottomかどうか
 			if ((cell_id.index == uf.top[uf.root(cell_id.index)].index || cell_id.index == uf.bottom[uf.root(cell_id.index)].index) && uf.top[uf.root(cell_id.index)].index != uf.bottom[uf.root(cell_id.index)].index) open = true;
-			
-			//隣がmergedセルのtop/bottomかどうか
+			// //隣がmergedセルのtop/bottomかどうか
 			iterate_cell_neighbors(cell_id,[&]( char dim, const cell_id3 &cell_neigh_id ) {
 				if (((cell_neigh_id.index == uf.top[uf.root(cell_id.index)].index 
 				|| cell_neigh_id.index == uf.bottom[uf.root(cell_id.index)].index)
 				 && uf.top[uf.root(cell_id.index)].index == uf.bottom[uf.root(cell_id.index)].index)) open = true;
 			});
+			//mergedの中間ならfalse
+			if ((uf.top[uf.root(cell_id.index)].index != cell_id.index && uf.bottom[uf.root(cell_id.index)].index != cell_id.index && uf.top[uf.root(cell_id.index)].index != uf.bottom[uf.root(cell_id.index)].index)) {
+				open = false;
+			}
 			if( open ) {
 				cell_map[cell_id.index] = 1;
 			}
@@ -3974,10 +3978,15 @@ void grid3::compute_cell_map_merged_former(UnionFind &uf) {
 }
 
 void grid3::compute_cell_map_merged_middle(UnionFind &uf) {
-	iterate_active_cells([&](const cell_id3 &cell_id, int tid ) {
+	serial_iterate_active_cells([&](const cell_id3 &cell_id) {
 		iterate_cell_neighbors(cell_id,[&]( char dim, const cell_id3 &cell_neigh_id ) {
-			if (cell_map[cell_neigh_id.index] && (uf.top[uf.root(cell_id.index)].index != cell_id.index && uf.bottom[uf.root(cell_id.index)].index != cell_id.index) && uf.top[uf.root(cell_id.index)].index != uf.bottom[uf.root(cell_id.index)].index) {
+			//隣がcell_mapにあるなら1を
+			if (cell_map[cell_neigh_id.index] ) {
 				cell_map[cell_id.index] = 1;
+			}
+			//mergedの中間なら0を
+			if ((uf.top[uf.root(cell_id.index)].index != cell_id.index && uf.bottom[uf.root(cell_id.index)].index != cell_id.index)) {
+				cell_map[cell_id.index] = 0;
 			}
 		});
 	});
@@ -4005,14 +4014,14 @@ void grid3::compute_cell_map_merged (UnionFind &uf ) {
 			bool valid (false);
 			bool open (false);
 			//mergedセルのtop/bottomかどうか
-			if ((cell_id.index == uf.top[uf.root(cell_id.index)].index || cell_id.index == uf.bottom[uf.root(cell_id.index)].index) && uf.top[uf.root(cell_id.index)].index != uf.bottom[uf.root(cell_id.index)].index) open = true;
-			
+			// if ((cell_id.index == uf.top[uf.root(cell_id.index)].index || cell_id.index == uf.bottom[uf.root(cell_id.index)].index) && uf.top[uf.root(cell_id.index)].index != uf.bottom[uf.root(cell_id.index)].index) open = true;
+			if ((cell_id.index == uf.top[uf.root(cell_id.index)].index || cell_id.index == uf.bottom[uf.root(cell_id.index)].index) ) open = true;
 			//隣がmergedセルのtop/bottomかどうか
-			iterate_cell_neighbors(cell_id,[&]( char dim, const cell_id3 &cell_neigh_id ) {
-				if (((cell_neigh_id.index == uf.top[uf.root(cell_id.index)].index 
-				|| cell_neigh_id.index == uf.bottom[uf.root(cell_id.index)].index)
-				 && uf.top[uf.root(cell_id.index)].index == uf.bottom[uf.root(cell_id.index)].index)) open = true;
-			});
+			// iterate_cell_neighbors(cell_id,[&]( char dim, const cell_id3 &cell_neigh_id ) {
+			// 	if (((cell_neigh_id.index == uf.top[uf.root(cell_id.index)].index 
+			// 	|| cell_neigh_id.index == uf.bottom[uf.root(cell_id.index)].index)
+			// 	 && uf.top[uf.root(cell_id.index)].index == uf.bottom[uf.root(cell_id.index)].index)) open = true;
+			// });
 			// iterate_cell_neighbors(cell_id,[&]( char dim, const cell_id3 &cell_neigh_id ) {
 			// 	if ((cell_map[cell_neigh_id.index] )
 			// 	 && !(uf.top[uf.root(cell_id.index)].index != cell_id.index && uf.bottom[uf.root(cell_id.index)].index != cell_id.index)) open = true;

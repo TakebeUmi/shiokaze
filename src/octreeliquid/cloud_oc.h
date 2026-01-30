@@ -52,6 +52,7 @@
 #include <shiokaze/cellmesher/cellmesher3_interface.h>
 #include <shiokaze/graphics/graphics_interface.h>
 #include "macoctreemesher3.h"
+#include <fftw3.h>
 //
 SHKZ_BEGIN_NAMESPACE
 //
@@ -229,6 +230,8 @@ protected:
 	void print_position(grid3 &grid) const;
 	double perlin_noise_source(const vec3d &p) const;
 	double circle_source(const vec3d &p) const;
+
+	void compute_energy_spectrum_fftw( const grid3 &grid, bool use_all_cells );
 	//added
 };
 //

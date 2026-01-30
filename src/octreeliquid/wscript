@@ -125,6 +125,6 @@ def build(bld):
 			target = bld.get_target_name(bld,'cloud_oc'),
 			includes = [os.path.expanduser('~/local/include')],
 			libpath = [os.path.expanduser('~/local/lib')],
-			lib = ['openvdb', 'tbb', 'Half', 'Imath', 'z', 'blosc'],
+			lib = ['openvdb', 'tbb', 'Half', 'Imath', 'z', 'blosc', 'fftw3'],
 			cxxflags = ['-DSPATIAL_DIM=3', '-I../'],
 			use = bld.get_target_name(bld,['core','timestepper','macutility3','images','octreeliquid','macoctreegrid3','macoctreeproject3','macoctreehelper3','macoctreesegregator3','macoctreesizingfunc3','macoctreemesher3']))

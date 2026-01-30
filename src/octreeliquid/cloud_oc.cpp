@@ -23,7 +23,10 @@
 */
 //
 #include "cloud_oc.h"
+#include <filesystem>
 #include <openvdb/openvdb.h>
+#include <openvdb/io/File.h>
+#include <fftw3.h>
 #include <shiokaze/core/console.h>
 #include <shiokaze/core/timer.h>
 #include <shiokaze/core/filesystem.h>
@@ -52,7 +55,7 @@ SHKZ_USING_NAMESPACE
 
 cloud_oc::cloud_oc () {
 	//
-	int coeff = 1;
+	int coeff = 3;
 	m_shape = shape3(64*coeff,64*coeff,64*coeff);
 	//m_dx = m_shape.dx();
 }
@@ -70,6 +73,94 @@ void cloud_oc::load( configuration &config ) {
 	//
 	m_param.render_density = console::system("mitsuba > /dev/null 2>&1") == 0;
 	config.get_bool("RenderDensity",m_param.render_density,"Whether to render density");
+}
+
+void cloud_oc::compute_energy_spectrum_fftw(const grid3 &grid, bool use_all_cells) {
+
+	int N = m_shape[0];
+    std::vector<double> energy_spectrum_total(N/2, 0.0);
+    
+    // u, v, w 各成分を個別に処理
+    for (int comp = 0; comp < 3; comp++) {
+        std::vector<double> velocity_comp(N*N*N, 0.0);
+        
+        // 各成分の速度を収集
+        grid.serial_iterate_active_cells([&](const cell_id3 &cell_id) {
+            if (cell_id.pi[0] < N && cell_id.pi[1] < N && cell_id.pi[2] < N) {
+                int idx = cell_id.pi[0] + cell_id.pi[1]*N + cell_id.pi[2]*N*N;
+                vec3d velocity = grid.sample_velocity(grid.get_cell_position(cell_id));
+                velocity_comp[idx] = velocity[comp]; // 0=u, 1=v, 2=w
+            }
+        });
+        
+        // FFTW メモリ割り当て
+        fftw_complex *in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * N*N*N);
+        fftw_complex *out = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * N*N*N);
+        fftw_plan p = fftw_plan_dft_3d(N, N, N, in, out, FFTW_FORWARD, FFTW_MEASURE);
+        
+        // 入力データをセット
+        for (int i = 0; i < N*N*N; i++) {
+            in[i][0] = velocity_comp[i];
+            in[i][1] = 0.0;
+        }
+        
+        // FFT 実行
+        fftw_execute(p);
+        
+        // エネルギースペクトル計算
+        std::vector<double> energy_spectrum(N/2, 0.0);
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N; j++) {
+                for (int k = 0; k < N; k++) {
+                    int idx = i + j*N + k*N*N;
+                    double real_part = out[idx][0];
+                    double imag_part = out[idx][1];
+                    double energy = real_part*real_part + imag_part*imag_part;
+                    
+                    int wavenumber = (int)std::sqrt(i*i + j*j + k*k);
+                    if (wavenumber < N/2) {
+                        energy_spectrum[wavenumber] += energy;
+                    }
+                }
+            }
+        }
+        
+        // 3成分を合算
+        for (int k = 0; k < N/2; k++) {
+            energy_spectrum_total[k] += energy_spectrum[k];
+        }
+        
+        // クリーンアップ
+        fftw_destroy_plan(p);
+        fftw_free(in);
+        fftw_free(out);
+    }
+    
+    // 3成分の平均を計算
+    for (int k = 0; k < N/2; k++) {
+        energy_spectrum_total[k] /= (3.0);
+    }
+
+	char filename_energy_spectrum[256];
+	if (use_all_cells) {
+		sprintf(filename_energy_spectrum, 
+				"/home/takebe/shiokaze/project/energy_spectrum/energy_spectrum_%03d_%03d.txt", 
+				N, m_timestepper->get_step_count());
+	} else {
+		sprintf(filename_energy_spectrum, 
+				"/home/takebe/shiokaze/project_merged/energy_spectrum/energy_spectrum_%03d_%03d.txt", 
+				N, m_timestepper->get_step_count());
+	}
+	std::filesystem::path energy_spectrum_path(filename_energy_spectrum);
+	if (!std::filesystem::exists(energy_spectrum_path)) {
+		std::filesystem::create_directories(energy_spectrum_path.parent_path());
+	}
+    std::ofstream spectrum_file(energy_spectrum_path);
+    for (int k = 0; k < N/2; k++) {
+        spectrum_file << k << " " << energy_spectrum_total[k] << "\n";
+    }
+    spectrum_file.close();
+
 }
 
 //added
@@ -232,6 +323,7 @@ void cloud_oc::configure( configuration &config ) {
 //
 void cloud_oc::post_initialize ( bool initialized_from_file ) {
 	//
+	openvdb::initialize();
 	scoped_timer timer(this);
 	//
 	timer.tick(); console::dump( ">>> Started initialization (%dx%dx%d)\n", m_shape[0], m_shape[1], m_shape[2] );
@@ -547,23 +639,24 @@ void cloud_oc::idle() {
 	}
 	int all_cell_count = cell_ids_included_merged_cells.size();
 	// // Project(added)
-	bool use_all_cells = false;
+	bool use_all_cells = true;
+	console::dump("is Used all cells: %d\n", use_all_cells);
 	bool use_Eigen = false;
 	Eigen::SparseMatrix<double> A;
 	Eigen::VectorXd b, x;
+	assert(m_timestepper->get_step_count()!=400);
 	if (use_all_cells) {
 		m_macoctreeproject.assemble_matrix_qc(*m_grid, m_timestepper->get_step_count());
 		auto solid_velocity_func = [&]( const vec3d &p ) {
 			return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
 		};
-		m_macoctreeproject.project_cloud(*m_grid,dt,m_timestepper->get_step_count(), solid_velocity_func);
+		m_macoctreeproject.project_cloud(*m_grid,dt,m_timestepper->get_step_count(), m_shape[0], solid_velocity_func);
 	} else {
 		//m_macoctreeproject.compute_maps(*m_grid, uf);
 		m_macoctreeproject.assemble_matrix_merged_cell(*m_grid, uf, use_Eigen, m_timestepper->get_step_count());
 		if (m_grid->valid_cell_count > 4) {
 			m_macoctreeproject.project_merged_cell(*m_grid, dt, use_Eigen, m_timestepper->get_step_count(), uf, m_shape[0]);
 		}
-
 		// m_macoctreeproject.project_merged_cell_all(*m_grid, dt, use_Eigen, m_timestepper->get_step_count(), uf);
 	}
 
@@ -599,21 +692,21 @@ void cloud_oc::idle() {
 		//console::dump("Advecting at position (%.6f, %.6f, %.6f)\n", u[0], u[1], u[2]);
 		// vec3d u (50.0,50.0,50.0); // test
 		double d =  m_grid_prev->sample_qv(p - dt_advect * u);
-		if (d > 1.0) return 0.0;
+		if (d > 0.3) return 0.0;
 		else return d;
-	});
+	});                                                                                                                                                                                                                                        
 	m_grid->assign_qc([&]( const vec3d &p ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
 		if (u[1] <= 1.0) u[1] = 1.0; // prevent going down too fast
 		double d =  m_grid_prev->sample_qc(p - dt_advect * u);
-		if (d > 1.0) return 0.0;
+		if (d > 0.3) return 0.0;
 		else return d;
 	});
 	m_grid->assign_qr([&]( const vec3d &p ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
 		if (u[1] <= 1.0) u[1] = 1.0; // prevent going down too fast
 		double d =  m_grid_prev->sample_qr(p - dt_advect * u);
-		if (d > 1.0) return 0.0;
+		if (d > 0.3) return 0.0;
 		else return d;
 	});
 	m_grid->assign_theta([&]( const vec3d &p ) {
@@ -651,20 +744,53 @@ void cloud_oc::idle() {
 	auto end_time = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsed = end_time - start_time;
 	console::dump( "Timestep finished. Elapsed time: %.2f seconds.\n", elapsed.count());
+	std::string is_merged = (use_all_cells)?"project":"project_merged_cell";
 
 	char filename[256];
-	sprintf(filename, "/home/takebe/shiokaze/project_merged_cell/time_to_finish_step_%03d.txt", m_shape[0]);
+	sprintf(filename, "/home/takebe/shiokaze/%s/time_to_finish_step_%03d.txt", is_merged.c_str(), m_shape[0]);
 	std::filesystem::path Time_to_finish_step(filename);
 	if (!std::filesystem::exists(Time_to_finish_step)) {
 		std::filesystem::create_directories(Time_to_finish_step.parent_path());
 	}
 	std::ofstream file(Time_to_finish_step, std::ios::app);
 	if (m_timestepper->get_step_count() == 0) {
-		file << "Step Count Time to Solve\n";
+		file << "Step Count Time\n";
 	}
 	file << m_timestepper->get_step_count() << " " << elapsed.count() << "\n";
 	file.close();
 
+	//vdbのグリッドの作成
+	openvdb::DoubleGrid::Ptr cloud_vdb_grid = openvdb::DoubleGrid::create(/*background value=*/0.0);
+	double scale = m_param.scale;
+	auto newTransform = openvdb::math::Transform::createLinearTransform(/*voxel size=*/m_dx);
+	//vdbグリッドへの値のセット
+	m_grid->serial_iterate_active_cells([&]( const cell_id3 &cell_id ) {
+		if (m_grid->qc[cell_id.index] > 0.0) {
+			openvdb::DoubleGrid::Accessor cloud_vdb_accessor = cloud_vdb_grid->getAccessor();
+
+			vec3i p = cell_id.pi;
+			
+			cloud_vdb_accessor.setValue(openvdb::Coord(p[0], p[1], p[2]), m_grid->qc[cell_id.index]);
+		}
+	});
+
+	openvdb::GridPtrVec grids;
+	grids.push_back(cloud_vdb_grid);
+
+	//vdbファイルへの書き出し
+	char vdb_filename[256];
+	sprintf(vdb_filename, "/home/takebe/vdb/cloud_oc/%s/res_%03d/cloud_%03d_%03d.vdb", is_merged.c_str(), m_shape[0], m_shape[0], m_timestepper->get_step_count());
+	std::filesystem::path VDB_filepath(vdb_filename);
+	if (!std::filesystem::exists(VDB_filepath.parent_path())) {
+		std::filesystem::create_directories(VDB_filepath.parent_path());
+	}
+
+	openvdb::io::File file_vdb(vdb_filename);
+	file_vdb.write(grids);
+	file_vdb.close();
+	if (m_timestepper->get_step_count() % 50 == 0) {
+		compute_energy_spectrum_fftw(*m_grid, use_all_cells);
+	}
 }
 //
 void cloud_oc::draw( graphics_engine &g ) const {
