@@ -590,7 +590,7 @@ using namespace std;
 
 		bool issame(int x, int y);
 
-		bool unite(grid3& grid, int x, int y);
+		bool unite(grid3& grid, int x, int y, bool use_X_axis);
 
 		cell_id3 get_top(int x);
 

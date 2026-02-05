@@ -231,7 +231,7 @@ protected:
 	double perlin_noise_source(const vec3d &p) const;
 	double circle_source(const vec3d &p) const;
 
-	void compute_energy_spectrum_fftw( const grid3 &grid, bool use_all_cells );
+	void compute_energy_spectrum_fftw( const grid3 &grid, bool use_all_cells, bool use_X_axis );
 	//added
 };
 //

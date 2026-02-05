@@ -42,7 +42,7 @@ int UnionFind::root(int x) {
 		return par[x] = root(par[x]);
 	}
 
-bool UnionFind::unite(grid3& grid, int x, int y) {
+bool UnionFind::unite(grid3& grid, int x, int y, bool use_X_axis) {
         int rx = root(x);
         int ry = root(y);
         if (rx == ry) return false;
@@ -58,11 +58,15 @@ bool UnionFind::unite(grid3& grid, int x, int y) {
         // ★ 根の top/bottom を比較して統合
         vec3d pos_top_rx = grid.get_cell_position(top[rx]);
         vec3d pos_top_ry = grid.get_cell_position(top[ry]);
-        top[rx] = (pos_top_rx[0] > pos_top_ry[0]) ? top[rx] : top[ry];
+		int dim;
+		if (use_X_axis) dim = 0;
+		else dim = 2;
+			
+        top[rx] = (pos_top_rx[dim] > pos_top_ry[dim]) ? top[rx] : top[ry];
         
         vec3d pos_bottom_rx = grid.get_cell_position(bottom[rx]);
         vec3d pos_bottom_ry = grid.get_cell_position(bottom[ry]);
-        bottom[rx] = (pos_bottom_rx[0] < pos_bottom_ry[0]) ? bottom[rx] : bottom[ry];
+        bottom[rx] = (pos_bottom_rx[dim] < pos_bottom_ry[dim]) ? bottom[rx] : bottom[ry];
 		number_of_cells[rx] += number_of_cells[ry];
 		velocity_sum_x[rx] += velocity_sum_x[ry];
 

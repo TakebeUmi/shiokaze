@@ -75,7 +75,7 @@ void cloud_oc::load( configuration &config ) {
 	config.get_bool("RenderDensity",m_param.render_density,"Whether to render density");
 }
 
-void cloud_oc::compute_energy_spectrum_fftw(const grid3 &grid, bool use_all_cells) {
+void cloud_oc::compute_energy_spectrum_fftw(const grid3 &grid, bool use_all_cells, bool use_X_axis) {
 
 	int N = m_shape[0];
     std::vector<double> energy_spectrum_total(N/2, 0.0);
@@ -142,14 +142,15 @@ void cloud_oc::compute_energy_spectrum_fftw(const grid3 &grid, bool use_all_cell
     }
 
 	char filename_energy_spectrum[256];
+	char merged_axis = use_X_axis ? 'X' : 'Z';
 	if (use_all_cells) {
 		sprintf(filename_energy_spectrum, 
 				"/home/takebe/shiokaze/project/energy_spectrum/energy_spectrum_%03d_%03d.txt", 
-				N, m_timestepper->get_step_count());
+				 N, m_timestepper->get_step_count());
 	} else {
 		sprintf(filename_energy_spectrum, 
-				"/home/takebe/shiokaze/project_merged/energy_spectrum/energy_spectrum_%03d_%03d.txt", 
-				N, m_timestepper->get_step_count());
+				"/home/takebe/shiokaze/project_merged/energy_spectrum/%c/energy_spectrum_%03d_%03d.txt", 
+				merged_axis, N, m_timestepper->get_step_count());
 	}
 	std::filesystem::path energy_spectrum_path(filename_energy_spectrum);
 	if (!std::filesystem::exists(energy_spectrum_path)) {
@@ -613,11 +614,12 @@ void cloud_oc::idle() {
 	m_grid->source_func(m_dx);
 	m_grid->add_buoyancy(dt);
 	//added
-
+	//X方向かZ方向か
+	bool use_X_axis = true; 
 	m_grid->serial_iterate_active_cells([&]( const cell_id3 &cell_id ) {
 		m_grid->right_cell_neighbor(cell_id, [&]( char dim, const cell_id3 &neighbor_id ) {
 			if (m_grid->qc[cell_id.index] > 0.0 && m_grid->qc[neighbor_id.index] > 0.0 ) {
-				uf.unite(*m_grid, cell_id.index, neighbor_id.index);
+				uf.unite(*m_grid, cell_id.index, neighbor_id.index, use_X_axis);
 			}
 		});
 	});
@@ -657,9 +659,9 @@ void cloud_oc::idle() {
 		m_macoctreeproject.project_cloud(*m_grid,dt,m_timestepper->get_step_count(), m_shape[0], uf, solid_velocity_func);
 	} else {
 		//m_macoctreeproject.compute_maps(*m_grid, uf);
-		m_macoctreeproject.assemble_matrix_merged_cell(*m_grid, uf, use_Eigen, m_timestepper->get_step_count());
+		m_macoctreeproject.assemble_matrix_merged_cell(*m_grid, uf, use_Eigen, use_X_axis, m_timestepper->get_step_count());
 		if (m_grid->valid_cell_count > 4) {
-			m_macoctreeproject.project_merged_cell(*m_grid, dt, use_Eigen, m_timestepper->get_step_count(), uf, m_shape[0]);
+			m_macoctreeproject.project_merged_cell(*m_grid, dt, use_Eigen, use_X_axis, m_timestepper->get_step_count(), uf, m_shape[0]);
 		}
 		// m_macoctreeproject.project_merged_cell_all(*m_grid, dt, use_Eigen, m_timestepper->get_step_count(), uf);
 	}
@@ -751,7 +753,8 @@ void cloud_oc::idle() {
 	std::string is_merged = (use_all_cells)?"project":"project_merged_cell";
 
 	char filename[256];
-	sprintf(filename, "/home/takebe/shiokaze/%s/time_to_finish_step_%03d.txt", is_merged.c_str(), m_shape[0]);
+	char merged_axis = use_X_axis ? 'X' : 'Z';
+	sprintf(filename, "/home/takebe/shiokaze/%s/%c/time_to_finish_step_%03d.txt", is_merged.c_str(), merged_axis, m_shape[0]);
 	std::filesystem::path Time_to_finish_step(filename);
 	if (!std::filesystem::exists(Time_to_finish_step)) {
 		std::filesystem::create_directories(Time_to_finish_step.parent_path());
@@ -783,7 +786,7 @@ void cloud_oc::idle() {
 
 	// //vdbファイルへの書き出し
 	// char vdb_filename[256];
-	// sprintf(vdb_filename, "/home/takebe/vdb/cloud_oc/%s/res_%03d/cloud_%03d_%03d.vdb", is_merged.c_str(), m_shape[0], m_shape[0], m_timestepper->get_step_count());
+	// sprintf(vdb_filename, "/home/takebe/vdb/cloud_oc/%s/%c/res_%03d/cloud_%03d_%03d.vdb", is_merged.c_str(), merged_axis, m_shape[0], m_shape[0], m_timestepper->get_step_count());
 	// std::filesystem::path VDB_filepath(vdb_filename);
 	// if (!std::filesystem::exists(VDB_filepath.parent_path())) {
 	// 	std::filesystem::create_directories(VDB_filepath.parent_path());
@@ -793,7 +796,7 @@ void cloud_oc::idle() {
 	// file_vdb.write(grids);
 	// file_vdb.close();
 	if (m_timestepper->get_step_count() % 50 == 0) {
-		compute_energy_spectrum_fftw(*m_grid, use_all_cells);
+		compute_energy_spectrum_fftw(*m_grid, use_all_cells, use_X_axis);
 	}
 }
 //

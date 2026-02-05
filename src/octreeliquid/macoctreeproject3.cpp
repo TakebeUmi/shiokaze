@@ -357,14 +357,15 @@ void macoctreeproject3::assemble_Lhs(grid3 &grid,std::vector<int> p, cell_id3 to
 	}
 }
 
-void macoctreeproject3::assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx, int dir, bool use_Eigen) {
+void macoctreeproject3::assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx, int dir, bool use_Eigen, bool use_X_axis) {
+	int d = use_X_axis ? 0 : 2;
 	//j0<j1, j2<j3と仮定。jaはminimal faceの下、jbは上
 	if (cell_ids[0].index != cell_ids[1].index && cell_ids[2].index != cell_ids[3].index) {
 		std::vector<int> j(4);
 		for (int i = 0; i < 4; i++) {
-			j[i] = cell_ids[i].pi[0];
+			j[i] = cell_ids[i].pi[d];
 		}
-		int J = cell_id_this.pi[0];
+		int J = cell_id_this.pi[d];
 		int ja = std::max(j[0], j[2]);
 		int jb = std::min(j[1], j[3]);
 		//virtual faceの位置
@@ -412,9 +413,9 @@ void macoctreeproject3::assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, s
 	else if (cell_ids[0].index != cell_ids[1].index) { //対セルがuniform j1!=j2 j3==j4
 		std::vector<int> j(3);
 		for (int i = 0; i < 2; i++) {
-			j[i] = cell_ids[i].pi[0];
+			j[i] = cell_ids[i].pi[d];
 		}
-		int J = cell_id_this.pi[0];
+		int J = cell_id_this.pi[d];
 		//virtual faceの位置
 		double scale_to_upper = dx * (double)(J-j[0]) / (j[1]-j[0]);
 		double scale_to_lower = dx * (double)(j[1]-J) / (j[1]-j[0]);
@@ -445,9 +446,9 @@ void macoctreeproject3::assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, s
 	else if (cell_ids[2].index != cell_ids[3].index) { //自セルがuniform j3!=j4 j1==j2
 		std::vector<int> j(3);
 		for (int i = 1; i < 4; i++) {
-			j[i-1] = cell_ids[i].pi[0];
+			j[i-1] = cell_ids[i].pi[d];
 		}
-		int J = cell_id_this.pi[0];
+		int J = cell_id_this.pi[d];
 		//virtual faceの位置
 		double scale_to_upper = dx;
 		double scale_to_lower = dx;
@@ -493,12 +494,13 @@ void macoctreeproject3::assemble_lhs_yz(grid3 &grid, std::vector<uint_type> p, s
 	}
 }
 
-void macoctreeproject3::assemble_lhs_x(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx, int dir, bool use_Eigen) {
+void macoctreeproject3::assemble_lhs_x(grid3 &grid, std::vector<uint_type> p, std::vector<cell_id3> cell_ids, cell_id3 cell_id_this, char dim, double dx, int dir, bool use_Eigen, bool use_X_axis) {
 	//i1<i2, i3<i4と仮定。iaはminimal faceの左、ibは右
 	if (p[0] != p[1]) {
 		std::vector<int> i(4);
+		int d = use_X_axis ? 0 : 2;
 		for (int k = 0; k < 4; k++) {
-			i[k] = cell_ids[k].pi[0];
+			i[k] = cell_ids[k].pi[d];
 		}
 		int I = cell_id_this.pi[1];
 		int ia = std::max(i[0], i[2]);
@@ -607,7 +609,7 @@ void macoctreeproject3::compute_maps( grid3 &grid , UnionFind &uf) {
 	console::dump("cell_map size: %zu\n", grid.valid_cell_count);
 }
 
-void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf, bool use_Eigen, int step_count) {
+void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf, bool use_Eigen, bool use_X_axis,int step_count) {
 	//
 	scoped_timer timer(this);
 	timer.tick(); console::dump( ">>> Assembling linear system...\n" );
@@ -731,11 +733,11 @@ void macoctreeproject3::assemble_matrix_merged_cell( grid3 &grid, UnionFind &uf,
 					const auto &layer = *grid.layers[cell_id.depth];
 					if (layer.active_cells.safe_active(upper_cell_id.pi) && (grid.cell_map[uf.top[uf.root(upper_cell_id.index)].index]) && (grid.cell_map[uf.bottom[uf.root(upper_cell_id.index)].index])) {
 						if (dim != 0) {
-							assemble_lhs_yz(grid, p, cell_ids, cell_id, dim, grid.layers[0]->dx, dir, use_Eigen);
+							assemble_lhs_yz(grid, p, cell_ids, cell_id, dim, grid.layers[0]->dx, dir, use_Eigen, use_X_axis);
 						}
 						//p[0]はtop1、p[1]はbottom1、p[2]はtop2、p[3]はbottom2それぞれの(cell_map上の値)-1。これはそのままLHSの行列idとして使える
 						else {
-							assemble_lhs_x(grid, p, cell_ids, cell_id, dim, grid.layers[0]->dx, dir, use_Eigen);
+							assemble_lhs_x(grid, p, cell_ids, cell_id, dim, grid.layers[0]->dx, dir, use_Eigen, use_X_axis);
 						}
 					}
 				}
@@ -2640,14 +2642,14 @@ void macoctreeproject3::project_cloud( grid3 &grid, double dt, int step_count, i
 	grid.clear_map();
 	console::dump( "<<< Done. Took %s.\n", timer.stock("project").c_str());
 }
-void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Eigen, int step_count,UnionFind &uf, int shape, std::function<vec3d(const vec3d &p)> solid_velocity, std::vector<Real> *pressure) {
+void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Eigen, bool use_X_axis, int step_count,UnionFind &uf, int shape, std::function<vec3d(const vec3d &p)> solid_velocity, std::vector<Real> *pressure) {
 	//
 	std::vector<uint_type> regions;
 	std::vector<Real> current_volumes;
 	std::vector<Real> target_volumes;
 	std::vector<Real> y_list;
 	//
-	project_merged_cell(grid,dt,use_Eigen,step_count,0,regions,current_volumes,target_volumes,y_list, uf, shape, solid_velocity,pressure);
+	project_merged_cell(grid,dt,use_Eigen, use_X_axis, step_count,0,regions,current_volumes,target_volumes,y_list, uf, shape, solid_velocity,pressure);
 }
 
 template<typename RHS_type>
@@ -2722,7 +2724,7 @@ void macoctreeproject3::assemble_RHS(grid3 &grid, std::vector<uint_type> p, doub
 		}
 	}
 }
-void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Eigen, int step_count,
+void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Eigen, bool use_X_axis, int step_count,
 					  size_t region_count,
 					  const std::vector<uint_type> &regions,
 					  const std::vector<Real> &current_volumes,
@@ -2964,6 +2966,7 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 
 	//rhs設計の旧バージョン
 	//if (!use_new_rhs)
+	int d = use_X_axis ? 0 : 2;
 	grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
 		for (int dir = -1; dir <= 1; dir += 2) {
 			for (char dim : DIMS3) {
@@ -2996,16 +2999,16 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 					double dx = grid.get_cell_dx(cell_id);
 					bool upper = (dir == 1);
 					//以下はassemble_RHSの中身。関数から呼び出すと遅かったので直接書くことで関数呼び出しオーバーヘッドを削減（？）
-					if (dim == 1 || dim == 2) {
+					if (dim != d) {
 						//p[1]は今回top1, p[0]はbottom1に対応
 						//LHSと現状逆になっていることに注意
-						cell_id3 p_top = (grid.get_cell_position(top1)[0] < grid.get_cell_position(top2)[0]) ? top1 : top2;
-						cell_id3 p_bottom = (grid.get_cell_position(bottom1)[0] > grid.get_cell_position(bottom2)[0]) ? bottom1 : bottom2;
-						int n = (p_top.pi - p_bottom.pi)[0];
+						cell_id3 p_top = (grid.get_cell_position(top1)[d] < grid.get_cell_position(top2)[d]) ? top1 : top2;
+						cell_id3 p_bottom = (grid.get_cell_position(bottom1)[d] > grid.get_cell_position(bottom2)[d]) ? bottom1 : bottom2;
+						int n = (p_top.pi - p_bottom.pi)[d];
 						double u_avg_upper = (grid.velocity[grid.upper_face_yz_position_of_x(p_top, dim).index] + grid.velocity[grid.upper_face_yz_position_of_x(p_bottom, dim).index]) * 0.5;
 						double u_avg_lower = (grid.velocity[grid.lower_face_yz_position_of_x(p_top, dim).index] + grid.velocity[grid.lower_face_yz_position_of_x(p_bottom, dim).index]) * 0.5;
-						bool top1_bigger = (grid.get_cell_position(top1)[0] > grid.get_cell_position(top1)[0]);
-						bool bottom1_bigger = (grid.get_cell_position(bottom1)[0] > grid.get_cell_position(bottom2)[0]);
+						bool top1_bigger = (grid.get_cell_position(top1)[d] > grid.get_cell_position(top1)[d]);
+						bool bottom1_bigger = (grid.get_cell_position(bottom1)[d] > grid.get_cell_position(bottom2)[d]);
 						double u_avg;
 						int dir;
 						double A;
@@ -3022,9 +3025,9 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 							rhs->add(p[0], u_avg * dir * dx * dx / dx);
 						}
 						else if ( !top1_bigger && !bottom1_bigger && !((top1==top2) && (bottom1==bottom2))) {
-							double a = (top1.pi[0] - p_bottom.pi[0] + 1) / (double)(top1.pi[0] - bottom1.pi[0] + 1);
-							double t = (grid.get_cell_position(top1)[0] - (grid.get_cell_position(p_bottom)[0] + grid.get_cell_position(p_top)[0])/2.0) / (grid.get_cell_position(top1)[0] - grid.get_cell_position(bottom1)[0]);
-							A = dx*dx * (p_top.pi[0] - p_bottom.pi[0] + 1);
+							double a = (top1.pi[d] - p_bottom.pi[d] + 1) / (double)(top1.pi[d] - bottom1.pi[d] + 1);
+							double t = (grid.get_cell_position(top1)[d] - (grid.get_cell_position(p_bottom)[d] + grid.get_cell_position(p_top)[d])/2.0) / (grid.get_cell_position(top1)[d] - grid.get_cell_position(bottom1)[d]);
+							A = dx*dx * (p_top.pi[d] - p_bottom.pi[d] + 1);
 							if (!utility::is_nan(u_avg)) {
 								// if (use_Eigen) {
 								// 	b(p[1]) += A * dir * a * u_avg * (1-t) / dx;
@@ -3038,9 +3041,9 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 							}
 						}
 						else if (top1_bigger && bottom1_bigger) {
-							double a = (p_top.pi[0] - bottom1.pi[0] + 1) / (double)(top1.pi[0] - bottom1.pi[0] + 1);
-							double t = (grid.get_cell_position(top1)[0] - (grid.get_cell_position(p_bottom)[0] + grid.get_cell_position(p_top)[0])/2.0)/(grid.get_cell_position(top1)[0] - grid.get_cell_position(bottom1)[0]);
-							A = dx*dx * (p_top.pi[0] - p_bottom.pi[0] + 1);
+							double a = (p_top.pi[d] - bottom1.pi[d] + 1) / (double)(top1.pi[d] - bottom1.pi[d] + 1);
+							double t = (grid.get_cell_position(top1)[d] - (grid.get_cell_position(p_bottom)[d] + grid.get_cell_position(p_top)[d])/2.0)/(grid.get_cell_position(top1)[d] - grid.get_cell_position(bottom1)[d]);
+							A = dx*dx * (p_top.pi[d] - p_bottom.pi[d] + 1);
 							if (!utility::is_nan(u_avg)) {
 								
 								// if (use_Eigen) {
@@ -3054,7 +3057,7 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 							}
 						}
 						else {
-							A = dx*dx * (p_top.pi[0] - p_bottom.pi[0] + 1);
+							A = dx*dx * (p_top.pi[d] - p_bottom.pi[d] + 1);
 							if (!utility::is_nan(u_avg)) {
 								// if (use_Eigen) {
 								// 	b(p[1]) += A * dir * u_avg / 2.0 / dx;
@@ -3070,11 +3073,11 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 					}
 					else {
 						double u_avg = uf.velocity_sum_x[uf.root(top1.index)] / uf.number_of_cells[uf.root(top1.index)];
-						double u_top = grid.velocity[grid.layers[top1.depth]->active_faces[0](top1.pi+vec3i(1,0,0))];
+						double u_top = grid.velocity[grid.layers[top1.depth]->active_faces[d](top1.pi+vec3i(d==0,d==0,d==0))];
 						if (grid.layers[bottom1.depth]->active_faces[dim].safe_active(bottom1.pi)){
 							
 						}
-						double u_bottom = grid.velocity[grid.layers[bottom1.depth]->active_faces[0](bottom1.pi+vec3i(0,0,0))];
+						double u_bottom = grid.velocity[grid.layers[bottom1.depth]->active_faces[d](bottom1.pi+vec3i(0,0,0))];
 						
 						if (top1 == bottom1) {
 							if (!utility::is_nan(u_top) && !utility::is_nan(u_bottom)) {
@@ -3239,7 +3242,8 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 
 	// 射影の収束を解くための時間
 	char filename_pressure[256];
-	sprintf(filename_pressure, "/home/takebe/shiokaze/project_merged_cell/time_to_finish_solving_projection_%03d.txt", shape);
+	char merged_axis = use_X_axis ? 'X' : 'Z';
+	sprintf(filename_pressure, "/home/takebe/shiokaze/project_merged_cell/%c/time_to_finish_solving_projection_%03d.txt", merged_axis, shape);
 	std::filesystem::path Time_to_finish_solving(filename_pressure);
 	if (!std::filesystem::exists(Time_to_finish_solving)) {
 		std::filesystem::create_directories(Time_to_finish_solving.parent_path());
@@ -3362,7 +3366,7 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 				cell_id3 bottom = uf.bottom[uf.root(cell_id.index)];
 				double pressure_top = result->at(grid.cell_map[top.index]-1);
 				double pressure_bottom = result->at(grid.cell_map[bottom.index]-1);
-				double t = (grid.get_cell_position(cell_id)[0] - grid.get_cell_position(bottom)[0]) / (grid.get_cell_position(top)[0] - grid.get_cell_position(bottom)[0]);
+				double t = (grid.get_cell_position(cell_id)[d] - grid.get_cell_position(bottom)[d]) / (grid.get_cell_position(top)[d] - grid.get_cell_position(bottom)[d]);
 				//if (face_id.dim !=1)
 				double v = (t * pressure_top + (1-t) * pressure_bottom) * scale;
 				if (face_id.dim != 1) grid.velocity[face_id.index] -= v / 10;
