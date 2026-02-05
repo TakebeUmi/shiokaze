@@ -114,8 +114,8 @@ namespace macotreeliquid3_namespace {
 					  std::vector<Real> &y_list,
 					  std::function<vec3d(const vec3d &p)> solid_velocity=nullptr,
 					  std::vector<Real> *pressure=nullptr );
-		void project_cloud( grid3 &grid, double dt, int step_count, int shape, std::function<vec3d(const vec3d &p)> solid_velocity=nullptr, std::vector<Real> *pressure=nullptr );
-		void project_cloud( grid3 &grid, double dt, int step_count, int shape, 
+		void project_cloud( grid3 &grid, double dt, int step_count, int shape, UnionFind &uf, std::function<vec3d(const vec3d &p)> solid_velocity=nullptr, std::vector<Real> *pressure=nullptr );
+		void project_cloud( grid3 &grid, double dt, int step_count, int shape, UnionFind &uf,
 					  size_t region_count,
 					  const std::vector<uint_type> &regions,
 					  const std::vector<Real> &current_volumes,

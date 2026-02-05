@@ -2309,17 +2309,17 @@ void macoctreeproject3::project_density( grid3 &grid, double dt,
 	console::dump( "<<< Done. Took %s.\n", timer.stock("project").c_str());
 }
 
-void macoctreeproject3::project_cloud( grid3 &grid, double dt, int step_count, int shape,std::function<vec3d(const vec3d &p)> solid_velocity, std::vector<Real> *pressure ) {
+void macoctreeproject3::project_cloud( grid3 &grid, double dt, int step_count, int shape,UnionFind &uf, std::function<vec3d(const vec3d &p)> solid_velocity, std::vector<Real> *pressure ) {
 	//
 	std::vector<uint_type> regions;
 	std::vector<Real> current_volumes;
 	std::vector<Real> target_volumes;
 	std::vector<Real> y_list;
 	//
-	project_cloud(grid,dt,step_count, shape, 0,regions,current_volumes,target_volumes,y_list,solid_velocity,pressure);
+	project_cloud(grid,dt,step_count, shape, uf, 0,regions,current_volumes,target_volumes,y_list,solid_velocity,pressure);
 }
 //
-void macoctreeproject3::project_cloud( grid3 &grid, double dt, int step_count, int shape,
+void macoctreeproject3::project_cloud( grid3 &grid, double dt, int step_count, int shape, UnionFind &uf,
 					  size_t region_count,
 					  const std::vector<uint_type> &regions,
 					  const std::vector<Real> &current_volumes,
@@ -2526,6 +2526,34 @@ void macoctreeproject3::project_cloud( grid3 &grid, double dt, int step_count, i
 	console::dump("RHS sum=%e\n",sum);
 	timer.tick(); console::dump("Starting solver...\n");
 	auto status = m_solver->solve(m_matrix.Lhs.get(),rhs.get(),result.get());
+
+	int px = shape/2;
+	int py = shape/5;
+	int pz = shape/2;
+	vec3i pi(px, py, pz);
+	uint_type cell_index = grid.layers[0]->active_cells(pi);
+	if (uf.root(cell_index) != cell_index) {
+		grid.serial_iterate_active_cells([&]( const cell_id3 &cell_id ) {
+			if (uf.root(cell_id.index) == uf.root(cell_index)) {
+				int x = cell_id.pi[0];
+				int y = cell_id.pi[1];
+				int z = cell_id.pi[2];
+				char filename_datas[256];
+				if (step_count % 50 == 0) {
+					sprintf(filename_datas, "/home/takebe/shiokaze/project/datas/datas_%03d_%03d.txt", shape, step_count);
+					std::filesystem::path datas(filename_datas);
+					if (!std::filesystem::exists(datas)) {
+						std::filesystem::create_directories(datas.parent_path());
+					}
+					std::ofstream file(datas, std::ios::app);
+					vec3d cell_position = grid.get_cell_position(cell_id);
+					vec3d v = grid.sample_velocity(cell_position);
+					file << x << " p:" << result->at(grid.cell_map[cell_id.index]-1) << " vx:" << v[0] << " vy:" << v[1] << " vz:" << v[2] << "\n";
+					file.close();
+				}
+			}
+		});
+	} 
 	//
 	auto solving_time = timer.stock("solver_solve").c_str();
 	console::dump( "Solver done. Took %s.\n", solving_time );
@@ -3323,10 +3351,10 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 			
 			if (grid.cell_map[cell_id.index] ) { //cell_mapが存在、もしくはmerged_cellの中にある、という条件づけ
 				double v = result->at(grid.cell_map[cell_id.index]-1) * scale;
-				//grid.velocity[face_id.index] -= v / 8;
-				// if (face_id.dim != 1) grid.velocity[face_id.index] -= v / 10;
-				// else grid.velocity[face_id.index] -= v < 0 ? v : 0.01 * v; //y方向の圧力勾配は減衰させる
-				grid.velocity[face_id.index] -= v;
+				grid.velocity[face_id.index] -= v / 8;
+				if (face_id.dim != 1) grid.velocity[face_id.index] -= v / 10;
+				else grid.velocity[face_id.index] -= v < 0 ? v : 0.01 * v; //y方向の圧力勾配は減衰させる
+				// grid.velocity[face_id.index] -= v;
 			} 
 			else if (grid.cell_map[uf.top[uf.root(cell_id.index)].index] && grid.cell_map[uf.bottom[uf.root(cell_id.index)].index] && uf.top[uf.root(cell_id.index)].index != uf.bottom[uf.root(cell_id.index)].index) {
 				//merged_cellの中にある場合
@@ -3337,10 +3365,10 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 				double t = (grid.get_cell_position(cell_id)[0] - grid.get_cell_position(bottom)[0]) / (grid.get_cell_position(top)[0] - grid.get_cell_position(bottom)[0]);
 				//if (face_id.dim !=1)
 				double v = (t * pressure_top + (1-t) * pressure_bottom) * scale;
-				// if (face_id.dim != 1) grid.velocity[face_id.index] -= v / 10;
-				// else grid.velocity[face_id.index] -= v < 0 ? v : 0.01 * v; //y方向の圧力勾配は減衰させる
+				if (face_id.dim != 1) grid.velocity[face_id.index] -= v / 10;
+				else grid.velocity[face_id.index] -= v < 0 ? v : 0.01 * v; //y方向の圧力勾配は減衰させる
 				
-				grid.velocity[face_id.index] -= v;
+				// grid.velocity[face_id.index] -= v;
 			}
 		});
 	});

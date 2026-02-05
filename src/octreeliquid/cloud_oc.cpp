@@ -55,7 +55,7 @@ SHKZ_USING_NAMESPACE
 
 cloud_oc::cloud_oc () {
 	//
-	int coeff = 3;
+	int coeff = 2;
 	m_shape = shape3(64*coeff,64*coeff,64*coeff);
 	//m_dx = m_shape.dx();
 }
@@ -621,6 +621,9 @@ void cloud_oc::idle() {
 			}
 		});
 	});
+
+
+
 	std::vector<cell_id3_and_is_merged> cell_ids_included_merged_cells;
 	//
 	std::vector<int> merged_cell_id(uf.par.size(), -1);
@@ -639,18 +642,19 @@ void cloud_oc::idle() {
 	}
 	int all_cell_count = cell_ids_included_merged_cells.size();
 	// // Project(added)
-	bool use_all_cells = true;
+	bool use_all_cells = false;
 	console::dump("is Used all cells: %d\n", use_all_cells);
 	bool use_Eigen = false;
 	Eigen::SparseMatrix<double> A;
 	Eigen::VectorXd b, x;
+	
 	assert(m_timestepper->get_step_count()!=400);
 	if (use_all_cells) {
 		m_macoctreeproject.assemble_matrix_qc(*m_grid, m_timestepper->get_step_count());
 		auto solid_velocity_func = [&]( const vec3d &p ) {
 			return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
 		};
-		m_macoctreeproject.project_cloud(*m_grid,dt,m_timestepper->get_step_count(), m_shape[0], solid_velocity_func);
+		m_macoctreeproject.project_cloud(*m_grid,dt,m_timestepper->get_step_count(), m_shape[0], uf, solid_velocity_func);
 	} else {
 		//m_macoctreeproject.compute_maps(*m_grid, uf);
 		m_macoctreeproject.assemble_matrix_merged_cell(*m_grid, uf, use_Eigen, m_timestepper->get_step_count());
@@ -759,35 +763,35 @@ void cloud_oc::idle() {
 	file << m_timestepper->get_step_count() << " " << elapsed.count() << "\n";
 	file.close();
 
-	//vdbのグリッドの作成
-	openvdb::DoubleGrid::Ptr cloud_vdb_grid = openvdb::DoubleGrid::create(/*background value=*/0.0);
-	double scale = m_param.scale;
-	auto newTransform = openvdb::math::Transform::createLinearTransform(/*voxel size=*/m_dx);
-	//vdbグリッドへの値のセット
-	m_grid->serial_iterate_active_cells([&]( const cell_id3 &cell_id ) {
-		if (m_grid->qc[cell_id.index] > 0.0) {
-			openvdb::DoubleGrid::Accessor cloud_vdb_accessor = cloud_vdb_grid->getAccessor();
+	// //vdbのグリッドの作成
+	// openvdb::DoubleGrid::Ptr cloud_vdb_grid = openvdb::DoubleGrid::create(/*background value=*/0.0);
+	// double scale = m_param.scale;
+	// auto newTransform = openvdb::math::Transform::createLinearTransform(/*voxel size=*/m_dx);
+	// //vdbグリッドへの値のセット
+	// m_grid->serial_iterate_active_cells([&]( const cell_id3 &cell_id ) {
+	// 	if (m_grid->qc[cell_id.index] > 0.0) {
+	// 		openvdb::DoubleGrid::Accessor cloud_vdb_accessor = cloud_vdb_grid->getAccessor();
 
-			vec3i p = cell_id.pi;
+	// 		vec3i p = cell_id.pi;
 			
-			cloud_vdb_accessor.setValue(openvdb::Coord(p[0], p[1], p[2]), m_grid->qc[cell_id.index]);
-		}
-	});
+	// 		cloud_vdb_accessor.setValue(openvdb::Coord(p[0], p[1], p[2]), m_grid->qc[cell_id.index]);
+	// 	}
+	// });
 
-	openvdb::GridPtrVec grids;
-	grids.push_back(cloud_vdb_grid);
+	// openvdb::GridPtrVec grids;
+	// grids.push_back(cloud_vdb_grid);
 
-	//vdbファイルへの書き出し
-	char vdb_filename[256];
-	sprintf(vdb_filename, "/home/takebe/vdb/cloud_oc/%s/res_%03d/cloud_%03d_%03d.vdb", is_merged.c_str(), m_shape[0], m_shape[0], m_timestepper->get_step_count());
-	std::filesystem::path VDB_filepath(vdb_filename);
-	if (!std::filesystem::exists(VDB_filepath.parent_path())) {
-		std::filesystem::create_directories(VDB_filepath.parent_path());
-	}
+	// //vdbファイルへの書き出し
+	// char vdb_filename[256];
+	// sprintf(vdb_filename, "/home/takebe/vdb/cloud_oc/%s/res_%03d/cloud_%03d_%03d.vdb", is_merged.c_str(), m_shape[0], m_shape[0], m_timestepper->get_step_count());
+	// std::filesystem::path VDB_filepath(vdb_filename);
+	// if (!std::filesystem::exists(VDB_filepath.parent_path())) {
+	// 	std::filesystem::create_directories(VDB_filepath.parent_path());
+	// }
 
-	openvdb::io::File file_vdb(vdb_filename);
-	file_vdb.write(grids);
-	file_vdb.close();
+	// openvdb::io::File file_vdb(vdb_filename);
+	// file_vdb.write(grids);
+	// file_vdb.close();
 	if (m_timestepper->get_step_count() % 50 == 0) {
 		compute_energy_spectrum_fftw(*m_grid, use_all_cells);
 	}
