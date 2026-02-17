@@ -156,6 +156,7 @@ protected:
 	vec2d center {0.5,0.5};
 	double source_coeff {1.0};
 	double Time_coeff {30.0};
+	double switch_ratio {0.1};
 	};
 	//
 	Parameters m_param;
@@ -232,6 +233,7 @@ protected:
 	double circle_source(const vec3d &p) const;
 
 	void compute_energy_spectrum_fftw( const grid3 &grid, bool use_all_cells, bool use_X_axis );
+	void directional_cloud_profile( const grid3 &grid, bool use_X_axis, bool use_all_cells );
 	//added
 };
 //

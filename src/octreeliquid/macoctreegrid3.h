@@ -380,7 +380,7 @@ using namespace std;
 		void balance_layers();
 		void assign_indices();
 		void iterate_cell_neighbors( const cell_id3 &cell_id, std::function<void( char dim, const cell_id3 &cell_id )> func ) const;
-		void right_cell_neighbor( const cell_id3 &cell_id, std::function<void( char dim, const cell_id3 &cell_id )> func ) const;
+		void right_cell_neighbor( const cell_id3 &cell_id, bool use_X_axis, std::function<void( char dim, const cell_id3 &neighbor_cell_id_right, const cell_id3 &neighbor_cell_id_left )> func ) const;
 		//added
 		double upper_face_xposition( const cell_id3 &cell_id );
 		double lower_face_xposition( const cell_id3 &cell_id );

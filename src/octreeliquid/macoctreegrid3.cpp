@@ -1120,52 +1120,157 @@ void grid3::iterate_cell_neighbors( const cell_id3 &cell_id, std::function<void(
 	}
 }
 
-void grid3::right_cell_neighbor( const cell_id3 &cell_id,  std::function<void( char dim, const cell_id3 &cell_id )> func ) const {
+// void grid3::right_cell_neighbor( const cell_id3 &cell_id, bool use_X_axis, std::function<bool( char dim, const cell_id3 &cell_id )> criteria, std::function<void( char dim, const cell_id3 &cell_id )> func ) const {
+// 	// xの正の方向のみの隣接セルを取得
+// 	const auto &layer = *layers[cell_id.depth];
+// 	const char dim = use_X_axis ? 0 : 2;  // x方向  // 正方向
+// 	bool criteria_1;
+// 	bool criteria_2;
+// 	//
+// 	for (int dir = -1; dir <= 1; dir += 2) {
+// 		vec3i ivec = vec3i(0,1,0);
+// 		vec3i jvec = vec3i(0,0,1);
+// 		vec3i nvec = vec3i(1,0,0);  // x方向の単位ベクトル
+// 		vec3i neigh_vec = vec3i(dim==0, dim==1, dim==2);
+// 		vec3i pi = cell_id.pi + dir * neigh_vec;
+// 		bool found (false);
+
+// 		// より細かいレイヤー（depth-1）に隣接セルがあるか確認
+// 		if( cell_id.depth > 0 ) {
+// 			const auto &high_layer = *layers[cell_id.depth-1];
+// 			vec3i bottom = 2*pi;
+// 			vec3i small_cells[4] = { bottom, bottom+ivec, bottom+jvec, bottom+ivec+jvec };
+// 			for( int n=0; n<4; ++n ) {
+// 				if( high_layer.active_cells.safe_active(small_cells[n])) {
+// 					uint_type column = high_layer.active_cells(small_cells[n]);
+// 					if (dir==-1) criteria_1 = criteria(dim,{(char)(cell_id.depth-1),small_cells[n],column});
+// 					else criteria_2 = criteria(dim,{(char)(cell_id.depth-1),small_cells[n],column});
+// 					found = true;
+// 				}
+// 			}
+// 		}
+
+// 		// 同じレイヤー内に隣接セルがあるか確認
+// 		if( ! found ) {
+// 			if( layer.active_cells.safe_active(pi)) {
+// 				uint_type column = layer.active_cells(pi);
+// 				if (dir==-1) criteria_1 = criteria(dim,{cell_id.depth,pi,column});
+// 				else criteria_2 = criteria(dim,{cell_id.depth,pi,column});
+// 				found = true;
+// 			}
+// 		}
+
+// 		// より粗いレイヤー（depth+1）に隣接セルがあるか確認
+// 		// if( ! found && cell_id.depth < layers.size()-1 ) {
+// 		// 	const auto &coarse_layer = *layers[cell_id.depth+1];
+// 		// 	vec3i cell = 0.5 * pi;
+// 		// 	if( coarse_layer.active_cells.safe_active(cell)) {
+// 		// 		uint_type column = coarse_layer.active_cells(cell);
+// 		// 		if (dir==-1) criteria_1 = criteria(dim,{(char)(cell_id.depth+1),cell,column});
+// 		// 		else criteria_2 = criteria(dim,{(char)(cell_id.depth+1),cell,column});
+// 		// 		found = true;
+// 		// 	}
+// 		// }
+// 	}
+
+// 	if (criteria_1 && criteria_2) {
+// 		// 再度探索してfuncを実行
+// 	for (int dir = -1; dir <= 1; dir += 2) {
+// 		vec3i ivec = vec3i(0,1,0);
+// 		vec3i jvec = vec3i(0,0,1);
+// 		vec3i nvec = vec3i(1,0,0);  // x方向の単位ベクトル
+// 		vec3i neigh_vec = vec3i(dim==0, dim==1, dim==2);
+// 		vec3i pi = cell_id.pi + dir * neigh_vec;
+// 		bool found (false);
+
+// 		// より細かいレイヤー（depth-1）に隣接セルがあるか確認
+// 		if( cell_id.depth > 0 ) {
+// 			const auto &high_layer = *layers[cell_id.depth-1];
+// 			vec3i bottom = 2*pi;
+// 			vec3i small_cells[4] = { bottom, bottom+ivec, bottom+jvec, bottom+ivec+jvec };
+// 			for( int n=0; n<4; ++n ) {
+// 				if( high_layer.active_cells.safe_active(small_cells[n])) {
+// 					uint_type column = high_layer.active_cells(small_cells[n]);
+// 					func(dim,{(char)(cell_id.depth-1),small_cells[n],column});
+// 					found = true;
+// 				}
+// 			}
+// 		}
+
+// 		// 同じレイヤー内に隣接セルがあるか確認
+// 		if( ! found ) {
+// 			if( layer.active_cells.safe_active(pi)) {
+// 				uint_type column = layer.active_cells(pi);
+// 				func(dim,{cell_id.depth,pi,column});
+// 				found = true;
+// 			}
+// 		}
+
+// 		// より粗いレイヤー（depth+1）に隣接セルがあるか確認
+// 		// if( ! found && cell_id.depth < layers.size()-1 ) {
+// 		// 	const auto &coarse_layer = *layers[cell_id.depth+1];
+// 		// 	vec3i cell = 0.5 * pi;
+// 		// 	if( coarse_layer.active_cells.safe_active(cell)) {
+// 		// 		uint_type column = coarse_layer.active_cells(cell);
+// 		// 		func(dim,{(char)(cell_id.depth+1),cell,column});
+// 		// 		found = true;
+// 		// 	}
+// 		// }
+// 	}
+// 	}
+// }
+
+void grid3::right_cell_neighbor( const cell_id3 &cell_id, bool use_X_axis, std::function<void( char dim, const cell_id3 &neigh_bor_cell_id_right, const cell_id3 &neigh_bor_cell_id_left )> func ) const {
 	// xの正の方向のみの隣接セルを取得
 	const auto &layer = *layers[cell_id.depth];
-	const char dim = 0;  // x方向
+	const char dim = use_X_axis ? 0 : 2;  // x方向またはy方向
 	const int dir = 1;   // 正方向
 
 	vec3i ivec = vec3i(0,1,0);
 	vec3i jvec = vec3i(0,0,1);
 	vec3i nvec = vec3i(1,0,0);  // x方向の単位ベクトル
-	vec3i pi = cell_id.pi + nvec;
+	vec3i neigh_vec = vec3i(dim==0, dim==1, dim==2);
+	vec3i pi_right = cell_id.pi + neigh_vec;
+	vec3i pi_left = cell_id.pi - neigh_vec;
+
 	bool found (false);
 
 	// より細かいレイヤー（depth-1）に隣接セルがあるか確認
-	if( cell_id.depth > 0 ) {
-		const auto &high_layer = *layers[cell_id.depth-1];
-		vec3i bottom = 2*pi;
-		vec3i small_cells[4] = { bottom, bottom+ivec, bottom+jvec, bottom+ivec+jvec };
-		for( int n=0; n<4; ++n ) {
-			if( high_layer.active_cells.safe_active(small_cells[n])) {
-				uint_type column = high_layer.active_cells(small_cells[n]);
-				func(dim,{(char)(cell_id.depth-1),small_cells[n],column});
-				found = true;
-			}
-		}
-	}
+	// if( cell_id.depth > 0 ) {
+	// 	const auto &high_layer = *layers[cell_id.depth-1];
+	// 	vec3i bottom = 2*pi;
+	// 	vec3i small_cells[4] = { bottom, bottom+ivec, bottom+jvec, bottom+ivec+jvec };
+	// 	for( int n=0; n<4; ++n ) {
+	// 		if( high_layer.active_cells.safe_active(small_cells[n])) {
+	// 			uint_type column = high_layer.active_cells(small_cells[n]);
+	// 			func(dim,{(char)(cell_id.depth-1),small_cells[n],column});
+	// 			found = true;
+	// 		}
+	// 	}
+	// }
 
 	// 同じレイヤー内に隣接セルがあるか確認
 	if( ! found ) {
-		if( layer.active_cells.safe_active(pi)) {
-			uint_type column = layer.active_cells(pi);
-			func(dim,{cell_id.depth,pi,column});
+		if( layer.active_cells.safe_active(pi_right) && layer.active_cells.safe_active(pi_left)) {
+			uint_type column_right = layer.active_cells(pi_right);
+			uint_type column_left = layer.active_cells(pi_left);
+			func(dim,{cell_id.depth,pi_right,column_right}, {cell_id.depth,pi_left,column_left});
 			found = true;
 		}
 	}
 
 	// より粗いレイヤー（depth+1）に隣接セルがあるか確認
-	if( ! found && cell_id.depth < layers.size()-1 ) {
-		const auto &coarse_layer = *layers[cell_id.depth+1];
-		vec3i cell = 0.5 * pi;
-		if( coarse_layer.active_cells.safe_active(cell)) {
-			uint_type column = coarse_layer.active_cells(cell);
-			func(dim,{(char)(cell_id.depth+1),cell,column});
-			found = true;
-		}
-	}
+	// if( ! found && cell_id.depth < layers.size()-1 ) {
+	// 	const auto &coarse_layer = *layers[cell_id.depth+1];
+	// 	vec3i cell = 0.5 * pi;
+	// 	if( coarse_layer.active_cells.safe_active(cell)) {
+	// 		uint_type column = coarse_layer.active_cells(cell);
+	// 		func(dim,{(char)(cell_id.depth+1),cell,column});
+	// 		found = true;
+	// 	}
+	// }
 }
+
 
 double grid3::lower_face_xposition( const cell_id3 &cell_id ) {
 	//

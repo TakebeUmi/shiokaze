@@ -55,7 +55,7 @@ SHKZ_USING_NAMESPACE
 
 cloud_oc::cloud_oc () {
 	//
-	int coeff = 2;
+	int coeff = 1;
 	m_shape = shape3(64*coeff,64*coeff,64*coeff);
 	//m_dx = m_shape.dx();
 }
@@ -75,13 +75,57 @@ void cloud_oc::load( configuration &config ) {
 	config.get_bool("RenderDensity",m_param.render_density,"Whether to render density");
 }
 
+void cloud_oc::directional_cloud_profile( const grid3 &grid, bool use_X_axis, bool use_all_cells ) {
+	
+	int N = m_shape[1];
+	std::vector<double> cloud_profile_density(N, 0.0);
+	std::vector<int> cloud_profile_count(N, 0);
+
+	
+	// 各セルを走査して、クラウド密度を収集
+	grid.serial_iterate_active_cells([&](const cell_id3 &cell_id) {
+		if (cell_id.pi[0] < N && cell_id.pi[1] < N && cell_id.pi[2] < N) {
+			int idx = cell_id.pi[1];
+			vec3d position = grid.get_cell_position(cell_id);
+			double density = grid.qc[cell_id.index];
+			cloud_profile_density[idx] += density;
+			if (density > 0) cloud_profile_count[idx] += 1;
+		}
+	});
+	
+	// ファイルに保存
+	char filename_cloud_profile[256];
+	char axis_char = use_X_axis ? 'X' : 'Z';
+	if (use_all_cells) {
+		sprintf(filename_cloud_profile, 
+				"/home/takebe/shiokaze/project/cloud_profile/cloud_profile_%03d_%03d.txt", 
+				 N, m_timestepper->get_step_count());
+	} else {
+		sprintf(filename_cloud_profile, 
+				"/home/takebe/shiokaze/project_merged/cloud_profile/%c/cloud_profile_%03d_%03d.txt", 
+				axis_char, N, m_timestepper->get_step_count());
+	}
+	std::filesystem::path cloud_profile_path(filename_cloud_profile);
+	if (!std::filesystem::exists(cloud_profile_path)) {
+		std::filesystem::create_directories(cloud_profile_path.parent_path());
+	}
+	std::ofstream profile_file(cloud_profile_path);
+	for (int i = 0; i < N; i++) {
+		profile_file << i << " " << cloud_profile_density[i] << " " << cloud_profile_count[i] << "\n";
+	}
+}
+
 void cloud_oc::compute_energy_spectrum_fftw(const grid3 &grid, bool use_all_cells, bool use_X_axis) {
 
 	int N = m_shape[0];
     std::vector<double> energy_spectrum_total(N/2, 0.0);
+	std::vector<double> energy_spectrum_x(N/2, 0.0);
+	std::vector<double> energy_spectrum_z(N/2, 0.0);
     
     // u, v, w 各成分を個別に処理
     for (int comp = 0; comp < 3; comp++) {
+        // x方向（u成分=0）またはz方向（w成分=2）のみを計算する場合
+        // if (comp != 0 && comp != 2) continue;  // u と w のみ処理
         std::vector<double> velocity_comp(N*N*N, 0.0);
         
         // 各成分の速度を収集
@@ -129,6 +173,18 @@ void cloud_oc::compute_energy_spectrum_fftw(const grid3 &grid, bool use_all_cell
         for (int k = 0; k < N/2; k++) {
             energy_spectrum_total[k] += energy_spectrum[k];
         }
+        // u成分（x方向）のみを収集
+        if (comp == 0) {
+            for (int k = 0; k < N/2; k++) {
+                energy_spectrum_x[k] += energy_spectrum[k];
+            }
+        }
+        // w成分（z方向）のみを収集
+        if (comp == 2) {
+            for (int k = 0; k < N/2; k++) {
+                energy_spectrum_z[k] += energy_spectrum[k];
+            }
+        }
         
         // クリーンアップ
         fftw_destroy_plan(p);
@@ -143,6 +199,7 @@ void cloud_oc::compute_energy_spectrum_fftw(const grid3 &grid, bool use_all_cell
 
 	char filename_energy_spectrum[256];
 	char merged_axis = use_X_axis ? 'X' : 'Z';
+	// 全体のエネルギースペクトル
 	if (use_all_cells) {
 		sprintf(filename_energy_spectrum, 
 				"/home/takebe/shiokaze/project/energy_spectrum/energy_spectrum_%03d_%03d.txt", 
@@ -162,6 +219,48 @@ void cloud_oc::compute_energy_spectrum_fftw(const grid3 &grid, bool use_all_cell
     }
     spectrum_file.close();
 
+	//x方向のエネルギースペクトル
+	char filename_energy_spectrum_x[256];
+	//char merged_axis = use_X_axis ? 'X' : 'Z';
+	if (use_all_cells) {
+		sprintf(filename_energy_spectrum_x, 
+				"/home/takebe/shiokaze/project/energy_spectrum/x/energy_spectrum_%03d_%03d_x.txt", 
+				 N, m_timestepper->get_step_count());
+	} else {
+		sprintf(filename_energy_spectrum_x, 
+				"/home/takebe/shiokaze/project_merged/energy_spectrum/%c/x/energy_spectrum_%03d_%03d_x.txt", 
+				merged_axis, N, m_timestepper->get_step_count());
+	}
+	std::filesystem::path energy_spectrum_path_x(filename_energy_spectrum_x);
+	if (!std::filesystem::exists(energy_spectrum_path_x)) {
+		std::filesystem::create_directories(energy_spectrum_path_x.parent_path());
+	}
+    std::ofstream spectrum_file_x(energy_spectrum_path_x);
+    for (int k = 0; k < N/2; k++) {
+        spectrum_file_x << k << " " << energy_spectrum_x[k] << "\n";
+    }
+    spectrum_file_x.close();
+
+	//z方向のエネルギースペクトル
+	char filename_energy_spectrum_z[256];
+	if (use_all_cells) {
+		sprintf(filename_energy_spectrum_z, 
+				"/home/takebe/shiokaze/project/energy_spectrum/z/energy_spectrum_%03d_%03d_z.txt", 
+				 N, m_timestepper->get_step_count());
+	} else {
+		sprintf(filename_energy_spectrum_z, 
+				"/home/takebe/shiokaze/project_merged/energy_spectrum/%c/z/energy_spectrum_%03d_%03d_z.txt", 
+				merged_axis, N, m_timestepper->get_step_count());
+	}
+	std::filesystem::path energy_spectrum_path_z(filename_energy_spectrum_z);
+	if (!std::filesystem::exists(energy_spectrum_path_z)) {
+		std::filesystem::create_directories(energy_spectrum_path_z.parent_path());
+	}
+    std::ofstream spectrum_file_z(energy_spectrum_path_z);
+    for (int k = 0; k < N/2; k++) {
+        spectrum_file_z << k << " " << energy_spectrum_z[k] << "\n";
+    }
+    spectrum_file_z.close();
 }
 
 //added
@@ -605,26 +704,139 @@ void cloud_oc::idle() {
     m_accumulated_CFL += CFL;
 	m_grid_prev->copy(*m_grid);
 	//advect velocity
+	timer.tick(); console::dump( "Advecting velocity..." );
 	m_grid->set_velocity([&]( const vec3d &p, char dim ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
 		// if (u[1] <= 1.0) u[1] = 1.0; // prevent going down too fast
 		return m_grid_prev->sample_velocity(p-dt*u,dim);
 	});
+	auto advecting_velocity_time = timer.stock("solver_solve").c_str();
+	bool use_X_axis = true;
+	bool use_all_cells = false;
+	std::string directory = use_all_cells ? "project" : "project_merged_cell";
+	char filename_advect_velocity[256];
+	char merged_axis = use_X_axis ? 'X' : 'Z';
+	sprintf(filename_advect_velocity, "/home/takebe/shiokaze/%s/%c/time_to_finish_advecting_velocity_projection_%03d.txt", directory.c_str(), merged_axis, m_shape[0]);
+	std::filesystem::path Time_to_finish_advection_velocity(filename_advect_velocity);
+	if (!std::filesystem::exists(Time_to_finish_advection_velocity)) {
+		std::filesystem::create_directories(Time_to_finish_advection_velocity.parent_path());
+	}
+	{
+		std::ofstream file(Time_to_finish_advection_velocity, std::ios::app);
+		if (m_timestepper->get_step_count() == 0) {
+			file << "Time to Advect Velocity\n";
+		}
+		file << m_timestepper->get_step_count() << " " << advecting_velocity_time << " " << m_grid->valid_cell_count << "\n";
+		file.close();
+	}
+	console::dump("Wrote time to advect velocity to %s\n", filename_advect_velocity);
+
+	timer.tick(); console::dump( "Vorticity confinement..." );
 	m_grid->vorticity_confinement(dt);
+	auto vorticity_confinement_time = timer.stock("vorticity").c_str();
+
+	char filename_vorticity_confinement[256];
+	sprintf(filename_vorticity_confinement, "/home/takebe/shiokaze/%s/%c/vorticity/time_to_finish_vorticity_confinement_%03d.txt", directory.c_str(), merged_axis, m_shape[0]);
+	std::filesystem::path Time_to_finish_vorticity_confinement(filename_vorticity_confinement);
+	if (!std::filesystem::exists(Time_to_finish_vorticity_confinement)) {
+		std::filesystem::create_directories(Time_to_finish_vorticity_confinement.parent_path());
+	}
+	{
+		std::ofstream file(Time_to_finish_vorticity_confinement, std::ios::app);
+		if (m_timestepper->get_step_count() == 0) {
+			file << "Time to vorticity confinement\n";
+		}
+		file << m_timestepper->get_step_count() << " " << vorticity_confinement_time << " " << m_grid->valid_cell_count << "\n";
+		file.close();
+	}
+	console::dump("Wrote time to solve vorticity confinement to %s\n", filename_vorticity_confinement);
+
+	timer.tick(); console::dump( "source term..." );
 	m_grid->source_func(m_dx);
+	auto source_term_time = timer.stock("source_term").c_str();
+
+	char filename_source_term[256];
+	sprintf(filename_source_term, "/home/takebe/shiokaze/%s/%c/source_term/time_to_finish_source_term_%03d.txt", directory.c_str(), merged_axis, m_shape[0]);
+	std::filesystem::path Time_to_finish_source_term(filename_source_term);
+	if (!std::filesystem::exists(Time_to_finish_source_term)) {
+		std::filesystem::create_directories(Time_to_finish_source_term.parent_path());
+	}
+	{
+		std::ofstream file(Time_to_finish_source_term, std::ios::app);
+		if (m_timestepper->get_step_count() == 0) {
+			file << "Time to source term\n";
+		}
+		file << m_timestepper->get_step_count() << " " << source_term_time << " " << m_grid->valid_cell_count << "\n";
+		file.close();
+	}
+	console::dump("Wrote time to solve source term to %s\n", filename_source_term);
+
+	timer.tick(); console::dump( "Microphysics cloud model..." );
 	m_grid->add_buoyancy(dt);
+	auto buoyancy_time = timer.stock("buoyancy").c_str();
+
+	char filename_buoyancy[256];
+	sprintf(filename_buoyancy, "/home/takebe/shiokaze/%s/%c/buoyancy/time_to_finish_buoyancy_%03d.txt", directory.c_str(), merged_axis, m_shape[0]);
+	std::filesystem::path Time_to_finish_buoyancy(filename_buoyancy);
+	if (!std::filesystem::exists(Time_to_finish_buoyancy)) {
+		std::filesystem::create_directories(Time_to_finish_buoyancy.parent_path());
+	}
+	{
+		std::ofstream file(Time_to_finish_buoyancy, std::ios::app);
+		if (m_timestepper->get_step_count() == 0) {
+			file << "Time to buoyancy\n";
+		}
+		file << m_timestepper->get_step_count() << " " << buoyancy_time << " " << m_grid->valid_cell_count << "\n";
+		file.close();
+	}
+	console::dump("Wrote time to solve buoyancy to %s\n", filename_buoyancy);
+
 	//added
 	//X方向かZ方向か
-	bool use_X_axis = true; 
+	timer.tick(); console::dump( "Building merged cells..." );
 	m_grid->serial_iterate_active_cells([&]( const cell_id3 &cell_id ) {
-		m_grid->right_cell_neighbor(cell_id, [&]( char dim, const cell_id3 &neighbor_id ) {
-			if (m_grid->qc[cell_id.index] > 0.0 && m_grid->qc[neighbor_id.index] > 0.0 ) {
-				uf.unite(*m_grid, cell_id.index, neighbor_id.index, use_X_axis);
+
+		// m_grid->right_cell_neighbor(cell_id, use_X_axis, 
+		// 	[&] ( char dim, const cell_id3 &neighbor_id ) {
+		// 		return m_grid->qc[cell_id.index] > 0.0 && m_grid->qc[neighbor_id.index] > 0.0;
+		// 	},
+		// 	[&]( char dim, const cell_id3 &neighbor_id ) {
+		// 	if (m_grid->qc[cell_id.index] > 0.0 && m_grid->qc[neighbor_id.index] > 0.0 ) {
+		// 		uf.unite(*m_grid, cell_id.index, neighbor_id.index, use_X_axis);
+		// 	}
+		// });
+
+		m_grid->right_cell_neighbor(cell_id, use_X_axis, [&]( char dim, const cell_id3 &neighbor_id_right, const cell_id3 &neighbor_id_left ) {
+			if (m_grid->qc[cell_id.index] > 0.0 && m_grid->qc[neighbor_id_right.index] > 0.0 && m_grid->qc[neighbor_id_left.index] > 0.0) {
+				uf.unite(*m_grid, cell_id.index, neighbor_id_right.index, use_X_axis);
+				uf.unite(*m_grid, cell_id.index, neighbor_id_left.index, use_X_axis);
 			}
 		});
+
 	});
+	auto merged_cells_time = timer.stock("merged_cells").c_str();
 
+	char filename_merged_cells[256];
+	sprintf(filename_merged_cells, "/home/takebe/shiokaze/%s/%c/merged_cells/time_to_finish_merged_cells_%03d.txt", directory.c_str(), merged_axis, m_shape[0]);
+	std::filesystem::path Time_to_finish_merged_cells(filename_merged_cells);
+	if (!std::filesystem::exists(Time_to_finish_merged_cells)) {
+		std::filesystem::create_directories(Time_to_finish_merged_cells.parent_path());
+	}
+	{
+		std::ofstream file(Time_to_finish_merged_cells, std::ios::app);
+		if (m_timestepper->get_step_count() == 0) {
+			file << "Time to merged cells\n";
+		}
+		file << m_timestepper->get_step_count() << " " << merged_cells_time << " " << m_grid->valid_cell_count << "\n";
+		file.close();
+	}
+	console::dump("Wrote time to merge cells to %s\n", filename_merged_cells);
 
+	int count = 0;
+	int all_cell = m_shape[0] * m_shape[1] * m_shape[2];
+	m_grid->serial_iterate_active_cells([&]( const cell_id3 &cell_id ) {
+		if (uf.top[uf.root(cell_id.index)].index !=uf.bottom[uf.root(cell_id.index)].index) count++;
+	});
 
 	std::vector<cell_id3_and_is_merged> cell_ids_included_merged_cells;
 	//
@@ -644,28 +856,29 @@ void cloud_oc::idle() {
 	}
 	int all_cell_count = cell_ids_included_merged_cells.size();
 	// // Project(added)
-	bool use_all_cells = false;
+	
 	console::dump("is Used all cells: %d\n", use_all_cells);
 	bool use_Eigen = false;
 	Eigen::SparseMatrix<double> A;
 	Eigen::VectorXd b, x;
 	
 	assert(m_timestepper->get_step_count()!=400);
-	if (use_all_cells) {
-		m_macoctreeproject.assemble_matrix_qc(*m_grid, m_timestepper->get_step_count());
+	// if (use_all_cells || (!use_all_cells && all_cell * m_param.switch_ratio > count)) {
+	if (use_all_cells ) {
+	m_macoctreeproject.assemble_matrix_qc(*m_grid, m_timestepper->get_step_count());
 		auto solid_velocity_func = [&]( const vec3d &p ) {
 			return m_moving_solid_func ? m_moving_solid_func(time,p).second : vec3d();
 		};
 		m_macoctreeproject.project_cloud(*m_grid,dt,m_timestepper->get_step_count(), m_shape[0], uf, solid_velocity_func);
 	} else {
 		//m_macoctreeproject.compute_maps(*m_grid, uf);
+
 		m_macoctreeproject.assemble_matrix_merged_cell(*m_grid, uf, use_Eigen, use_X_axis, m_timestepper->get_step_count());
 		if (m_grid->valid_cell_count > 4) {
 			m_macoctreeproject.project_merged_cell(*m_grid, dt, use_Eigen, use_X_axis, m_timestepper->get_step_count(), uf, m_shape[0]);
 		}
 		// m_macoctreeproject.project_merged_cell_all(*m_grid, dt, use_Eigen, m_timestepper->get_step_count(), uf);
 	}
-
 
 	std::swap(m_grid,m_grid_prev);
     if( m_accumulated_CFL >= m_param.maximal_CFL_accumulation ) {
@@ -686,11 +899,10 @@ void cloud_oc::idle() {
 		m_grid->copy(*m_grid_prev);
 		console::dump( "Done. Took %s.\n", timer.stock("copy_grid").c_str());
     }
-	
-
 
 	// Advect scalar quantities
 	double dt_advect = 5.0;
+	timer.tick(); console::dump( "Advecting scalar quantities..." );
 	m_grid->assign_qv([&]( const vec3d &p ) {
 		vec3d u (m_grid_prev->sample_velocity(p));
 		vec3d advected_point = p - dt_advect * u;
@@ -720,13 +932,23 @@ void cloud_oc::idle() {
 		double d =  m_grid_prev->sample_theta(p - dt_advect * u);
 		return d;
 	});
+	auto advecting_scalar_time = timer.stock("advecting_scalar").c_str();
 	//write_to_txt("after_density_advection"); //added
-
-	//added
-	
-
-
-
+	char filename_advecting_scalar[256];
+	sprintf(filename_advecting_scalar, "/home/takebe/shiokaze/%s/%c/merged_cells/time_to_finish_merged_cells_%03d.txt", directory.c_str(), merged_axis, m_shape[0]);
+	std::filesystem::path Time_to_finish_advecting_scalar(filename_advecting_scalar);
+	if (!std::filesystem::exists(Time_to_finish_advecting_scalar)) {
+		std::filesystem::create_directories(Time_to_finish_advecting_scalar.parent_path());
+	}
+	{
+		std::ofstream file(Time_to_finish_advecting_scalar, std::ios::app);
+		if (m_timestepper->get_step_count() == 0) {
+			file << "Time to advect scalar quantities\n";
+		}
+		file << m_timestepper->get_step_count() << " " << advecting_scalar_time << " " << m_grid->valid_cell_count << "\n";
+		file.close();
+	}
+	console::dump("Wrote time to advect scalar quantities to %s\n", filename_advecting_scalar);
 
 	// //added
 	// m_grid->extrapolate_toward_solid(m_combined_solid_func);
@@ -735,10 +957,27 @@ void cloud_oc::idle() {
 	
 	//add_source_cloud(m_timestepper->get_current_time(),dt, *m_grid);
 	
-	//
-	
 	//m_grid->check_buoyancy();
+	timer.tick(); console::dump( "Microphysics cloud model..." );
 	microphysics_cloud(*m_grid, dt);
+	auto microphysics_cloud_time = timer.stock("microphysics_cloud").c_str();
+
+	char filename_microphysics_cloud[256];
+	sprintf(filename_microphysics_cloud, "/home/takebe/shiokaze/%s/%c/merged_cells/time_to_finish_merged_cells_%03d.txt", directory.c_str(), merged_axis, m_shape[0]);
+	std::filesystem::path Time_to_finish_microphysics_cloud(filename_microphysics_cloud);
+	if (!std::filesystem::exists(Time_to_finish_microphysics_cloud)) {
+		std::filesystem::create_directories(Time_to_finish_microphysics_cloud.parent_path());
+	}
+	{
+		std::ofstream file(Time_to_finish_microphysics_cloud, std::ios::app);
+		if (m_timestepper->get_step_count() == 0) {
+			file << "Time to solve microphysics cloud model\n";
+		}
+		file << m_timestepper->get_step_count() << " " << microphysics_cloud_time << " " << m_grid->valid_cell_count << "\n";
+		file.close();
+	}
+	console::dump("Wrote time to solve microphysics cloud model to %s\n", filename_microphysics_cloud);
+
 	// Add external force
 	//inject_external_force(m_velocity);
 	//
@@ -753,18 +992,20 @@ void cloud_oc::idle() {
 	std::string is_merged = (use_all_cells)?"project":"project_merged_cell";
 
 	char filename[256];
-	char merged_axis = use_X_axis ? 'X' : 'Z';
-	sprintf(filename, "/home/takebe/shiokaze/%s/%c/time_to_finish_step_%03d.txt", is_merged.c_str(), merged_axis, m_shape[0]);
+	char final_merged_axis = use_X_axis ? 'X' : 'Z';
+	sprintf(filename, "/home/takebe/shiokaze/%s/%c/time_to_finish_step_%03d.txt", is_merged.c_str(), final_merged_axis, m_shape[0]);
 	std::filesystem::path Time_to_finish_step(filename);
 	if (!std::filesystem::exists(Time_to_finish_step)) {
 		std::filesystem::create_directories(Time_to_finish_step.parent_path());
 	}
-	std::ofstream file(Time_to_finish_step, std::ios::app);
-	if (m_timestepper->get_step_count() == 0) {
-		file << "Step Count Time\n";
+	{
+		std::ofstream file(Time_to_finish_step, std::ios::app);
+		if (m_timestepper->get_step_count() == 0) {
+			file << "Step Count Time\n";
+		}
+		file << m_timestepper->get_step_count() << " " << elapsed.count() << "\n";
+		file.close();
 	}
-	file << m_timestepper->get_step_count() << " " << elapsed.count() << "\n";
-	file.close();
 
 	// //vdbのグリッドの作成
 	// openvdb::DoubleGrid::Ptr cloud_vdb_grid = openvdb::DoubleGrid::create(/*background value=*/0.0);
@@ -797,6 +1038,7 @@ void cloud_oc::idle() {
 	// file_vdb.close();
 	if (m_timestepper->get_step_count() % 50 == 0) {
 		compute_energy_spectrum_fftw(*m_grid, use_all_cells, use_X_axis);
+		directional_cloud_profile(*m_grid, use_X_axis, use_all_cells);
 	}
 }
 //

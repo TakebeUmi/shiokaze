@@ -2398,6 +2398,7 @@ void macoctreeproject3::project_cloud( grid3 &grid, double dt, int step_count, i
 	console::dump( "Done. Took %s.\n", timer.stock("allocate_vector").c_str());
 	//
 	console::dump("vector size: %zu\n", grid.valid_cell_count);
+	console::dump("project cloud\n");
 	timer.tick(); console::dump( "Computing divergence..." );
 	//
 	grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
@@ -2796,13 +2797,14 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 	assert( m_matrix.assembled );
 	//
 	//こっからRHSの作成
-	timer.tick(); console::dump( "Allocating vectors..." );
+	timer.tick(); console::dump( "Allocating vectors...\n" );
 	auto rhs = m_factory->allocate_vector(grid.valid_cell_count);
 	auto result = m_factory->allocate_vector(grid.valid_cell_count);
 	console::dump("vector size: %zu\n", grid.valid_cell_count);
 	console::dump( "Done. Took %s.\n", timer.stock("allocate_vector").c_str());
 	//
 	console::dump("vector size: %zu\n", grid.valid_cell_count);
+	console::dump("Using merged cells for projection.\n");
 	timer.tick(); console::dump( "Computing divergence..." );
 	//
 	bool use_new_rhs = false;
@@ -2966,7 +2968,7 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 
 	//rhs設計の旧バージョン
 	//if (!use_new_rhs)
-	int d = use_X_axis ? 0 : 2;
+	char d = use_X_axis ? 0 : 2;
 	grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
 		for (int dir = -1; dir <= 1; dir += 2) {
 			for (char dim : DIMS3) {
@@ -3073,10 +3075,10 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 					}
 					else {
 						double u_avg = uf.velocity_sum_x[uf.root(top1.index)] / uf.number_of_cells[uf.root(top1.index)];
-						double u_top = grid.velocity[grid.layers[top1.depth]->active_faces[d](top1.pi+vec3i(d==0,d==0,d==0))];
-						if (grid.layers[bottom1.depth]->active_faces[dim].safe_active(bottom1.pi)){
-							
-						}
+						//ここがおかしい↓
+						double u_top = grid.velocity[grid.layers[top1.depth]->active_faces[d](top1.pi+vec3i(d==0,d==1,d==2))];
+						//double u_top = grid.velocity[grid.layers[top1.depth]->active_faces[d](top1.pi+vec3i(1,0,0))];
+
 						double u_bottom = grid.velocity[grid.layers[bottom1.depth]->active_faces[d](bottom1.pi+vec3i(0,0,0))];
 						
 						if (top1 == bottom1) {
@@ -3109,83 +3111,83 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 						}
 	});
 	
-	grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
-		if( grid.cell_map[cell_id.index] ) {
-			uint_type row = grid.cell_map[cell_id.index]-1;
-			if( rhs_correct ) {
-				bool solid_cell (false);
-				for( char dim : DIMS3 ) {
-					grid.iterate_face_neighbors(cell_id,dim,[&]( const face_id3 &face_id ){
-						if( grid.area[face_id.index] < 1.0 ) solid_cell = true;
-					});
-					if( solid_cell ) break;
-				}
-				if( rhs_correct && ! solid_cell && ! is_surface_cell(cell_id)) {
-					const double dx = grid.get_cell_dx(cell_id);
-					if( region_count ) {
-						rhs->add(row,(dx*dx*dx)*rhs_corrects[regions[cell_id.index]-1]);
-					} else {
-						console::dump("rhs_correct=%e\n",rhs_correct);
-						// if (use_Eigen) {
-						// 	b(row) += (dx*dx*dx)*rhs_correct;
-						// }
-						// else {
-							rhs->add(row,(dx*dx*dx)*rhs_correct);
-						// }
-					}
-				}
-			}
+	// grid.iterate_active_cells([&]( const cell_id3 &cell_id, int tid ) {
+	// 	if( grid.cell_map[cell_id.index] ) {
+	// 		uint_type row = grid.cell_map[cell_id.index]-1;
+	// 		if( rhs_correct ) {
+	// 			bool solid_cell (false);
+	// 			for( char dim : DIMS3 ) {
+	// 				grid.iterate_face_neighbors(cell_id,dim,[&]( const face_id3 &face_id ){
+	// 					if( grid.area[face_id.index] < 1.0 ) solid_cell = true;
+	// 				});
+	// 				if( solid_cell ) break;
+	// 			}
+	// 			if( rhs_correct && ! solid_cell && ! is_surface_cell(cell_id)) {
+	// 				const double dx = grid.get_cell_dx(cell_id);
+	// 				if( region_count ) {
+	// 					rhs->add(row,(dx*dx*dx)*rhs_corrects[regions[cell_id.index]-1]);
+	// 				} else {
+	// 					console::dump("rhs_correct=%e\n",rhs_correct);
+	// 					// if (use_Eigen) {
+	// 					// 	b(row) += (dx*dx*dx)*rhs_correct;
+	// 					// }
+	// 					// else {
+	// 						rhs->add(row,(dx*dx*dx)*rhs_correct);
+	// 					// }
+	// 				}
+	// 			}
+	// 		}
 			
-			if( m_param.fix_divergence ) {
-				double err (0.0);
-				if( solid_velocity ) {
-					grid.get_unmofidied_divergence(cell_id,[&]( const face_id3 &face_id, double value ) {
-						err += value*grid.sample_solid_face_velocity(face_id,solid_velocity);
-					});
-				}
-				bool boundary_flag (false);
-				for( int dim : DIMS3 ) {
-					boundary_flag = cell_id.pi[dim] == 0 || cell_id.pi[dim] == grid.layers[cell_id.depth]->shape[dim]-1;
-					if( boundary_flag ) break;
-				}
-				if( ! boundary_flag ) {
-					// if (use_Eigen) {
-					// 	b(row) += -err;
-					// }
-					// else {
-						rhs->add(row,-err);
-					//}
-				}
-			}
-			//
-			const vec3d p = grid.get_cell_position(cell_id);
-			const double dx = grid.get_cell_dx(cell_id);
-			//
-			// grid.get_divergence_qc(cell_id,[&]( const face_id3 &face_id, double value0, double value1 ) {
-			// 	bool add_divergence (true);
-			// 	if( add_divergence ) {
-			// 		if( solid_velocity && value1 ) {
-			// 			if( cell_id.pi[0] != grid.layers[cell_id.depth]->shape[0]-1 ) {
-			// 				if (use_Eigen) {
-			// 					b(row) += value1*grid.sample_solid_face_velocity(face_id,solid_velocity);
-			// 				}
-			// 				else {
-			// 					rhs->add(row,value1*grid.sample_solid_face_velocity(face_id,solid_velocity));
-			// 				}
-			// 			}
-			// 		}
-			// 		if( value0 ) {
-			// 			if (use_Eigen) {
-			// 				b(row) += value0*grid.velocity[face_id.index];
-			// 			}
-			// 			else {
-			// 				rhs->add(row,value0*grid.velocity[face_id.index]);
-			// 			}
-			// 		}
-			// 	}
-			// });
-		}
-	});
+	// 		if( m_param.fix_divergence ) {
+	// 			double err (0.0);
+	// 			if( solid_velocity ) {
+	// 				grid.get_unmofidied_divergence(cell_id,[&]( const face_id3 &face_id, double value ) {
+	// 					err += value*grid.sample_solid_face_velocity(face_id,solid_velocity);
+	// 				});
+	// 			}
+	// 			bool boundary_flag (false);
+	// 			for( int dim : DIMS3 ) {
+	// 				boundary_flag = cell_id.pi[dim] == 0 || cell_id.pi[dim] == grid.layers[cell_id.depth]->shape[dim]-1;
+	// 				if( boundary_flag ) break;
+	// 			}
+	// 			if( ! boundary_flag ) {
+	// 				// if (use_Eigen) {
+	// 				// 	b(row) += -err;
+	// 				// }
+	// 				// else {
+	// 					rhs->add(row,-err);
+	// 				//}
+	// 			}
+	// 		}
+	// 		//
+	// 		const vec3d p = grid.get_cell_position(cell_id);
+	// 		const double dx = grid.get_cell_dx(cell_id);
+	// 		//
+	// 		// grid.get_divergence_qc(cell_id,[&]( const face_id3 &face_id, double value0, double value1 ) {
+	// 		// 	bool add_divergence (true);
+	// 		// 	if( add_divergence ) {
+	// 		// 		if( solid_velocity && value1 ) {
+	// 		// 			if( cell_id.pi[0] != grid.layers[cell_id.depth]->shape[0]-1 ) {
+	// 		// 				if (use_Eigen) {
+	// 		// 					b(row) += value1*grid.sample_solid_face_velocity(face_id,solid_velocity);
+	// 		// 				}
+	// 		// 				else {
+	// 		// 					rhs->add(row,value1*grid.sample_solid_face_velocity(face_id,solid_velocity));
+	// 		// 				}
+	// 		// 			}
+	// 		// 		}
+	// 		// 		if( value0 ) {
+	// 		// 			if (use_Eigen) {
+	// 		// 				b(row) += value0*grid.velocity[face_id.index];
+	// 		// 			}
+	// 		// 			else {
+	// 		// 				rhs->add(row,value0*grid.velocity[face_id.index]);
+	// 		// 			}
+	// 		// 		}
+	// 		// 	}
+	// 		// });
+	// 	}
+	// });
 	console::dump( "Done. Took %s.\n", timer.stock("divergence_compute").c_str());
 	//
 	auto compute_vector_kind = [&]( std::vector<unsigned char> &result ) {
@@ -3201,14 +3203,14 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 		return total_kinds;
 	};
 	//
-	b.resize(grid.valid_cell_count);
-	x.resize(grid.valid_cell_count);
-	b.setZero();
-	x.setZero();
-	for (int n = 0; n < grid.valid_cell_count; ++n) {
-		double val = rhs->at(n);
-		b(n) = val;
-	}
+	// b.resize(grid.valid_cell_count);
+	// x.resize(grid.valid_cell_count);
+	// b.setZero();
+	// x.setZero();
+	// for (int n = 0; n < grid.valid_cell_count; ++n) {
+	// 	double val = rhs->at(n);
+	// 	b(n) = val;
+	// }
 	timer.tick(); console::dump( "Counting and forming the vector norm kind..." );
 	std::vector<unsigned char> vector_kind; unsigned total_kinds = compute_vector_kind(vector_kind);
 	m_solver->register_vector_norm_kind(vector_kind);
@@ -3221,20 +3223,21 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 	});
 	//
 	// auto rhs_dummy = m_factory->allocate_vector(grid.valid_cell_count);
-	double sum = 0.0;
-	for (size_t n=0; n<grid.valid_cell_count; ++n ) {
-		sum += rhs->at(n);
-		m_matrix.Lhs->add_to_element(n,n,1e-6); // to avoid singularity
-	}
+	// double sum = 0.0;
+	// for (size_t n=0; n<grid.valid_cell_count; ++n ) {
+	// 	sum += rhs->at(n);
+	// 	m_matrix.Lhs->add_to_element(n,n,1e-6); // to avoid singularity
+	// }
 	// for (size_t n=0; n<grid.valid_cell_count; ++n ) {
 	// 	rhs->add(n, - sum / (double)(grid.valid_cell_count));
 	// }
-	console::dump("RHS sum=%e\n",sum);
+	//console::dump("RHS sum=%e\n",sum);
 	//solveWithBiCGSTAB(A,b,x);
 	// if (use_Eigen) {
-		//bool is_solved = solveWithICCG(A,b,x);
-		//solveWithBiCGSTAB(A,b,x);
+	// 	bool is_solved = solveWithICCG(A,b,x);
+	// 	solveWithBiCGSTAB(A,b,x);
 	// } else {
+
 	timer.tick(); console::dump( "Starting solver..." );
 	auto status = m_solver->solve(m_matrix.Lhs.get(),rhs.get(),result.get());
 	auto solving_time = timer.stock("solver_solve").c_str();
@@ -3329,7 +3332,7 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 		console::dump( "Reresid=%s\n", reresid_str.c_str());
 		console::dump( "Absresid=%s\n", absresid_str.c_str());
 	}
-	//
+	
 
 
 	
@@ -3377,17 +3380,7 @@ void macoctreeproject3::project_merged_cell( grid3 &grid, double dt, bool use_Ei
 		});
 	});
 	//
-	// if( pressure_vector ) {
-	// 	pressure_vector->resize(grid.cell_count);
-	// 	for( uint_type n=0; n<grid.cell_count; ++n ) {
-	// 		if( grid.cell_map[n] ) {
-	// 			(*pressure_vector)[n] = result->at(grid.cell_map[n]-1);
-	// 		} else {
-	// 			(*pressure_vector)[n] = 0.0;
-	// 		}
-	// 	}
-	// }
-	//
+
 	console::dump( "Done. Took %s.\n", timer.stock("update_velocity").c_str());
 	//
 	grid.clear_map();
